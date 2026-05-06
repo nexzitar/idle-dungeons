@@ -21,7 +21,6 @@ Desktop.ini
 
 # Rust
 /target/
-Cargo.lock
 
 # Bevy and local assets generated during development
 *.ron.tmp
