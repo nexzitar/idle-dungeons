@@ -4,21 +4,11 @@ use crate::domain::progression::MetaProgression;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct SaveProfile {
     pub hero: HeroProfile,
     pub inventory: Vec<ItemInstance>,
     pub meta: MetaProgression,
-}
-
-impl Default for SaveProfile {
-    fn default() -> Self {
-        Self {
-            hero: HeroProfile::default(),
-            inventory: Vec::new(),
-            meta: MetaProgression::default(),
-        }
-    }
 }
 
 #[derive(Debug, thiserror::Error)]
