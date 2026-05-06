@@ -30,6 +30,9 @@ Desktop.ini
 *.log
 logs/
 
+# Local game saves
+saves/
+
 # Environment and local configuration
 .env
 .env.*

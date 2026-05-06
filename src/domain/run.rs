@@ -25,6 +25,7 @@ pub struct RunSummary {
     pub salvage_earned: u32,
     pub loot: Vec<ItemInstance>,
     pub death_reason: Option<String>,
+    pub log: Vec<String>,
 }
 
 pub fn simulate_run(hero: &HeroProfile, config: RunConfig) -> RunSummary {
@@ -33,6 +34,7 @@ pub fn simulate_run(hero: &HeroProfile, config: RunConfig) -> RunSummary {
     let mut gold_earned = 0;
     let mut salvage_earned = 0;
     let mut loot = Vec::new();
+    let mut log = Vec::new();
 
     for room in rooms {
         deepest_depth = room.depth;
@@ -43,8 +45,10 @@ pub fn simulate_run(hero: &HeroProfile, config: RunConfig) -> RunSummary {
                 let combat = simulate_combat(hero, &enemy, 100);
                 match combat.outcome {
                     CombatOutcome::HeroWon => {
+                        log.push(format!("Depth {}: defeated {}", room.depth, enemy.name));
                         gold_earned += room.depth * 3;
                         if is_boss {
+                            log.push("The Gate Warden falls. The delve is victorious.".to_string());
                             return RunSummary {
                                 outcome: RunOutcome::BossDefeated,
                                 deepest_depth,
@@ -52,10 +56,12 @@ pub fn simulate_run(hero: &HeroProfile, config: RunConfig) -> RunSummary {
                                 salvage_earned,
                                 loot,
                                 death_reason: None,
+                                log,
                             };
                         }
                     }
                     CombatOutcome::EnemyWon | CombatOutcome::TimedOut => {
+                        log.push(format!("Depth {}: defeated by {}", room.depth, enemy.name));
                         return RunSummary {
                             outcome: RunOutcome::HeroDied,
                             deepest_depth,
@@ -63,6 +69,7 @@ pub fn simulate_run(hero: &HeroProfile, config: RunConfig) -> RunSummary {
                             salvage_earned,
                             loot,
                             death_reason: Some(format!("Defeated by {}", enemy.name)),
+                            log,
                         };
                     }
                 }
@@ -70,10 +77,15 @@ pub fn simulate_run(hero: &HeroProfile, config: RunConfig) -> RunSummary {
             RoomKind::Treasure => {
                 let item = roll_loot(room.depth, config.seed);
                 salvage_earned += salvage_value(&item);
+                log.push(format!("Depth {}: found {}", room.depth, item.name));
                 loot.push(item);
                 gold_earned += room.depth * 2;
             }
             RoomKind::Shrine => {
+                log.push(format!(
+                    "Depth {}: shrine grants {} gold",
+                    room.depth, room.depth
+                ));
                 gold_earned += room.depth;
             }
         }
@@ -86,5 +98,6 @@ pub fn simulate_run(hero: &HeroProfile, config: RunConfig) -> RunSummary {
         salvage_earned,
         loot,
         death_reason: None,
+        log,
     }
 }
