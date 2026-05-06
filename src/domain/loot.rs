@@ -70,7 +70,7 @@ fn rarity_bonus(rarity: ItemRarity) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::items::GearSlot;
+    use crate::domain::items::{GearSlot, ItemInstance, ItemRarity};
 
     #[test]
     fn loot_rolls_are_repeatable_for_seed_and_depth() {
@@ -93,9 +93,15 @@ mod tests {
 
     #[test]
     fn salvage_value_scales_by_rarity() {
-        let item = roll_loot(10, 123);
+        let mut common = ItemInstance::basic(1, "Common Sword", GearSlot::Weapon);
+        common.rarity = ItemRarity::Common;
+        let mut uncommon = ItemInstance::basic(2, "Uncommon Sword", GearSlot::Weapon);
+        uncommon.rarity = ItemRarity::Uncommon;
+        let mut rare = ItemInstance::basic(3, "Rare Sword", GearSlot::Weapon);
+        rare.rarity = ItemRarity::Rare;
 
-        assert!(salvage_value(&item) > 0);
+        assert!(salvage_value(&uncommon) > salvage_value(&common));
+        assert!(salvage_value(&rare) > salvage_value(&uncommon));
     }
 
     #[test]
