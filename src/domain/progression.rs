@@ -1,3 +1,4 @@
+use crate::domain::stats::Stats;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -42,6 +43,20 @@ impl MetaProgression {
         *self.upgrades.get(&upgrade).unwrap_or(&0)
     }
 
+    pub fn stat_bonus(&self) -> Stats {
+        Stats {
+            max_health: self.upgrade_level(UpgradeId::MaxHealth) as i32 * 10,
+            damage: self.upgrade_level(UpgradeId::BaseDamage) as i32 * 2,
+            armor: self.upgrade_level(UpgradeId::Armor) as i32,
+            attack_speed: 0.0,
+            healing_power: self.upgrade_level(UpgradeId::HealingPower) as i32,
+        }
+    }
+
+    pub fn upgrade_cost(&self, upgrade: UpgradeId) -> u32 {
+        10 + self.upgrade_level(upgrade) * 5
+    }
+
     pub fn buy_upgrade(&mut self, upgrade: UpgradeId) -> Result<(), ProgressionError> {
         let cost = self.upgrade_cost(upgrade);
         if self.gold < cost {
@@ -60,10 +75,6 @@ impl MetaProgression {
         if self.skill_slot_progress >= 100 {
             self.unlocked_skill_slots = self.unlocked_skill_slots.max(3);
         }
-    }
-
-    fn upgrade_cost(&self, upgrade: UpgradeId) -> u32 {
-        10 + self.upgrade_level(upgrade) * 5
     }
 }
 
@@ -106,5 +117,25 @@ mod tests {
         profile.add_skill_slot_progress(100);
 
         assert_eq!(profile.unlocked_skill_slots, 3);
+    }
+
+    #[test]
+    fn upgrade_levels_produce_stat_bonuses() {
+        let mut profile = MetaProgression {
+            gold: 100,
+            ..MetaProgression::default()
+        };
+
+        profile.buy_upgrade(UpgradeId::MaxHealth).unwrap();
+        profile.buy_upgrade(UpgradeId::BaseDamage).unwrap();
+        profile.buy_upgrade(UpgradeId::Armor).unwrap();
+        profile.buy_upgrade(UpgradeId::HealingPower).unwrap();
+
+        let bonus = profile.stat_bonus();
+
+        assert_eq!(bonus.max_health, 10);
+        assert_eq!(bonus.damage, 2);
+        assert_eq!(bonus.armor, 1);
+        assert_eq!(bonus.healing_power, 1);
     }
 }

@@ -33,3 +33,18 @@ fn run_summary_reports_depth_gold_and_outcome() {
         RunOutcome::HeroDied | RunOutcome::BossDefeated
     ));
 }
+
+#[test]
+fn run_summary_reports_playback_log() {
+    let hero = HeroProfile::default();
+    let result = simulate_run(
+        &hero,
+        RunConfig {
+            seed: 5,
+            max_depth: 25,
+        },
+    );
+
+    assert!(!result.log.is_empty());
+    assert!(result.log.first().unwrap().contains("Depth"));
+}

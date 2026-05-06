@@ -1,15 +1,17 @@
 # MVP Acceptance Checklist
 
-- [ ] `cargo fmt --check` passes.
-- [ ] `cargo test` passes.
-- [ ] `cargo check` passes.
-- [ ] A seeded run returns the same summary on repeated executions.
-- [ ] Hero builds derive stats from base stats, skills, gear, and affixes.
-- [ ] Locked skill slots reject equipped skills.
-- [ ] Gear only equips into matching gear slots.
-- [ ] Dungeon generation places the milestone boss at depth 25.
-- [ ] Combat resolves to hero victory, hero death, or timeout.
-- [ ] Loot rolls are deterministic under seed and depth.
-- [ ] Permanent upgrades spend gold and update levels.
-- [ ] Save/load round trips preserve profile data.
-- [ ] UI text models expose build and summary information.
+- [x] `cargo fmt --check` passes.
+- [x] `cargo test` passes.
+- [x] `cargo check` passes.
+- [x] A seeded run returns the same summary on repeated executions.
+- [x] Hero builds derive stats from base stats, skills, gear, affixes, and permanent upgrade bonuses.
+- [x] Locked skill slots reject equipped skills.
+- [x] Gear only equips into matching gear slots.
+- [x] Dungeon generation places the milestone boss at depth 25.
+- [x] Combat resolves to hero victory, hero death, or timeout.
+- [x] Loot rolls are deterministic under seed and depth.
+- [x] Permanent upgrades spend gold and update levels.
+- [x] Save/load round trips preserve profile data.
+- [x] UI exposes build, summary, inventory, salvage, equip, upgrade, and run-again actions.
+- [x] Run rewards apply to the persistent profile exactly once.
+- [x] Profile progress saves after reward, equipment, salvage, and upgrade changes.

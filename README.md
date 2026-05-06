@@ -56,6 +56,11 @@ Common commands:
 cargo fmt --check
 cargo test
 cargo check
+cargo run
 ```
 
 The MVP should be built one testable slice at a time. Each behavior change should start with a failing test, then minimal implementation, then a passing verification run.
+
+## Current Playable Loop
+
+The MVP opens to a build screen. From there you can start an automated dungeon run, accept the run rewards, equip or salvage found loot, buy permanent upgrades, and run again. Progress is saved locally to `saves/profile.json`.
