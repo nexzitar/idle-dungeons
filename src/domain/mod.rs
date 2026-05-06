@@ -1,3 +1,4 @@
+pub mod combat;
 pub mod dungeon;
 pub mod hero;
 pub mod items;
