@@ -56,7 +56,13 @@ fn start_run(
 
 pub fn run() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "Idle Dungeons".to_string(),
+                ..default()
+            }),
+            ..default()
+        }))
         .add_plugins(IdleDungeonsPlugin)
         .add_plugins(UiPlugin)
         .run();
