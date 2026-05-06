@@ -47,3 +47,15 @@ The run simulation should be the source of truth. UI should observe simulation s
 The full design document lives at:
 
 `docs/superpowers/specs/2026-05-06-roguelike-incremental-bevy-design.md`
+
+## Development
+
+Common commands:
+
+```sh
+cargo fmt --check
+cargo test
+cargo check
+```
+
+The MVP should be built one testable slice at a time. Each behavior change should start with a failing test, then minimal implementation, then a passing verification run.
