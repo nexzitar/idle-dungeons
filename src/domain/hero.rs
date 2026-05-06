@@ -146,10 +146,18 @@ mod tests {
     fn gear_replaces_only_matching_slot() {
         let mut hero = HeroProfile::default();
         let armor = ItemInstance::basic(1, "Iron Armor", GearSlot::Armor);
+        let weapon = ItemInstance::basic(2, "Iron Sword", GearSlot::Weapon);
+        let replacement_armor = ItemInstance::basic(3, "Steel Armor", GearSlot::Armor);
 
         hero.equip_item(armor).unwrap();
+        hero.equip_item(weapon.clone()).unwrap();
+        hero.equip_item(replacement_armor.clone()).unwrap();
 
-        assert!(hero.equipped_item(GearSlot::Armor).is_some());
-        assert!(hero.equipped_item(GearSlot::Weapon).is_none());
+        assert_eq!(
+            hero.equipped_item(GearSlot::Armor),
+            Some(&replacement_armor)
+        );
+        assert_eq!(hero.equipped_item(GearSlot::Weapon), Some(&weapon));
+        assert!(hero.equipped_item(GearSlot::Trinket).is_none());
     }
 }
