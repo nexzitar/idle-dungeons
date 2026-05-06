@@ -1,0 +1,46 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Linux
+*~
+.fuse_hidden*
+.nfs*
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# Rust
+/target/
+Cargo.lock
+
+# Bevy and local assets generated during development
+*.ron.tmp
+*.scn.ron.tmp
+
+# Logs
+*.log
+logs/
+
+# Environment and local configuration
+.env
+.env.*
+!.env.example
+
+# Build and distribution output
+dist/
+build/
+out/
+
+# Local scratch files
+tmp/
+temp/
