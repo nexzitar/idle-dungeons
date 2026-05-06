@@ -47,13 +47,13 @@ Because this repository is a Rust application, `Cargo.lock` should be committed.
 ## Task 1: Project Bootstrap And Lockfile Policy
 
 **Files:**
+
 - Create: `Cargo.toml`
 - Create: `src/main.rs`
 - Create: `src/lib.rs`
 - Create: `src/app.rs`
 - Modify: `.gitignore`
-
-- [ ] **Step 1: Fix the lockfile ignore rule**
+- **Step 1: Fix the lockfile ignore rule**
 
 Remove the `Cargo.lock` line from `.gitignore` so the application lockfile can be committed.
 
@@ -64,7 +64,7 @@ Expected `.gitignore` Rust section:
 /target/
 ```
 
-- [ ] **Step 2: Create `Cargo.toml`**
+- **Step 2: Create `Cargo.toml`**
 
 ```toml
 [package]
@@ -84,7 +84,7 @@ thiserror = "1"
 tempfile = "3"
 ```
 
-- [ ] **Step 3: Create the minimal app entrypoint**
+- **Step 3: Create the minimal app entrypoint**
 
 `src/main.rs`:
 
@@ -123,13 +123,13 @@ pub fn run() {
 }
 ```
 
-- [ ] **Step 4: Verify bootstrap compiles**
+- **Step 4: Verify bootstrap compiles**
 
 Run: `cargo check`
 
 Expected: command exits 0 and creates `Cargo.lock`.
 
-- [ ] **Step 5: Commit**
+- **Step 5: Commit**
 
 ```bash
 git add .gitignore Cargo.toml Cargo.lock src/main.rs src/lib.rs src/app.rs
@@ -139,14 +139,14 @@ git commit -m "Bootstrap Bevy project"
 ## Task 2: Stats, Skills, Items, And Hero Loadouts
 
 **Files:**
+
 - Create: `src/domain/mod.rs`
 - Create: `src/domain/stats.rs`
 - Create: `src/domain/skills.rs`
 - Create: `src/domain/items.rs`
 - Create: `src/domain/hero.rs`
 - Modify: `src/lib.rs`
-
-- [ ] **Step 1: Export the domain module**
+- **Step 1: Export the domain module**
 
 Add to `src/lib.rs`:
 
@@ -168,7 +168,7 @@ pub mod skills;
 pub mod stats;
 ```
 
-- [ ] **Step 2: Write failing stat derivation tests**
+- **Step 2: Write failing stat derivation tests**
 
 Add tests at the bottom of `src/domain/hero.rs` before implementation:
 
@@ -239,13 +239,13 @@ mod tests {
 }
 ```
 
-- [ ] **Step 3: Run tests and verify RED**
+- **Step 3: Run tests and verify RED**
 
 Run: `cargo test domain::hero --lib`
 
 Expected: fails because `HeroProfile`, `Stats`, `SkillId`, `ItemInstance`, and related APIs do not exist yet.
 
-- [ ] **Step 4: Implement `src/domain/stats.rs`**
+- **Step 4: Implement `src/domain/stats.rs`**
 
 ```rust
 use serde::{Deserialize, Serialize};
@@ -287,7 +287,7 @@ impl Add for Stats {
 }
 ```
 
-- [ ] **Step 5: Implement `src/domain/skills.rs`**
+- **Step 5: Implement `src/domain/skills.rs`**
 
 ```rust
 use serde::{Deserialize, Serialize};
@@ -377,7 +377,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
 }
 ```
 
-- [ ] **Step 6: Implement `src/domain/items.rs`**
+- **Step 6: Implement `src/domain/items.rs`**
 
 ```rust
 use crate::domain::stats::Stats;
@@ -470,7 +470,7 @@ impl Stats {
 }
 ```
 
-- [ ] **Step 7: Implement `src/domain/hero.rs`**
+- **Step 7: Implement `src/domain/hero.rs`**
 
 ```rust
 use crate::domain::items::{GearSlot, ItemInstance};
@@ -542,19 +542,19 @@ impl HeroProfile {
 }
 ```
 
-- [ ] **Step 8: Run tests and verify GREEN**
+- **Step 8: Run tests and verify GREEN**
 
 Run: `cargo test domain::hero --lib`
 
 Expected: all hero tests pass.
 
-- [ ] **Step 9: Run format and full tests**
+- **Step 9: Run format and full tests**
 
 Run: `cargo fmt --check && cargo test`
 
 Expected: both commands exit 0.
 
-- [ ] **Step 10: Commit**
+- **Step 10: Commit**
 
 ```bash
 git add src/lib.rs src/domain
@@ -564,10 +564,10 @@ git commit -m "Add hero build domain"
 ## Task 3: Deterministic Dungeon Generation
 
 **Files:**
+
 - Create: `src/domain/dungeon.rs`
 - Modify: `src/domain/mod.rs`
-
-- [ ] **Step 1: Export dungeon module**
+- **Step 1: Export dungeon module**
 
 Add to `src/domain/mod.rs`:
 
@@ -579,7 +579,7 @@ pub mod skills;
 pub mod stats;
 ```
 
-- [ ] **Step 2: Write failing dungeon tests**
+- **Step 2: Write failing dungeon tests**
 
 Add tests to `src/domain/dungeon.rs` before implementation:
 
@@ -615,13 +615,13 @@ mod tests {
 }
 ```
 
-- [ ] **Step 3: Run tests and verify RED**
+- **Step 3: Run tests and verify RED**
 
 Run: `cargo test domain::dungeon --lib`
 
 Expected: fails because dungeon APIs do not exist.
 
-- [ ] **Step 4: Implement `src/domain/dungeon.rs`**
+- **Step 4: Implement `src/domain/dungeon.rs`**
 
 ```rust
 use crate::domain::stats::Stats;
@@ -723,19 +723,19 @@ impl From<&Enemy> for Stats {
 }
 ```
 
-- [ ] **Step 5: Run tests and verify GREEN**
+- **Step 5: Run tests and verify GREEN**
 
 Run: `cargo test domain::dungeon --lib`
 
 Expected: all dungeon tests pass.
 
-- [ ] **Step 6: Run full verification**
+- **Step 6: Run full verification**
 
 Run: `cargo fmt --check && cargo test`
 
 Expected: all checks pass.
 
-- [ ] **Step 7: Commit**
+- **Step 7: Commit**
 
 ```bash
 git add src/domain/mod.rs src/domain/dungeon.rs
@@ -745,15 +745,15 @@ git commit -m "Add deterministic dungeon generation"
 ## Task 4: Fixed-Tick Combat Simulation
 
 **Files:**
+
 - Create: `src/domain/combat.rs`
 - Modify: `src/domain/mod.rs`
 - Modify: `src/domain/skills.rs`
-
-- [ ] **Step 1: Export combat module**
+- **Step 1: Export combat module**
 
 Add `pub mod combat;` to `src/domain/mod.rs`.
 
-- [ ] **Step 2: Write failing combat tests**
+- **Step 2: Write failing combat tests**
 
 Add tests to `src/domain/combat.rs` before implementation:
 
@@ -822,13 +822,13 @@ mod tests {
 }
 ```
 
-- [ ] **Step 3: Run tests and verify RED**
+- **Step 3: Run tests and verify RED**
 
 Run: `cargo test domain::combat --lib`
 
 Expected: fails because combat APIs do not exist.
 
-- [ ] **Step 4: Implement `src/domain/combat.rs`**
+- **Step 4: Implement `src/domain/combat.rs`**
 
 Implement a simple deterministic tick model:
 
@@ -898,19 +898,19 @@ pub fn simulate_combat(hero: &HeroProfile, enemy: &Enemy, max_ticks: u32) -> Com
 }
 ```
 
-- [ ] **Step 5: Run tests and verify GREEN**
+- **Step 5: Run tests and verify GREEN**
 
 Run: `cargo test domain::combat --lib`
 
 Expected: all combat tests pass.
 
-- [ ] **Step 6: Run full verification**
+- **Step 6: Run full verification**
 
 Run: `cargo fmt --check && cargo test`
 
 Expected: all checks pass.
 
-- [ ] **Step 7: Commit**
+- **Step 7: Commit**
 
 ```bash
 git add src/domain/mod.rs src/domain/skills.rs src/domain/combat.rs
@@ -920,15 +920,15 @@ git commit -m "Add fixed tick combat simulation"
 ## Task 5: Loot, Inventory, And Salvage
 
 **Files:**
+
 - Create: `src/domain/loot.rs`
 - Modify: `src/domain/mod.rs`
 - Modify: `src/domain/items.rs`
-
-- [ ] **Step 1: Export loot module**
+- **Step 1: Export loot module**
 
 Add `pub mod loot;` to `src/domain/mod.rs`.
 
-- [ ] **Step 2: Write failing loot tests**
+- **Step 2: Write failing loot tests**
 
 Add tests to `src/domain/loot.rs`:
 
@@ -970,13 +970,13 @@ mod tests {
 }
 ```
 
-- [ ] **Step 3: Run tests and verify RED**
+- **Step 3: Run tests and verify RED**
 
 Run: `cargo test domain::loot --lib`
 
 Expected: fails because loot APIs do not exist.
 
-- [ ] **Step 4: Implement `src/domain/loot.rs`**
+- **Step 4: Implement `src/domain/loot.rs`**
 
 ```rust
 use crate::domain::items::{GearSlot, ItemAffix, ItemInstance, ItemRarity};
@@ -1038,19 +1038,19 @@ fn rarity_bonus(rarity: ItemRarity) -> i32 {
 }
 ```
 
-- [ ] **Step 5: Run tests and verify GREEN**
+- **Step 5: Run tests and verify GREEN**
 
 Run: `cargo test domain::loot --lib`
 
 Expected: all loot tests pass.
 
-- [ ] **Step 6: Run full verification**
+- **Step 6: Run full verification**
 
 Run: `cargo fmt --check && cargo test`
 
 Expected: all checks pass.
 
-- [ ] **Step 7: Commit**
+- **Step 7: Commit**
 
 ```bash
 git add src/domain/mod.rs src/domain/items.rs src/domain/loot.rs
@@ -1060,14 +1060,14 @@ git commit -m "Add deterministic loot generation"
 ## Task 6: Meta-Progression
 
 **Files:**
+
 - Create: `src/domain/progression.rs`
 - Modify: `src/domain/mod.rs`
-
-- [ ] **Step 1: Export progression module**
+- **Step 1: Export progression module**
 
 Add `pub mod progression;` to `src/domain/mod.rs`.
 
-- [ ] **Step 2: Write failing progression tests**
+- **Step 2: Write failing progression tests**
 
 Add tests to `src/domain/progression.rs`:
 
@@ -1107,13 +1107,13 @@ mod tests {
 }
 ```
 
-- [ ] **Step 3: Run tests and verify RED**
+- **Step 3: Run tests and verify RED**
 
 Run: `cargo test domain::progression --lib`
 
 Expected: fails because progression APIs do not exist.
 
-- [ ] **Step 4: Implement progression**
+- **Step 4: Implement progression**
 
 ```rust
 use serde::{Deserialize, Serialize};
@@ -1183,19 +1183,19 @@ impl MetaProgression {
 }
 ```
 
-- [ ] **Step 5: Run tests and verify GREEN**
+- **Step 5: Run tests and verify GREEN**
 
 Run: `cargo test domain::progression --lib`
 
 Expected: all progression tests pass.
 
-- [ ] **Step 6: Run full verification**
+- **Step 6: Run full verification**
 
 Run: `cargo fmt --check && cargo test`
 
 Expected: all checks pass.
 
-- [ ] **Step 7: Commit**
+- **Step 7: Commit**
 
 ```bash
 git add src/domain/mod.rs src/domain/progression.rs
@@ -1205,15 +1205,15 @@ git commit -m "Add meta progression"
 ## Task 7: Complete Run State Machine
 
 **Files:**
+
 - Create: `src/domain/run.rs`
 - Create: `tests/simulation_mvp.rs`
 - Modify: `src/domain/mod.rs`
-
-- [ ] **Step 1: Export run module**
+- **Step 1: Export run module**
 
 Add `pub mod run;` to `src/domain/mod.rs`.
 
-- [ ] **Step 2: Write failing integration test**
+- **Step 2: Write failing integration test**
 
 Create `tests/simulation_mvp.rs`:
 
@@ -1243,13 +1243,13 @@ fn run_summary_reports_depth_gold_and_outcome() {
 }
 ```
 
-- [ ] **Step 3: Run tests and verify RED**
+- **Step 3: Run tests and verify RED**
 
 Run: `cargo test --test simulation_mvp`
 
 Expected: fails because run APIs do not exist.
 
-- [ ] **Step 4: Implement `src/domain/run.rs`**
+- **Step 4: Implement `src/domain/run.rs`**
 
 ```rust
 use crate::domain::combat::{simulate_combat, CombatOutcome};
@@ -1339,19 +1339,19 @@ pub fn simulate_run(hero: &HeroProfile, config: RunConfig) -> RunSummary {
 }
 ```
 
-- [ ] **Step 5: Run tests and verify GREEN**
+- **Step 5: Run tests and verify GREEN**
 
 Run: `cargo test --test simulation_mvp`
 
 Expected: integration tests pass.
 
-- [ ] **Step 6: Run full verification**
+- **Step 6: Run full verification**
 
 Run: `cargo fmt --check && cargo test`
 
 Expected: all checks pass.
 
-- [ ] **Step 7: Commit**
+- **Step 7: Commit**
 
 ```bash
 git add src/domain/mod.rs src/domain/run.rs tests/simulation_mvp.rs
@@ -1361,14 +1361,14 @@ git commit -m "Add deterministic run simulation"
 ## Task 8: Save And Load Profiles
 
 **Files:**
+
 - Create: `src/save.rs`
 - Modify: `src/lib.rs`
-
-- [ ] **Step 1: Export save module**
+- **Step 1: Export save module**
 
 Add `pub mod save;` to `src/lib.rs`.
 
-- [ ] **Step 2: Write failing save tests**
+- **Step 2: Write failing save tests**
 
 Add tests to `src/save.rs`:
 
@@ -1414,13 +1414,13 @@ mod tests {
 }
 ```
 
-- [ ] **Step 3: Run tests and verify RED**
+- **Step 3: Run tests and verify RED**
 
 Run: `cargo test save --lib`
 
 Expected: fails because save APIs do not exist.
 
-- [ ] **Step 4: Implement `src/save.rs`**
+- **Step 4: Implement `src/save.rs`**
 
 ```rust
 use crate::domain::hero::HeroProfile;
@@ -1473,19 +1473,19 @@ pub fn save_profile(path: &Path, profile: &SaveProfile) -> Result<(), SaveError>
 }
 ```
 
-- [ ] **Step 5: Run tests and verify GREEN**
+- **Step 5: Run tests and verify GREEN**
 
 Run: `cargo test save --lib`
 
 Expected: all save tests pass.
 
-- [ ] **Step 6: Run full verification**
+- **Step 6: Run full verification**
 
 Run: `cargo fmt --check && cargo test`
 
 Expected: all checks pass.
 
-- [ ] **Step 7: Commit**
+- **Step 7: Commit**
 
 ```bash
 git add src/lib.rs src/save.rs
@@ -1495,9 +1495,9 @@ git commit -m "Add profile save loading"
 ## Task 9: Bevy App States And Simulation Resource
 
 **Files:**
-- Modify: `src/app.rs`
 
-- [ ] **Step 1: Write failing app state tests**
+- Modify: `src/app.rs`
+- **Step 1: Write failing app state tests**
 
 Add tests to `src/app.rs`:
 
@@ -1529,13 +1529,13 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- **Step 2: Run tests and verify RED**
 
 Run: `cargo test app --lib`
 
 Expected: fails because `GameState`, `StartRun`, and `LatestRunSummary` do not exist.
 
-- [ ] **Step 3: Implement app resources and systems**
+- **Step 3: Implement app resources and systems**
 
 Update `src/app.rs`:
 
@@ -1588,19 +1588,19 @@ pub fn run() {
 }
 ```
 
-- [ ] **Step 4: Run tests and verify GREEN**
+- **Step 4: Run tests and verify GREEN**
 
 Run: `cargo test app --lib`
 
 Expected: app state tests pass.
 
-- [ ] **Step 5: Run full verification**
+- **Step 5: Run full verification**
 
 Run: `cargo fmt --check && cargo test`
 
 Expected: all checks pass.
 
-- [ ] **Step 6: Commit**
+- **Step 6: Commit**
 
 ```bash
 git add src/app.rs
@@ -1610,6 +1610,7 @@ git commit -m "Wire run simulation into Bevy app"
 ## Task 10: Functional MVP UI
 
 **Files:**
+
 - Create: `src/ui/mod.rs`
 - Create: `src/ui/build_panel.rs`
 - Create: `src/ui/run_panel.rs`
@@ -1619,12 +1620,11 @@ git commit -m "Wire run simulation into Bevy app"
 - Create: `src/ui/summary_panel.rs`
 - Modify: `src/lib.rs`
 - Modify: `src/app.rs`
-
-- [ ] **Step 1: Export UI module**
+- **Step 1: Export UI module**
 
 Add `pub mod ui;` to `src/lib.rs`.
 
-- [ ] **Step 2: Write failing UI text model tests**
+- **Step 2: Write failing UI text model tests**
 
 Use testable text model functions before building visual Bevy nodes. Add to `src/ui/build_panel.rs`:
 
@@ -1674,13 +1674,13 @@ mod tests {
 }
 ```
 
-- [ ] **Step 3: Run tests and verify RED**
+- **Step 3: Run tests and verify RED**
 
 Run: `cargo test ui --lib`
 
 Expected: fails because UI modules and text functions do not exist.
 
-- [ ] **Step 4: Implement UI text model functions**
+- **Step 4: Implement UI text model functions**
 
 `src/ui/mod.rs`:
 
@@ -1746,7 +1746,7 @@ pub fn panel_title() -> &'static str {
 
 Use that function in `inventory_panel.rs`, `log_panel.rs`, `run_panel.rs`, and `upgrade_panel.rs`, changing the returned string to the panel name.
 
-- [ ] **Step 5: Wire `UiPlugin` into app**
+- **Step 5: Wire `UiPlugin` into app**
 
 In `src/app.rs`, import and add the plugin:
 
@@ -1757,19 +1757,19 @@ use crate::ui::UiPlugin;
 .add_plugins(UiPlugin)
 ```
 
-- [ ] **Step 6: Run tests and verify GREEN**
+- **Step 6: Run tests and verify GREEN**
 
 Run: `cargo test ui --lib`
 
 Expected: UI text model tests pass.
 
-- [ ] **Step 7: Run full verification**
+- **Step 7: Run full verification**
 
 Run: `cargo fmt --check && cargo test && cargo check`
 
 Expected: all checks pass.
 
-- [ ] **Step 8: Commit**
+- **Step 8: Commit**
 
 ```bash
 git add src/lib.rs src/app.rs src/ui
@@ -1779,10 +1779,10 @@ git commit -m "Add functional MVP UI models"
 ## Task 11: MVP Acceptance Pass
 
 **Files:**
+
 - Modify: `README.md`
 - Create: `docs/mvp-acceptance.md`
-
-- [ ] **Step 1: Write acceptance checklist**
+- **Step 1: Write acceptance checklist**
 
 Create `docs/mvp-acceptance.md`:
 
@@ -1804,7 +1804,7 @@ Create `docs/mvp-acceptance.md`:
 - [ ] UI text models expose build and summary information.
 ```
 
-- [ ] **Step 2: Add README development commands**
+- **Step 2: Add README development commands**
 
 Append to `README.md`:
 
@@ -1820,6 +1820,7 @@ cargo check
 ```
 
 The MVP should be built one testable slice at a time. Each behavior change should start with a failing test, then minimal implementation, then a passing verification run.
+
 ```
 
 - [ ] **Step 3: Run full MVP verification**
@@ -1849,3 +1850,4 @@ git commit -m "Document MVP acceptance checks"
 - Spec coverage: This plan covers project bootstrap, plugin architecture, hero skill slots, gear/stat synergy, deterministic dungeon generation, fixed-tick combat, loot, meta-progression, save/load, UI panels, and MVP acceptance checks.
 - Intentional gaps: Full party formation, multiple heroes, advanced procedural maps, online systems, external content tooling, and asset-heavy visuals remain out of scope, matching the design document.
 - Test strategy: Every behavior subsystem has a red-green test gate and a full verification gate before commit.
+
