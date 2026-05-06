@@ -1,5 +1,6 @@
 use crate::domain::hero::HeroProfile;
 use crate::domain::run::{simulate_run, RunConfig, RunSummary};
+use crate::ui::UiPlugin;
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
 
@@ -57,6 +58,7 @@ pub fn run() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(IdleDungeonsPlugin)
+        .add_plugins(UiPlugin)
         .run();
 }
 
