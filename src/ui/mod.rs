@@ -41,6 +41,7 @@ impl Plugin for UiPlugin {
                     handle_salvage_buttons,
                     handle_buy_upgrade_buttons,
                     handle_return_to_build_button,
+                    refresh_upgrade_screen_on_profile_change,
                 )
                     .run_if(in_state(GameState::Upgrades)),
             );
@@ -225,6 +226,10 @@ fn spawn_summary_screen(mut commands: Commands, latest_summary: Option<Res<Lates
 }
 
 fn spawn_upgrade_screen(mut commands: Commands, profile: Res<ProfileState>) {
+    spawn_upgrade_screen_root(&mut commands, &profile);
+}
+
+fn spawn_upgrade_screen_root(commands: &mut Commands, profile: &ProfileState) {
     let hero = profile.effective_hero();
     let stats = hero.derived_stats();
     let meta = &profile.profile.meta;
@@ -277,6 +282,21 @@ fn spawn_upgrade_screen(mut commands: Commands, profile: Res<ProfileState>) {
                     button.spawn(button_text("Run Again"));
                 });
         });
+}
+
+fn refresh_upgrade_screen_on_profile_change(
+    mut commands: Commands,
+    profile: Res<ProfileState>,
+    upgrade_roots: Query<Entity, With<UpgradeScreen>>,
+) {
+    if !profile.is_changed() || upgrade_roots.is_empty() {
+        return;
+    }
+
+    for root in &upgrade_roots {
+        commands.entity(root).despawn_recursive();
+    }
+    spawn_upgrade_screen_root(&mut commands, &profile);
 }
 
 fn spawn_equipped_text(parent: &mut ChildBuilder, profile: &ProfileState) {
@@ -500,7 +520,8 @@ fn full_screen_column() -> Style {
 mod tests {
     use super::*;
     use crate::app::{
-        AcceptRunRewards, GameState, IdleDungeonsPlugin, LatestRunSummary, ProfileState, StartRun,
+        AcceptRunRewards, GameState, IdleDungeonsPlugin, LatestRunSummary, ProfileSavePath,
+        ProfileState, StartRun,
     };
     use crate::domain::items::{GearSlot, ItemInstance};
     use crate::domain::progression::UpgradeId;
@@ -655,6 +676,47 @@ mod tests {
         );
     }
 
+    #[test]
+    fn pressing_upgrade_button_updates_profile_and_refreshes_screen_text() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_plugins(StatesPlugin);
+        app.insert_resource(ProfileSavePath(dir.path().join("profile.json")));
+        app.add_plugins(IdleDungeonsPlugin);
+        app.add_plugins(UiPlugin);
+        app.world_mut()
+            .resource_mut::<ProfileState>()
+            .profile
+            .meta
+            .gold = 100;
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::Upgrades);
+        app.update();
+        app.update();
+
+        let button = app
+            .world_mut()
+            .query_filtered::<(Entity, &BuyUpgradeButton), ()>()
+            .iter(app.world())
+            .find_map(|(entity, button)| {
+                (button.upgrade == UpgradeId::BaseDamage).then_some(entity)
+            })
+            .unwrap();
+        app.world_mut()
+            .entity_mut(button)
+            .insert(Interaction::Pressed);
+        app.update();
+        app.update();
+
+        let profile = app.world().resource::<ProfileState>();
+        assert_eq!(profile.profile.meta.gold, 90);
+        assert_eq!(profile.profile.meta.upgrade_level(UpgradeId::BaseDamage), 1);
+        assert!(all_text(app.world_mut()).contains("Gold: 90"));
+        assert!(all_text(app.world_mut()).contains("BaseDamage L1"));
+    }
+
     fn entity_count<T: Component>(world: &mut World) -> usize {
         let mut query = world.query_filtered::<Entity, With<T>>();
         query.iter(world).count()
@@ -663,5 +725,15 @@ mod tests {
     fn single_entity<T: Component>(world: &mut World) -> Entity {
         let mut query = world.query_filtered::<Entity, With<T>>();
         query.single(world)
+    }
+
+    fn all_text(world: &mut World) -> String {
+        let mut query = world.query::<&Text>();
+        query
+            .iter(world)
+            .flat_map(|text| text.sections.iter())
+            .map(|section| section.value.as_str())
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }
