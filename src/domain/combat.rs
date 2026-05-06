@@ -139,7 +139,35 @@ mod tests {
     }
 
     #[test]
-    fn armor_reduces_incoming_damage_but_damage_is_at_least_one() {
+    fn armor_reduces_incoming_damage_compared_to_unarmored_hero() {
+        let unarmored_hero = HeroProfile::default();
+        let armored_hero = HeroProfile::new(Stats {
+            armor: 3,
+            ..Stats::default()
+        });
+        let enemy = Enemy {
+            name: "Rustblade Hollow".into(),
+            max_health: 999,
+            damage: 5,
+            armor: 0,
+            attack_speed: 1.0,
+        };
+
+        let unarmored_result = simulate_combat(&unarmored_hero, &enemy, 1);
+        let armored_result = simulate_combat(&armored_hero, &enemy, 1);
+        let unarmored_damage_taken =
+            unarmored_hero.derived_stats().max_health - unarmored_result.hero_health;
+        let armored_damage_taken =
+            armored_hero.derived_stats().max_health - armored_result.hero_health;
+
+        assert!(
+            armored_damage_taken < unarmored_damage_taken,
+            "expected armor to reduce incoming damage below {unarmored_damage_taken}, got {armored_damage_taken}"
+        );
+    }
+
+    #[test]
+    fn incoming_damage_is_at_least_one_when_armor_exceeds_enemy_damage() {
         let hero = HeroProfile::new(Stats {
             armor: 99,
             ..Stats::default()
@@ -154,6 +182,8 @@ mod tests {
 
         let result = simulate_combat(&hero, &enemy, 1);
 
-        assert!(result.hero_health < hero.derived_stats().max_health);
+        let damage_taken = hero.derived_stats().max_health - result.hero_health;
+
+        assert_eq!(damage_taken, 1);
     }
 }
