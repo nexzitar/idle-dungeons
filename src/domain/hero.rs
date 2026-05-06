@@ -8,6 +8,8 @@ use std::collections::HashMap;
 pub enum HeroError {
     #[error("skill slot {slot} is locked")]
     SkillSlotLocked { slot: usize },
+    #[error("skill slot {slot} is unavailable")]
+    SkillSlotUnavailable { slot: usize },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -42,6 +44,9 @@ impl HeroProfile {
         if slot >= self.unlocked_skill_slots {
             return Err(HeroError::SkillSlotLocked { slot });
         }
+        if slot >= self.equipped_skills.len() {
+            return Err(HeroError::SkillSlotUnavailable { slot });
+        }
         self.equipped_skills[slot] = Some(skill);
         Ok(())
     }
@@ -74,9 +79,10 @@ mod tests {
     use crate::domain::items::{GearSlot, ItemAffix, ItemInstance, ItemRarity};
     use crate::domain::skills::SkillId;
     use crate::domain::stats::Stats;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
 
     #[test]
-    fn derived_stats_include_base_stats_equipped_skills_and_gear() {
+    fn derived_stats_include_base_stats_and_gear() {
         let mut hero = HeroProfile::new(Stats {
             max_health: 100,
             damage: 10,
@@ -119,6 +125,21 @@ mod tests {
         let result = hero.equip_skill(1, SkillId::Guard);
 
         assert_eq!(result, Err(HeroError::SkillSlotLocked { slot: 1 }));
+    }
+
+    #[test]
+    fn invalid_skill_slot_state_returns_error_instead_of_panicking() {
+        let mut hero = HeroProfile {
+            base_stats: Stats::default(),
+            unlocked_skill_slots: 3,
+            equipped_skills: vec![None],
+            equipped_items: HashMap::new(),
+        };
+
+        let result = catch_unwind(AssertUnwindSafe(|| hero.equip_skill(2, SkillId::Guard)));
+
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_err());
     }
 
     #[test]
