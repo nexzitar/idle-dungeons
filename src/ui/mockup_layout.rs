@@ -14,7 +14,7 @@ use crate::ui::components::{
     ResetProgressButton, ReturnToBuildButton, SettingsButton, SettingsModalBackdrop,
     SettingsModalCloseButton, SettingsModalRoot, SettingsModalSpeedButton, SettingsModalSpeedLabel,
     SkillSlotButton, SkipPlaybackButton, TopBarField, UiButtonPalette, UiScrollContent,
-    UiScrollRegion, UiScrollState,
+    UiScrollRegion, UiScrollState, UiTooltip,
 };
 use crate::ui::theme::{
     body_text, caption_text, format_item_stat_summary, headline_text, log_line_present,
@@ -210,6 +210,7 @@ pub fn spawn_settings_modal(parent: &mut ChildBuilder, speed_mult: f32) {
                 },
                 SettingsModalBackdrop,
                 backdrop_pal,
+                UiTooltip::txt("Click the dimmed backdrop to close settings (same as Close)."),
             ));
             layer
                 .spawn(NodeBundle {
@@ -256,6 +257,9 @@ pub fn spawn_settings_modal(parent: &mut ChildBuilder, speed_mult: f32) {
                             },
                             SettingsModalSpeedButton,
                             speed_btn_pal,
+                            UiTooltip::txt(
+                                "Toggle run playback speed between 1x and 2x. Affects delve playback and future combat timing.",
+                            ),
                         ))
                         .with_children(|b| {
                             b.spawn((
@@ -289,6 +293,9 @@ pub fn spawn_settings_modal(parent: &mut ChildBuilder, speed_mult: f32) {
                             },
                             ResetProgressButton,
                             reset_pal,
+                            UiTooltip::txt(
+                                "Permanently wipe local save data—hero, stash, gold, upgrades—and return to a fresh profile.",
+                            ),
                         ))
                         .with_children(|b| {
                             b.spawn(TextBundle::from_section(
@@ -318,6 +325,7 @@ pub fn spawn_settings_modal(parent: &mut ChildBuilder, speed_mult: f32) {
                             },
                             SettingsModalCloseButton,
                             close_pal,
+                            UiTooltip::txt("Close the settings dialog without applying other changes."),
                         ))
                         .with_children(|b| {
                             b.spawn(TextBundle::from_section(
@@ -388,6 +396,7 @@ pub fn spawn_mockup_header(
                     "Gold",
                     TopBarField::Gold,
                     format!("{gold}"),
+                    "Gold pays for caravan upgrades. Earn it from dungeon runs when you accept rewards.",
                 );
                 resource_chip(
                     center,
@@ -395,6 +404,7 @@ pub fn spawn_mockup_header(
                     "Salvage",
                     TopBarField::Salvage,
                     format!("{salvage}"),
+                    "Salvage currency from breaking down spare gear in your stash.",
                 );
                 resource_chip(
                     center,
@@ -402,6 +412,7 @@ pub fn spawn_mockup_header(
                     "Skills",
                     TopBarField::SkillSlots,
                     format!("{skill_slots}/{skill_cap}"),
+                    "Equipped skill slots in use versus how many are unlocked for your hero.",
                 );
                 resource_chip(
                     center,
@@ -409,6 +420,7 @@ pub fn spawn_mockup_header(
                     "Depth",
                     TopBarField::Depth,
                     depth_label.to_string(),
+                    "Deepest floor reached on the latest run (or dash when not applicable).",
                 );
                 resource_chip(
                     center,
@@ -416,6 +428,7 @@ pub fn spawn_mockup_header(
                     "Speed",
                     TopBarField::Speed,
                     fmt_speed_label(speed_mult),
+                    "How fast delve playback runs. Also applies to some future real-time combat.",
                 );
             });
             row.spawn(NodeBundle {
@@ -446,6 +459,9 @@ pub fn spawn_mockup_header(
                         },
                         SettingsButton,
                         p,
+                        UiTooltip::txt(
+                            "Open settings: change playback speed or reset all progress and saves.",
+                        ),
                     ))
                     .with_children(|btn| {
                         btn.spawn(TextBundle::from_section(
@@ -477,17 +493,22 @@ fn resource_chip(
     label: &'static str,
     field: TopBarField,
     value: String,
+    tooltip: &'static str,
 ) {
     parent
-        .spawn(NodeBundle {
-            style: Style {
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
-                min_width: Val::Px(68.0),
+        .spawn((
+            NodeBundle {
+                style: Style {
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    min_width: Val::Px(68.0),
+                    ..default()
+                },
                 ..default()
             },
-            ..default()
-        })
+            Interaction::default(),
+            UiTooltip::txt(tooltip),
+        ))
         .with_children(|col| {
             col.spawn(TextBundle::from_section(
                 format!("{icon} {label}"),
@@ -652,6 +673,18 @@ fn skill_slot_row(
                         .and_then(|s| *s)
                         .map(|sk| crate::domain::skills::skill_definition(sk).name.to_string())
                         .unwrap_or_else(|| format!("Slot {}", i + 1));
+                    let tip = hero
+                        .equipped_skills
+                        .get(i)
+                        .and_then(|s| *s)
+                        .map(|sk| {
+                            let d = crate::domain::skills::skill_definition(sk);
+                            format!("{}\n{}", d.name, d.description)
+                        })
+                        .unwrap_or_else(|| {
+                            "Click to cycle this slot through your unlocked skills (or clear it)."
+                                .to_string()
+                        });
                     let p = UiButtonPalette::skill_slot_chip();
                     row.spawn((
                         ButtonBundle {
@@ -671,6 +704,7 @@ fn skill_slot_row(
                         },
                         SkillSlotButton { slot: i },
                         p,
+                        UiTooltip::txt(tip),
                     ))
                     .with_children(|s| {
                         s.spawn(TextBundle::from_section(
@@ -701,27 +735,44 @@ fn skill_slot_row(
                 } else {
                     "\u{1F512}".to_string()
                 };
-                row.spawn(NodeBundle {
-                    style: Style {
-                        width: Val::Px(52.0),
-                        height: Val::Px(52.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        border: UiRect::all(Val::Px(1.0)),
+                let idle_tip = if !unlocked {
+                    "Locked skill slot. Improve your profile to unlock more active skills."
+                        .to_string()
+                } else {
+                    hero.equipped_skills
+                        .get(i)
+                        .and_then(|s| *s)
+                        .map(|sk| {
+                            let d = crate::domain::skills::skill_definition(sk);
+                            format!("{}\n{}", d.name, d.description)
+                        })
+                        .unwrap_or_else(|| "Empty skill slot.".to_string())
+                };
+                row.spawn((
+                    NodeBundle {
+                        style: Style {
+                            width: Val::Px(52.0),
+                            height: Val::Px(52.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            border: UiRect::all(Val::Px(1.0)),
+                            ..default()
+                        },
+                        background_color: if unlocked {
+                            UiTheme::panel_bg_deep().into()
+                        } else {
+                            Color::srgba(0.06, 0.06, 0.07, 1.0).into()
+                        },
+                        border_color: BorderColor(if unlocked {
+                            UiTheme::ornate_gold()
+                        } else {
+                            UiTheme::panel_border()
+                        }),
                         ..default()
                     },
-                    background_color: if unlocked {
-                        UiTheme::panel_bg_deep().into()
-                    } else {
-                        Color::srgba(0.06, 0.06, 0.07, 1.0).into()
-                    },
-                    border_color: BorderColor(if unlocked {
-                        UiTheme::ornate_gold()
-                    } else {
-                        UiTheme::panel_border()
-                    }),
-                    ..default()
-                })
+                    Interaction::default(),
+                    UiTooltip::txt(idle_tip),
+                ))
                 .with_children(|s| {
                     s.spawn(TextBundle::from_section(
                         label,
@@ -747,21 +798,37 @@ pub fn mockup_gear_cards(parent: &mut ChildBuilder, profile: &crate::app::Profil
         ("Trinket", crate::domain::items::GearSlot::Trinket),
     ] {
         let item = profile.profile.hero.equipped_item(slot);
+        let tip = if let Some(item) = item {
+            format!(
+                "{}\n{:?}\n{}",
+                item.name,
+                item.rarity,
+                format_item_stat_summary(item)
+            )
+        } else {
+            format!(
+                "No {label} equipped yet. Loot gear on runs and equip it from the Inventory tab."
+            )
+        };
         parent
-            .spawn(NodeBundle {
-                style: Style {
-                    width: Val::Percent(100.0),
-                    flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(10.0),
-                    padding: UiRect::all(Val::Px(8.0)),
-                    border: UiRect::all(Val::Px(1.0)),
-                    margin: UiRect::bottom(Val::Px(8.0)),
+            .spawn((
+                NodeBundle {
+                    style: Style {
+                        width: Val::Percent(100.0),
+                        flex_direction: FlexDirection::Row,
+                        column_gap: Val::Px(10.0),
+                        padding: UiRect::all(Val::Px(8.0)),
+                        border: UiRect::all(Val::Px(1.0)),
+                        margin: UiRect::bottom(Val::Px(8.0)),
+                        ..default()
+                    },
+                    background_color: UiTheme::panel_bg_deep().into(),
+                    border_color: BorderColor(UiTheme::ornate_gold()),
                     ..default()
                 },
-                background_color: UiTheme::panel_bg_deep().into(),
-                border_color: BorderColor(UiTheme::ornate_gold()),
-                ..default()
-            })
+                Interaction::default(),
+                UiTooltip::txt(tip),
+            ))
             .with_children(|card| {
                 card.spawn(NodeBundle {
                     style: Style {
@@ -1302,9 +1369,27 @@ pub fn spawn_right_management_column(
                 ..default()
             })
             .with_children(|tabs| {
-                tab_btn(tabs, "INVENTORY", RightPanelTab::Inventory, tab);
-                tab_btn(tabs, "UPGRADES", RightPanelTab::Upgrades, tab);
-                tab_btn(tabs, "LOOT", RightPanelTab::Loot, tab);
+                tab_btn(
+                    tabs,
+                    "INVENTORY",
+                    RightPanelTab::Inventory,
+                    tab,
+                    "Stash: items not on your hero. Equip to wear them or salvage for currency.",
+                );
+                tab_btn(
+                    tabs,
+                    "UPGRADES",
+                    RightPanelTab::Upgrades,
+                    tab,
+                    "Spend gold on caravan upgrades that strengthen your hero on future runs.",
+                );
+                tab_btn(
+                    tabs,
+                    "LOOT",
+                    RightPanelTab::Loot,
+                    tab,
+                    "Treasure from the latest run—review before you accept rewards to your profile.",
+                );
             });
             col.spawn(caption_text("Filters: all rarities   |   Sort: newest"));
             if matches!(tab, RightPanelTab::Inventory | RightPanelTab::Loot) {
@@ -1322,7 +1407,13 @@ pub fn spawn_right_management_column(
         });
 }
 
-fn tab_btn(parent: &mut ChildBuilder, label: &str, id: RightPanelTab, active: RightPanelTab) {
+fn tab_btn(
+    parent: &mut ChildBuilder,
+    label: &str,
+    id: RightPanelTab,
+    active: RightPanelTab,
+    tooltip: &'static str,
+) {
     let is_on = id == active;
     let p = UiButtonPalette::stash_tab(is_on);
     parent
@@ -1343,6 +1434,7 @@ fn tab_btn(parent: &mut ChildBuilder, label: &str, id: RightPanelTab, active: Ri
             },
             RightTabButton(id),
             p,
+            UiTooltip::txt(tooltip),
         ))
         .with_children(|b| {
             b.spawn(TextBundle::from_section(
@@ -1447,6 +1539,7 @@ fn spawn_right_scroll_body(
                             },
                             BuyUpgradeButton { upgrade },
                             p,
+                            UiTooltip::txt(crate::ui::tooltip::upgrade_tooltip(upgrade)),
                         ))
                         .with_children(|b| {
                             b.spawn(TextBundle::from_section(
@@ -1550,6 +1643,9 @@ pub fn spawn_mockup_footer(parent: &mut ChildBuilder, mode: FooterMode) {
                         },
                         ReturnToBuildButton,
                         p,
+                        UiTooltip::txt(
+                            "Leave the upgrades camp and return to the pre-run briefing screen.",
+                        ),
                     ))
                     .with_children(|b| {
                         b.spawn(TextBundle::from_section(
@@ -1580,6 +1676,9 @@ pub fn spawn_mockup_footer(parent: &mut ChildBuilder, mode: FooterMode) {
                         },
                         crate::ui::components::StartRunButton,
                         p,
+                        UiTooltip::txt(
+                            "Begin a seeded dungeon run using your current hero build and stash.",
+                        ),
                     ))
                     .with_children(|b| {
                         b.spawn(TextBundle::from_section(
@@ -1611,6 +1710,9 @@ pub fn spawn_mockup_footer(parent: &mut ChildBuilder, mode: FooterMode) {
                         },
                         SkipPlaybackButton,
                         p,
+                        UiTooltip::txt(
+                            "Jump straight to the run summary without watching the rest of playback.",
+                        ),
                     ))
                     .with_children(|b| {
                         b.spawn(TextBundle::from_section(
@@ -1641,6 +1743,9 @@ pub fn spawn_mockup_footer(parent: &mut ChildBuilder, mode: FooterMode) {
                         },
                         AcceptRewardsButton,
                         p,
+                        UiTooltip::txt(
+                            "Apply this run's gold, loot, and progression to your profile and return to play.",
+                        ),
                     ))
                     .with_children(|b| {
                         b.spawn(TextBundle::from_section(
