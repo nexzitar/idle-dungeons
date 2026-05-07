@@ -33,13 +33,14 @@
 **Files:**
 - Read: `src/domain/skills.rs` (`SkillDefinition` per skill)
 - Read: `src/domain/combat.rs` (`simulate_combat` body ~61–239)
-- Modify: `docs/superpowers/plans/2026-05-06-mvp-remaining-work.md` (strike outdated “only Lifesteal” claim if still present)
+- **`docs/superpowers/plans/2026-05-07-skill-combat-catalog-mapping.md`** — per-skill trigger vs simulation (maintain when combat changes)
+- Modify: `docs/superpowers/plans/2026-05-06-mvp-remaining-work.md` (reality table + README link)
 
-- [ ] **Step 1:** For each `SkillId`, write a one-line mapping in a scratch note: **trigger** (OnAttack / OnHitTaken / OnRoomStart / PeriodicTick) vs **what code does today**. Flag mismatches (e.g. poison described as DoT but applied only on hero attack swing).
+- [x] **Step 1:** For each `SkillId`, mapping: **trigger** vs **what code does today** — see catalog mapping doc.
 
-- [ ] **Step 2:** Prioritize mismatches: decide **minimal** change that matches text (preferred) or **update description string** if gameplay prefers current simpler model (document in commit message).
+- [x] **Step 2:** Mismatches resolved in Phase A.2–A.4; doc notes future copy-only transparency.
 
-- [ ] **Step 3:** Commit chore: `docs: align roadmap note with combat skill coverage`
+- [x] **Step 3:** Docs committed: `mvp-remaining-work.md` + `skill-combat-catalog-mapping.md` + README pointer.
 
 ```bash
 git add docs/superpowers/plans/2026-05-06-mvp-remaining-work.md
@@ -108,7 +109,7 @@ Pick **one** path; do not leave misleading UI.
 
 **Superseded for filter line by B.2:** stash column now shows `Stash filters: —` plus a real sort control. Remaining “filters” work is still future scope.
 
-- [ ] **Step 1–3:** Optional follow-up if you want to tweak copy further; not required after B.2.
+- [x] **Step 1–3:** No further copy required; stash sort (B.2) superseded filter line. **Done / N/A.**
 
 #### Task B.2 (Path 2 — functional minimal): Sort only
 
@@ -151,9 +152,7 @@ Documented in `generate_dungeon` rustdoc on `src/domain/dungeon.rs`.
 
 Depth **11** is fixed **Treasure** when `seed % 97 == 11` (e.g. seed **108**). Test: `seeded_depth_11_treasure_when_seed_mod_97_eq_11`.
 
-- [ ] **Step 3:** Expose **risk hint** in run summary or `RunPlaybackFrame` caption if needed (small string field).
-
-Deferred (optional in plan).
+- [x] **Step 3:** **`RunPlaybackFrame.risk_hint`** (per-room label from `room_risk_hint` in `src/domain/dungeon.rs`) on playback “Type” line; **`RunSummary.peak_risk_note`** (max danger seen) on summary panel + text report. Integration test: `tests/simulation_mvp.rs`.
 
 - [x] **Step 4:** Commit `feat(dungeon): tweak room table + test`
 
@@ -185,12 +184,11 @@ Briefing column captions updated; seed labeled as MVP fixed value until picker e
 
 - [x] **Step 2:** Subtle color contrast fixes for `body_dim` vs backgrounds (manual playtest).
 
-- [ ] **Step 3:** Commit `style(ui): theme consistency pass`
+- [x] **Step 3:** Commit `style(ui): theme consistency pass`
 
 #### Task D.2: Playback motion (optional)
 
-**Files:**
-- `src/app.rs` (`ActiveRunPlayback` advance), `src/ui/mod.rs` sync systems
+**Status:** **Deferred.** Bars and log advance on fixed `PLAYBACK_STEP_SECS` in `src/app.rs`; adding interpolation would require smoothing state in `UiPlugin` and was skipped to keep playback timing simple and tests stable.
 
 - [ ] **Step 1:** If adding interpolation, keep **simulation indices** authoritative; only ease displayed bars/text.
 
