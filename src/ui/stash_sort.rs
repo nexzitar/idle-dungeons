@@ -1,36 +1,8 @@
-//! Stash inventory display order (profile [`Vec`](crate::save SaveProfile) order vs rarity/name).
-
-use bevy::prelude::Resource;
+//! Stash list ordering helpers (persisted [`crate::save::StashSortOrder`] on [`crate::save::SaveProfile`]).
 
 use crate::domain::items::{ItemInstance, ItemRarity};
 
-/// How items are ordered in the stash / loot list UI.
-#[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub enum StashSortOrder {
-    /// Same sequence as `SaveProfile::inventory` in memory and on disk:
-    /// the **last** element is the most recently added (e.g. `Vec::push` / `extend` from run loot).
-    /// Shown **newest first** in the UI.
-    #[default]
-    Recent,
-    /// Highest rarity first, then item name (`str` order), then `id` for stability.
-    RarityName,
-}
-
-impl StashSortOrder {
-    pub fn toggle(self) -> Self {
-        match self {
-            Self::Recent => Self::RarityName,
-            Self::RarityName => Self::Recent,
-        }
-    }
-
-    pub fn button_label(self) -> &'static str {
-        match self {
-            Self::Recent => "Order: · newest ·",
-            Self::RarityName => "Order: · rarity ·",
-        }
-    }
-}
+pub use crate::save::StashSortOrder;
 
 #[inline]
 fn rarity_rank(r: ItemRarity) -> u8 {

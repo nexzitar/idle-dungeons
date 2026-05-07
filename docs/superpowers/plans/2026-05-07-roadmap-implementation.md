@@ -118,7 +118,7 @@ Pick **one** path; do not leave misleading UI.
 
 - [x] **Step 1:** Add resource `StashSort: enum { Recent, RarityName }` in `src/ui/mod.rs` or `components.rs`.
 
-Implemented as `StashSortOrder` in `src/ui/stash_sort.rs` (`Recent` = reverse profile vec order / newest appended last; `RarityName` = rare first, name A–Z, `id` tie-break).
+Implemented as `StashSortOrder` in `src/save.rs` on `SaveProfile` (`Recent` = reverse profile vec order / newest appended last; `RarityName` = rare first, name A–Z, `id` tie-break). Session `Resource` removed; UI reads `profile.profile.stash_sort`, toggles persist via `save_profile`.
 
 - [x] **Step 2:** When spawning inventory rows OR in a sync system, sort `inventory: &[ItemInstance]` by chosen key before `spawn_item_card` (define “recent” as **file order** or `id` if no timestamp — document in comment).
 
@@ -132,7 +132,7 @@ Implemented as `StashSortOrder` in `src/ui/stash_sort.rs` (`Recent` = reverse pr
 
 Tests in `src/ui/stash_sort.rs`.
 
-- [x] **Step 5:** Commit `feat(ui): stash sort by rarity/name`
+- [x] **Step 5:** Commit `feat(ui): stash sort by rarity/name` (preference persisted in `SaveProfile.stash_sort` as of follow-up save change).
 
 ---
 
@@ -143,13 +143,19 @@ Tests in `src/ui/stash_sort.rs`.
 **Files:**
 - `src/domain/dungeon.rs`, `src/domain/run.rs`, tests under `src/domain/`
 
-- [ ] **Step 1:** Read `RoomKind` and generation; list which kinds appear at which depths today.
+- [x] **Step 1:** Read `RoomKind` and generation; list which kinds appear at which depths today.
 
-- [ ] **Step 2:** Add **one** new encounter pattern or weight tweak with deterministic seed test (e.g. depth 10 always sees X under seed Y unless design forbids).
+Documented in `generate_dungeon` rustdoc on `src/domain/dungeon.rs`.
+
+- [x] **Step 2:** Add **one** new encounter pattern or weight tweak with deterministic seed test (e.g. depth 10 always sees X under seed Y unless design forbids).
+
+Depth **11** is fixed **Treasure** when `seed % 97 == 11` (e.g. seed **108**). Test: `seeded_depth_11_treasure_when_seed_mod_97_eq_11`.
 
 - [ ] **Step 3:** Expose **risk hint** in run summary or `RunPlaybackFrame` caption if needed (small string field).
 
-- [ ] **Step 4:** Commit `feat(dungeon): tweak room table + test`
+Deferred (optional in plan).
+
+- [x] **Step 4:** Commit `feat(dungeon): tweak room table + test`
 
 #### Task C.2: Briefing UI
 

@@ -7,6 +7,7 @@ use crate::domain::dungeon::RoomKind;
 use crate::domain::progression::MetaProgression;
 use crate::domain::progression::UpgradeId;
 use crate::domain::run::{RunOutcome, RunSummary, DEFAULT_RUN_MAX_DEPTH};
+use crate::save::StashSortOrder;
 use crate::ui::components::{
     AcceptRewardsButton, BuyUpgradeButton, PlaybackCaptionText, PlaybackDepthText,
     PlaybackEnemyBarFill, PlaybackEnemyNameText, PlaybackHeroBarFill, PlaybackLogScrollRegion,
@@ -16,7 +17,6 @@ use crate::ui::components::{
     SkillSlotButton, SkipPlaybackButton, StashSortCycleButton, TopBarField, UiButtonPalette,
     UiScrollContent, UiScrollRegion, UiScrollState, UiTooltip,
 };
-use crate::ui::stash_sort::StashSortOrder;
 use crate::ui::theme::{
     body_text, caption_text, format_item_stat_summary, headline_text, log_line_present,
     rarity_color, section_title, UiTheme,
@@ -1395,8 +1395,8 @@ pub fn spawn_right_management_column(
     inventory: &[crate::domain::items::ItemInstance],
     summary_loot: Option<&[crate::domain::items::ItemInstance]>,
     interactive_inventory: bool,
-    stash_sort: StashSortOrder,
 ) {
+    let stash_sort = profile.profile.stash_sort;
     parent
         .spawn(NodeBundle {
             style: Style {
