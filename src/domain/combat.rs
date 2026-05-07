@@ -109,6 +109,9 @@ pub fn simulate_combat(
     let mut hero_meter = 0.0_f32;
     let mut enemy_meter = 0.0_f32;
 
+    // Poison Edge: stacks on hit; one stack consumed at end of each clock iteration (DoT).
+    let mut poison_stacks: u32 = 0;
+
     let mut events = Vec::new();
 
     const MAX_EVENTS: usize = 600;
@@ -174,9 +177,7 @@ pub fn simulate_combat(
             }
 
             if has_poison {
-                let venom = poison_tick;
-                enemy_health -= venom;
-                events.push(CombatEvent::PoisonTick { damage: venom });
+                poison_stacks = (poison_stacks + 2).min(40);
             }
 
             if enemy_health <= 0 {
@@ -218,6 +219,20 @@ pub fn simulate_combat(
             if hero_health <= 0 {
                 events.push(CombatEvent::HeroDefeated);
                 enemy_win!();
+            }
+        }
+
+        if has_poison && poison_stacks > 0 && hero_health > 0 && enemy_health > 0 {
+            if events.len() >= MAX_EVENTS {
+                break;
+            }
+            let d = poison_tick.min(enemy_health);
+            enemy_health -= d;
+            poison_stacks -= 1;
+            events.push(CombatEvent::PoisonTick { damage: d });
+            if enemy_health <= 0 {
+                events.push(CombatEvent::EnemyDefeated);
+                hero_win!();
             }
         }
     }
@@ -498,6 +513,43 @@ mod tests {
             e,
             CombatEvent::PoisonTick { damage } if *damage > 0
         )));
+    }
+
+    #[test]
+    fn poison_deals_damage_across_clock_ticks() {
+        let mut hero = HeroProfile::default();
+        hero.base_stats.attack_speed = 0.12;
+        hero.unlock_skill_slots(1);
+        hero.equip_skill(0, SkillId::PoisonEdge).unwrap();
+
+        let enemy = Enemy {
+            name: "Pacer".into(),
+            max_health: 999,
+            damage: 1,
+            armor: 0,
+            attack_speed: 1.0,
+        };
+
+        let result = simulate_combat(&hero, &enemy, 12, hero.derived_stats().max_health);
+        let hero_swings = result
+            .events
+            .iter()
+            .filter(|e| matches!(e, CombatEvent::HeroAttacked { .. }))
+            .count();
+        let poison_ticks = result
+            .events
+            .iter()
+            .filter(|e| matches!(e, CombatEvent::PoisonTick { .. }))
+            .count();
+
+        assert_eq!(
+            hero_swings, 1,
+            "slow hero should land one strike in this tick budget"
+        );
+        assert!(
+            poison_ticks >= 2,
+            "poison should tick on later clock iterations without a second hero swing, got {poison_ticks} PoisonTick events"
+        );
     }
 
     #[test]
