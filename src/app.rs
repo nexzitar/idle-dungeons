@@ -50,6 +50,16 @@ pub struct BuyUpgrade {
 #[derive(Debug, Clone, Copy, Event)]
 pub struct ReturnToBuild;
 
+/// Display-only run speed multiplier (combat simulation uses fixed ticks for now).
+#[derive(Debug, Resource, Clone, Copy)]
+pub struct RunSpeedSetting(pub f32);
+
+impl Default for RunSpeedSetting {
+    fn default() -> Self {
+        Self(1.0)
+    }
+}
+
 #[derive(Debug, Resource)]
 pub struct ProfileSavePath(pub PathBuf);
 
@@ -95,6 +105,7 @@ impl Plugin for IdleDungeonsPlugin {
         app.init_state::<GameState>()
             .init_resource::<ProfileSavePath>()
             .init_resource::<ProfileState>()
+            .init_resource::<RunSpeedSetting>()
             .add_event::<StartRun>()
             .add_event::<AcceptRunRewards>()
             .add_event::<EquipInventoryItem>()
