@@ -981,7 +981,9 @@ fn handle_start_button(
     };
     for (entity, interaction) in &buttons {
         if entity == target && ui_click_release_confirms(*interaction) {
-            start_run_events.send(StartRun { seed: 1 });
+            start_run_events.send(StartRun {
+                seed: crate::domain::run::DEFAULT_RUN_SEED,
+            });
             break;
         }
     }

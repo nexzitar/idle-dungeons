@@ -162,11 +162,15 @@ Deferred (optional in plan).
 **Files:**
 - `src/ui/mockup_layout.rs` (`spawn_dungeon_briefing_column`)
 
-- [ ] **Step 1:** Pull next-run info from `ProfileState` / default depth cap strings (e.g. `DEFAULT_RUN_MAX_DEPTH`).
+- [x] **Step 1:** Pull next-run info from `ProfileState` / default depth cap strings (e.g. `DEFAULT_RUN_MAX_DEPTH`).
 
-- [ ] **Step 2:** Show “Target depth”, “Boss at depth N”, “Seed (if fixed)” consistently.
+Uses `DEFAULT_RUN_MAX_DEPTH` and `DEFAULT_RUN_SEED` from `run.rs` (single source with Start button).
 
-- [ ] **Step 3:** Commit `feat(ui): clearer briefing stats`
+- [x] **Step 2:** Show “Target depth”, “Boss at depth N”, “Seed (if fixed)” consistently.
+
+Briefing column captions updated; seed labeled as MVP fixed value until picker exists.
+
+- [x] **Step 3:** Commit `feat(ui): clearer briefing stats`
 
 ---
 

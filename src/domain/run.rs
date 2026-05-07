@@ -10,6 +10,9 @@ use serde::{Deserialize, Serialize};
 /// Default floor cap for a full delve (matches typical [`RunConfig::max_depth`]).
 pub const DEFAULT_RUN_MAX_DEPTH: u32 = 25;
 
+/// Fixed seed for the MVP “Start run” control until a seed picker exists.
+pub const DEFAULT_RUN_SEED: u64 = 1;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RunConfig {
     pub seed: u64,

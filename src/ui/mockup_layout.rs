@@ -6,7 +6,7 @@ use bevy::ui::{FocusPolicy, RelativeCursorPosition};
 use crate::domain::dungeon::RoomKind;
 use crate::domain::progression::MetaProgression;
 use crate::domain::progression::UpgradeId;
-use crate::domain::run::{RunOutcome, RunSummary, DEFAULT_RUN_MAX_DEPTH};
+use crate::domain::run::{RunOutcome, RunSummary, DEFAULT_RUN_MAX_DEPTH, DEFAULT_RUN_SEED};
 use crate::save::StashSortOrder;
 use crate::ui::components::{
     AcceptRewardsButton, BuyUpgradeButton, PlaybackCaptionText, PlaybackDepthText,
@@ -1045,8 +1045,10 @@ pub fn spawn_dungeon_briefing_column(parent: &mut ChildBuilder, stash_count: usi
             ..default()
         })
         .with_children(|r| {
-            r.spawn(caption_text("Depth: -"));
-            r.spawn(caption_text("Type: Briefing"));
+            r.spawn(caption_text(format!(
+                "Target depth: {DEFAULT_RUN_MAX_DEPTH}"
+            )));
+            r.spawn(caption_text("Phase: briefing"));
         });
         p.spawn(NodeBundle {
             style: Style {
@@ -1092,6 +1094,9 @@ pub fn spawn_dungeon_briefing_column(parent: &mut ChildBuilder, stash_count: usi
             })
             .with_children(|col| {
                 col.spawn(headline_text("Awaiting delve"));
+                col.spawn(caption_text(format!(
+                    "Boss at depth {DEFAULT_RUN_MAX_DEPTH} · MVP run seed {DEFAULT_RUN_SEED}",
+                )));
                 health_bar(col, 1.0, UiTheme::healing());
                 col.spawn(caption_text(format!("Stash waiting: {stash_count} items")));
             });
