@@ -54,6 +54,8 @@ The player should feel like:
 
 ## Phase 1 — Skill System Redesign
 
+**Status (2026-05):** Initial delivery on branch `feat/phase1-skill-book` — skill book modal, Active/Passive `SkillKind`, expanded tags and synergy hints, ~20 `SkillId` entries (several stubs for later combat/telemetry), six slots with milestone unlocks via delve progress, simulation updates for Cleave, passives (e.g. Thick Hide, Toxic Mastery, Second Wind, Vampiric Aura). Phases 2–5 below are **not** implemented in that slice.
+
 ### Goals
 
 Replace the temporary “click slot to rotate skill” interaction with a proper skill selection system.

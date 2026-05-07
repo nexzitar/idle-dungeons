@@ -6,7 +6,7 @@ Idle Dungeons is a Bevy-based roguelike incremental game: you configure a hero, 
 
 ## Playable loop (today)
 
-1. **Briefing** — Inspect the hero column; **click unlocked skill slots** to cycle through available skills (build + camp). Start a run when ready.
+1. **Briefing** — Inspect the hero column; **click unlocked skill slots** to open the **skill book**, pick a skill or clear the slot (build + camp). Start a run when ready.
 2. **Run** — Watch playback or **skip to results**.
 3. **Summary** — **Accept rewards** once; gold and loot merge into your profile.
 4. **Camp / upgrades** — **Equip** or **salvage** stash items; buy **caravan upgrades** with gold (including **Gold Gain**, which scales run gold). **Return to briefing** to change loadout again.

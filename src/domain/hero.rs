@@ -1,5 +1,5 @@
 use crate::domain::items::{GearSlot, ItemAffix, ItemInstance};
-use crate::domain::skills::SkillId;
+use crate::domain::skills::{skill_definition, SkillId, SkillKind};
 use crate::domain::stats::Stats;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -38,6 +38,57 @@ impl HeroProfile {
 
     pub fn unlock_skill_slots(&mut self, count: usize) {
         self.unlocked_skill_slots = count.min(self.equipped_skills.len());
+    }
+
+    pub fn assign_skill_to_slot(
+        &mut self,
+        slot: usize,
+        skill: Option<SkillId>,
+    ) -> Result<(), HeroError> {
+        if slot >= self.unlocked_skill_slots {
+            return Err(HeroError::SkillSlotLocked { slot });
+        }
+        if slot >= self.equipped_skills.len() {
+            return Err(HeroError::SkillSlotUnavailable { slot });
+        }
+        if let Some(s) = skill {
+            for i in 0..self.equipped_skills.len() {
+                if i != slot && self.equipped_skills.get(i) == Some(&Some(s)) {
+                    self.equipped_skills[i] = None;
+                }
+            }
+            self.equipped_skills[slot] = Some(s);
+            Ok(())
+        } else {
+            self.equipped_skills[slot] = None;
+            Ok(())
+        }
+    }
+
+    fn passive_skill_stat_bonus(&self) -> Stats {
+        let mut b = Stats::default_zero();
+        for id in self.equipped_skill_ids() {
+            if skill_definition(id).kind != SkillKind::Passive {
+                continue;
+            }
+            match id {
+                SkillId::ThickHide => b.armor += 3,
+                SkillId::ArcaneOverflow => b.healing_power += 3,
+                SkillId::Berserker => {
+                    b.damage += 4;
+                    b.armor -= 2;
+                }
+                SkillId::SwiftStrikes => b.attack_speed += 0.08,
+                SkillId::IronWill => b.max_health += 5,
+                SkillId::BattleFocus => b.damage += 2,
+                SkillId::CautiousAdvance => {
+                    b.armor += 4;
+                    b.damage -= 1;
+                }
+                _ => {}
+            }
+        }
+        b
     }
 
     pub fn equip_skill(&mut self, slot: usize, skill: SkillId) -> Result<(), HeroError> {
@@ -82,11 +133,13 @@ impl HeroProfile {
     }
 
     pub fn derived_stats(&self) -> Stats {
-        self.equipped_items
+        let gear = self
+            .equipped_items
             .values()
-            .fold(self.base_stats, |stats, item| {
+            .fold(Stats::default_zero(), |stats, item| {
                 stats + item.stats + item.affix_stats()
-            })
+            });
+        self.base_stats + gear + self.passive_skill_stat_bonus()
     }
 }
 
@@ -176,6 +229,28 @@ mod tests {
 
         assert!(result.is_ok());
         assert!(result.unwrap().is_err());
+    }
+
+    #[test]
+    fn assign_skill_to_slot_clears_duplicate_elsewhere() {
+        let mut hero = HeroProfile::default();
+        hero.unlock_skill_slots(2);
+        hero.assign_skill_to_slot(0, Some(SkillId::Guard)).unwrap();
+        hero.assign_skill_to_slot(1, Some(SkillId::Guard)).unwrap();
+        assert_eq!(hero.equipped_skills[0], None);
+        assert_eq!(hero.equipped_skills[1], Some(SkillId::Guard));
+    }
+
+    #[test]
+    fn passive_thick_hide_adds_armor_to_derived_stats() {
+        let mut hero = HeroProfile::new(Stats {
+            armor: 1,
+            ..Stats::default()
+        });
+        hero.unlock_skill_slots(1);
+        hero.assign_skill_to_slot(0, Some(SkillId::ThickHide))
+            .unwrap();
+        assert_eq!(hero.derived_stats().armor, 4);
     }
 
     #[test]

@@ -17,7 +17,7 @@
 | Loop (build → run → summary → camp → save) | Working |
 | Gear equip/salvage, upgrades, deterministic runs | Working |
 | `docs/mvp-acceptance.md` | All items checked |
-| **In-game skill loadout** | **Working** — `CycleHeroSkillSlot` / skill slot buttons on Build & Camp; see `src/app.rs`, `src/ui/mod.rs` |
+| **In-game skill loadout** | **Working** — `OpenSkillBook` / `AssignHeroSkill` + skill book modal on Build & Camp slot buttons; see `src/app.rs`, `src/ui/mod.rs`, `src/ui/skill_book.rs` |
 | **Combat uses skill catalog** | **Aligned (MVP)** — `simulate_combat` matches the catalog for all `SkillId` entries; see **`docs/superpowers/plans/2026-05-07-skill-combat-catalog-mapping.md`**. |
 | **Gold gain upgrade** | **Working** — `gold_gain_multiplier` on `RunConfig` from meta in `src/app.rs`; applied in `src/domain/run.rs` |
 | Stash “Filters / Sort” | **Sort** — rarity/name + persisted order (`SaveProfile.stash_sort`); filters still future. |

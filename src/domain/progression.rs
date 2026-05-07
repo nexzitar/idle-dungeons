@@ -71,10 +71,19 @@ impl MetaProgression {
     }
 
     pub fn add_skill_slot_progress(&mut self, amount: u32) {
-        self.skill_slot_progress += amount;
-        if self.skill_slot_progress >= 100 {
-            self.unlocked_skill_slots = self.unlocked_skill_slots.max(3);
-        }
+        self.skill_slot_progress = self.skill_slot_progress.saturating_add(amount);
+        let cap = if self.skill_slot_progress >= 1000 {
+            6
+        } else if self.skill_slot_progress >= 600 {
+            5
+        } else if self.skill_slot_progress >= 300 {
+            4
+        } else if self.skill_slot_progress >= 100 {
+            3
+        } else {
+            2
+        };
+        self.unlocked_skill_slots = self.unlocked_skill_slots.max(cap);
     }
 }
 
@@ -117,6 +126,23 @@ mod tests {
         profile.add_skill_slot_progress(100);
 
         assert_eq!(profile.unlocked_skill_slots, 3);
+    }
+
+    #[test]
+    fn skill_slot_unlocks_through_six_slots_with_progress_milestones() {
+        let mut profile = MetaProgression::default();
+
+        profile.add_skill_slot_progress(100);
+        assert_eq!(profile.unlocked_skill_slots, 3);
+
+        profile.add_skill_slot_progress(200);
+        assert_eq!(profile.unlocked_skill_slots, 4);
+
+        profile.add_skill_slot_progress(300);
+        assert_eq!(profile.unlocked_skill_slots, 5);
+
+        profile.add_skill_slot_progress(400);
+        assert_eq!(profile.unlocked_skill_slots, 6);
     }
 
     #[test]
