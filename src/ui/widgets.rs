@@ -225,9 +225,9 @@ fn spawn_panel_scroll_viewport(parent: &mut ChildBuilder, content: impl FnOnce(&
                     overflow: Overflow::clip_y(),
                     ..default()
                 },
+                focus_policy: FocusPolicy::Pass,
                 ..default()
             },
-            Interaction::default(),
             RelativeCursorPosition::default(),
             UiScrollState::default(),
             UiScrollRegion,
@@ -333,9 +333,9 @@ pub fn spawn_scrollable_log(
                 },
                 background_color: UiTheme::panel_bg_deep().into(),
                 border_color: BorderColor(UiTheme::panel_border_inner()),
+                focus_policy: FocusPolicy::Pass,
                 ..default()
             },
-            Interaction::default(),
             RelativeCursorPosition::default(),
             UiScrollState::default(),
             UiScrollRegion,

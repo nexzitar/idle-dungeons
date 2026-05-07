@@ -4,11 +4,30 @@ use crate::domain::progression::MetaProgression;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SaveProfile {
     pub hero: HeroProfile,
     pub inventory: Vec<ItemInstance>,
     pub meta: MetaProgression,
+}
+
+impl SaveProfile {
+    /// Keep [`HeroProfile::unlocked_skill_slots`] aligned with meta progression (source of truth).
+    pub fn sync_skill_slot_unlocks(&mut self) {
+        self.hero.unlock_skill_slots(self.meta.unlocked_skill_slots);
+    }
+}
+
+impl Default for SaveProfile {
+    fn default() -> Self {
+        let mut s = Self {
+            hero: HeroProfile::default(),
+            inventory: vec![],
+            meta: MetaProgression::default(),
+        };
+        s.sync_skill_slot_unlocks();
+        s
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

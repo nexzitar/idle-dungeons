@@ -10,10 +10,22 @@ use serde::{Deserialize, Serialize};
 /// Default floor cap for a full delve (matches typical [`RunConfig::max_depth`]).
 pub const DEFAULT_RUN_MAX_DEPTH: u32 = 25;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RunConfig {
     pub seed: u64,
     pub max_depth: u32,
+    /// Multiplier applied to total run gold (from meta upgrades). Default `1.0`.
+    pub gold_gain_multiplier: f32,
+}
+
+impl RunConfig {
+    pub fn new(seed: u64, max_depth: u32) -> Self {
+        Self {
+            seed,
+            max_depth,
+            gold_gain_multiplier: 1.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -73,6 +85,15 @@ pub struct RunSimulation {
 }
 
 pub fn simulate_run_with_playback(hero: &HeroProfile, config: RunConfig) -> RunSimulation {
+    let mut sim = simulate_run_with_playback_inner(hero, config);
+    let m = config.gold_gain_multiplier.max(0.0);
+    if m != 1.0 {
+        sim.summary.gold_earned = (sim.summary.gold_earned as f32 * m).round() as u32;
+    }
+    sim
+}
+
+fn simulate_run_with_playback_inner(hero: &HeroProfile, config: RunConfig) -> RunSimulation {
     let rooms = generate_dungeon(config.max_depth, config.seed);
     let cap = config.max_depth.max(1);
     let mut deepest_depth = 0;
@@ -92,7 +113,7 @@ pub fn simulate_run_with_playback(hero: &HeroProfile, config: RunConfig) -> RunS
             RoomKind::Monster | RoomKind::Elite | RoomKind::Boss => {
                 let enemy = room.encounter.as_ref().unwrap().enemy.clone();
                 let at_start = hero_current_hp;
-                let combat = simulate_combat(hero, &enemy, 100, at_start);
+                let combat = simulate_combat(hero, &enemy, 240, at_start);
                 for frame in combat_playback_frames_from_result(
                     &combat,
                     &enemy.name,
@@ -183,10 +204,7 @@ pub fn simulate_run_with_playback(hero: &HeroProfile, config: RunConfig) -> RunS
                 });
             }
             RoomKind::Shrine => {
-                let line = format!(
-                    "Depth {}: shrine grants {} gold",
-                    room.depth, room.depth
-                );
+                let line = format!("Depth {}: shrine grants {} gold", room.depth, room.depth);
                 log.push(line.clone());
                 gold_earned += room.depth;
                 floors_cleared += 1;

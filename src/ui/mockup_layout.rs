@@ -10,10 +10,11 @@ use crate::domain::run::{RunOutcome, RunSummary, DEFAULT_RUN_MAX_DEPTH};
 use crate::ui::components::{
     AcceptRewardsButton, BuyUpgradeButton, PlaybackCaptionText, PlaybackDepthText,
     PlaybackEnemyBarFill, PlaybackEnemyNameText, PlaybackHeroBarFill, PlaybackLogScrollRegion,
-    PlaybackLogText, PlaybackProgressBarFill, PlaybackProgressLabel, PlaybackRoomKindText, ResetProgressButton, ReturnToBuildButton,
-    SettingsButton, SettingsModalBackdrop, SettingsModalCloseButton, SettingsModalRoot,
-    SettingsModalSpeedButton, SettingsModalSpeedLabel, SkipPlaybackButton, TopBarField,
-    UiButtonPalette, UiScrollContent, UiScrollRegion, UiScrollState,
+    PlaybackLogText, PlaybackProgressBarFill, PlaybackProgressLabel, PlaybackRoomKindText,
+    ResetProgressButton, ReturnToBuildButton, SettingsButton, SettingsModalBackdrop,
+    SettingsModalCloseButton, SettingsModalRoot, SettingsModalSpeedButton, SettingsModalSpeedLabel,
+    SkillSlotButton, SkipPlaybackButton, TopBarField, UiButtonPalette, UiScrollContent,
+    UiScrollRegion, UiScrollState,
 };
 use crate::ui::theme::{
     body_text, caption_text, format_item_stat_summary, headline_text, log_line_present,
@@ -91,9 +92,9 @@ fn spawn_column_flex_scroll(parent: &mut ChildBuilder, content: impl FnOnce(&mut
                     overflow: Overflow::clip_y(),
                     ..default()
                 },
+                focus_policy: FocusPolicy::Pass,
                 ..default()
             },
-            Interaction::default(),
             RelativeCursorPosition::default(),
             UiScrollState::default(),
             UiScrollRegion,
@@ -120,7 +121,10 @@ fn spawn_column_flex_scroll(parent: &mut ChildBuilder, content: impl FnOnce(&mut
 }
 
 /// Combat log during playback — pins scroll to the latest line when content grows.
-fn spawn_playback_combat_log_scroll(parent: &mut ChildBuilder, content: impl FnOnce(&mut ChildBuilder)) {
+fn spawn_playback_combat_log_scroll(
+    parent: &mut ChildBuilder,
+    content: impl FnOnce(&mut ChildBuilder),
+) {
     parent
         .spawn((
             NodeBundle {
@@ -133,9 +137,9 @@ fn spawn_playback_combat_log_scroll(parent: &mut ChildBuilder, content: impl FnO
                     overflow: Overflow::clip_y(),
                     ..default()
                 },
+                focus_policy: FocusPolicy::Pass,
                 ..default()
             },
-            Interaction::default(),
             RelativeCursorPosition::default(),
             UiScrollState::default(),
             UiScrollRegion,
@@ -562,6 +566,7 @@ pub fn spawn_hero_column_mockup(
     parent: &mut ChildBuilder,
     hero: &crate::domain::hero::HeroProfile,
     loadout_lines: &[String],
+    skill_slots_interactive: bool,
 ) {
     let inner = move |p: &mut ChildBuilder| {
         p.spawn(panel_title_centered("HERO"));
@@ -579,7 +584,10 @@ pub fn spawn_hero_column_mockup(
                 }
             }
             body.spawn(section_title("Skills"));
-            skill_slot_row(body, hero);
+            if skill_slots_interactive {
+                body.spawn(caption_text("Click a slot to cycle skills."));
+            }
+            skill_slot_row(body, hero, skill_slots_interactive);
         });
     };
     inner(parent);
@@ -618,7 +626,11 @@ fn stat_line_row(parent: &mut ChildBuilder, label: &str, value: impl std::fmt::D
         });
 }
 
-fn skill_slot_row(parent: &mut ChildBuilder, hero: &crate::domain::hero::HeroProfile) {
+fn skill_slot_row(
+    parent: &mut ChildBuilder,
+    hero: &crate::domain::hero::HeroProfile,
+    skill_slots_interactive: bool,
+) {
     parent
         .spawn(NodeBundle {
             style: Style {
@@ -633,6 +645,46 @@ fn skill_slot_row(parent: &mut ChildBuilder, hero: &crate::domain::hero::HeroPro
             let cap = hero.equipped_skills.len().max(6);
             for i in 0..cap {
                 let unlocked = i < hero.unlocked_skill_slots;
+                if unlocked && skill_slots_interactive {
+                    let label = hero
+                        .equipped_skills
+                        .get(i)
+                        .and_then(|s| *s)
+                        .map(|sk| crate::domain::skills::skill_definition(sk).name.to_string())
+                        .unwrap_or_else(|| format!("Slot {}", i + 1));
+                    let p = UiButtonPalette::skill_slot_chip();
+                    row.spawn((
+                        ButtonBundle {
+                            style: Style {
+                                width: Val::Px(100.0),
+                                min_height: Val::Px(48.0),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                padding: UiRect::horizontal(Val::Px(4.0)),
+                                border: UiRect::all(Val::Px(1.0)),
+                                flex_wrap: FlexWrap::Wrap,
+                                ..default()
+                            },
+                            background_color: p.idle_bg.into(),
+                            border_color: BorderColor(p.idle_border),
+                            ..default()
+                        },
+                        SkillSlotButton { slot: i },
+                        p,
+                    ))
+                    .with_children(|s| {
+                        s.spawn(TextBundle::from_section(
+                            label,
+                            TextStyle {
+                                font_size: 12.0,
+                                color: UiTheme::body(),
+                                ..default()
+                            },
+                        ));
+                    });
+                    continue;
+                }
+
                 let label = if unlocked {
                     hero.equipped_skills
                         .get(i)
@@ -847,14 +899,8 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildBuilder) {
             ..default()
         })
         .with_children(|r| {
-            r.spawn((
-                caption_text("Depth: —"),
-                PlaybackDepthText,
-            ));
-            r.spawn((
-                caption_text("Type: —"),
-                PlaybackRoomKindText,
-            ));
+            r.spawn((caption_text("Depth: —"), PlaybackDepthText));
+            r.spawn((caption_text("Type: —"), PlaybackRoomKindText));
         });
         p.spawn(NodeBundle {
             style: Style {
@@ -899,10 +945,7 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildBuilder) {
                 ..default()
             })
             .with_children(|col| {
-                col.spawn((
-                    headline_text("—"),
-                    PlaybackEnemyNameText,
-                ));
+                col.spawn((headline_text("—"), PlaybackEnemyNameText));
                 col.spawn(caption_text("Your health"));
                 playback_hero_bar(col, 1.0);
                 col.spawn(caption_text("Foe"));
@@ -910,16 +953,10 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildBuilder) {
             });
         });
         p.spawn(section_title("NOW"));
-        p.spawn((
-            body_text("…"),
-            PlaybackCaptionText,
-        ));
+        p.spawn((body_text("…"), PlaybackCaptionText));
         p.spawn(section_title("COMBAT LOG"));
         spawn_playback_combat_log_scroll(p, |scroll| {
-            scroll.spawn((
-                body_text(""),
-                PlaybackLogText,
-            ));
+            scroll.spawn((body_text(""), PlaybackLogText));
         });
         p.spawn(section_title("PROGRESS"));
         spawn_playback_delve_progress_section(p);
@@ -1145,10 +1182,7 @@ pub fn spawn_dungeon_summary_column(parent: &mut ChildBuilder, summary: &RunSumm
 
 fn spawn_playback_delve_progress_section(parent: &mut ChildBuilder) {
     parent.spawn((
-        caption_text(format!(
-            "Floors cleared: 0 / {}",
-            DEFAULT_RUN_MAX_DEPTH
-        )),
+        caption_text(format!("Floors cleared: 0 / {}", DEFAULT_RUN_MAX_DEPTH)),
         PlaybackProgressLabel,
     ));
     parent
@@ -1182,9 +1216,7 @@ fn spawn_playback_delve_progress_section(parent: &mut ChildBuilder) {
 fn spawn_static_delve_progress_section(parent: &mut ChildBuilder, cleared: u32, cap: u32) {
     let cap_n = cap.max(1);
     let frac = cleared as f32 / cap_n as f32;
-    parent.spawn(caption_text(format!(
-        "Floors cleared: {cleared} / {cap_n}"
-    )));
+    parent.spawn(caption_text(format!("Floors cleared: {cleared} / {cap_n}")));
     parent
         .spawn(NodeBundle {
             style: Style {
@@ -1275,10 +1307,7 @@ pub fn spawn_right_management_column(
                 tab_btn(tabs, "LOOT", RightPanelTab::Loot, tab);
             });
             col.spawn(caption_text("Filters: all rarities   |   Sort: newest"));
-            if matches!(
-                tab,
-                RightPanelTab::Inventory | RightPanelTab::Loot
-            ) {
+            if matches!(tab, RightPanelTab::Inventory | RightPanelTab::Loot) {
                 col.spawn(section_title("EQUIPMENT"));
                 mockup_gear_cards(col, profile);
             }
@@ -1350,9 +1379,9 @@ fn spawn_right_scroll_body(
                     overflow: Overflow::clip_y(),
                     ..default()
                 },
+                focus_policy: FocusPolicy::Pass,
                 ..default()
             },
-            Interaction::default(),
             RelativeCursorPosition::default(),
             UiScrollState::default(),
             UiScrollRegion,
@@ -1496,10 +1525,7 @@ pub fn spawn_mockup_footer(parent: &mut ChildBuilder, mode: FooterMode) {
                 footer_pill(
                     nav,
                     "RUN",
-                    matches!(
-                        mode,
-                        FooterMode::Briefing | FooterMode::DelvePlayback
-                    ),
+                    matches!(mode, FooterMode::Briefing | FooterMode::DelvePlayback),
                 );
                 footer_pill(nav, "HERO", false);
                 footer_pill(nav, "UPGRADES", false);

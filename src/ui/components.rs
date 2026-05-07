@@ -13,6 +13,11 @@ pub struct MainCamera;
 pub struct StartRunButton;
 
 #[derive(Component)]
+pub struct SkillSlotButton {
+    pub slot: usize,
+}
+
+#[derive(Component)]
 pub struct BuildScreen;
 
 #[derive(Component)]
@@ -186,6 +191,19 @@ impl UiButtonPalette {
             idle_border: UiTheme::panel_border(),
             hover_border: UiTheme::ornate_gold(),
             pressed_border: UiTheme::muted_gold(),
+        }
+    }
+
+    /// Compact hero skill slot (briefing / camp).
+    pub fn skill_slot_chip() -> Self {
+        let idle = UiTheme::panel_bg_deep();
+        Self {
+            idle_bg: idle,
+            hover_bg: idle.mix(&Color::WHITE, 0.12),
+            pressed_bg: idle.mix(&Color::BLACK, 0.18),
+            idle_border: UiTheme::ornate_gold(),
+            hover_border: UiTheme::muted_gold(),
+            pressed_border: UiTheme::accent_red(),
         }
     }
 

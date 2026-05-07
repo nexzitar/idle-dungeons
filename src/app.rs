@@ -21,6 +21,11 @@ pub enum GameState {
 }
 
 #[derive(Debug, Clone, Copy, Event)]
+pub struct CycleHeroSkillSlot {
+    pub slot: usize,
+}
+
+#[derive(Debug, Clone, Copy, Event)]
 pub struct StartRun {
     pub seed: u64,
 }
@@ -98,7 +103,8 @@ impl FromWorld for ProfileState {
             .get_resource::<ProfileSavePath>()
             .map(|save_path| save_path.0.clone())
             .unwrap_or_else(|| ProfileSavePath::default().0);
-        let profile = load_profile(&path).unwrap_or_default();
+        let mut profile = load_profile(&path).unwrap_or_default();
+        profile.sync_skill_slot_unlocks();
         Self { profile }
     }
 }
@@ -132,6 +138,7 @@ impl Plugin for IdleDungeonsPlugin {
             .add_event::<ReturnToBuild>()
             .add_event::<SkipRunPlayback>()
             .add_event::<ResetProgress>()
+            .add_event::<CycleHeroSkillSlot>()
             .add_systems(
                 Update,
                 (
@@ -144,7 +151,8 @@ impl Plugin for IdleDungeonsPlugin {
                     buy_upgrade,
                     return_to_build,
                 ),
-            );
+            )
+            .add_systems(PostUpdate, cycle_hero_skill_slot);
     }
 }
 
@@ -156,11 +164,14 @@ fn start_run(
 ) {
     for event in events.read() {
         let hero = profile.effective_hero();
+        let gold_gain_mult =
+            1.0 + 0.1 * profile.profile.meta.upgrade_level(UpgradeId::GoldGain) as f32;
         let RunSimulation { summary, playback } = simulate_run_with_playback(
             &hero,
             RunConfig {
                 seed: event.seed,
                 max_depth: DEFAULT_RUN_MAX_DEPTH,
+                gold_gain_multiplier: gold_gain_mult,
             },
         );
         commands.insert_resource(LatestRunSummary {
@@ -307,6 +318,46 @@ fn apply_run_rewards(profile: &mut SaveProfile, summary: &RunSummary) {
     profile.meta.salvage += summary.salvage_earned;
     profile.meta.add_skill_slot_progress(summary.deepest_depth);
     profile.inventory.extend(summary.loot.iter().cloned());
+    profile.sync_skill_slot_unlocks();
+}
+
+fn cycle_hero_skill_slot(
+    mut events: EventReader<CycleHeroSkillSlot>,
+    mut profile: ResMut<ProfileState>,
+    save_path: Res<ProfileSavePath>,
+) {
+    use crate::domain::skills::SKILL_LOADOUT_CHOICES;
+
+    for event in events.read() {
+        profile.profile.sync_skill_slot_unlocks();
+        let slot = event.slot;
+        if slot >= profile.profile.meta.unlocked_skill_slots {
+            continue;
+        }
+        if slot >= profile.profile.hero.equipped_skills.len() {
+            continue;
+        }
+        let current = profile
+            .profile
+            .hero
+            .equipped_skills
+            .get(slot)
+            .copied()
+            .flatten();
+        let idx = SKILL_LOADOUT_CHOICES
+            .iter()
+            .position(|&c| c == current)
+            .unwrap_or(0);
+        let next = SKILL_LOADOUT_CHOICES[(idx + 1) % SKILL_LOADOUT_CHOICES.len()];
+
+        let changed = match next {
+            Some(skill) => profile.profile.hero.equip_skill(slot, skill).is_ok(),
+            None => profile.profile.hero.clear_skill_slot(slot).is_ok(),
+        };
+        if changed {
+            save_current_profile(&save_path, &profile);
+        }
+    }
 }
 
 fn remove_inventory_item(inventory: &mut Vec<ItemInstance>, item_id: u64) -> Option<ItemInstance> {
@@ -492,5 +543,31 @@ mod tests {
 
         let saved = crate::save::load_profile(&save_path).unwrap();
         assert_eq!(saved.meta.upgrade_level(UpgradeId::BaseDamage), 1);
+    }
+
+    #[test]
+    fn cycle_hero_skill_slot_writes_save() {
+        let dir = tempfile::tempdir().unwrap();
+        let save_path = dir.path().join("profile.json");
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.insert_resource(ProfileSavePath(save_path.clone()));
+        app.add_plugins(IdleDungeonsPlugin);
+        app.update();
+
+        app.world_mut().send_event(CycleHeroSkillSlot { slot: 0 });
+        app.update();
+
+        let profile = app.world().resource::<ProfileState>();
+        assert_eq!(
+            profile.profile.hero.equipped_skills[0],
+            Some(crate::domain::skills::SkillId::LifestealStrike)
+        );
+
+        let saved = crate::save::load_profile(&save_path).unwrap();
+        assert_eq!(
+            saved.hero.equipped_skills[0],
+            Some(crate::domain::skills::SkillId::LifestealStrike)
+        );
     }
 }

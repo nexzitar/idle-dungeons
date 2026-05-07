@@ -10,6 +10,17 @@ pub enum SkillId {
     BarrierPulse,
 }
 
+/// UI loadout cycle order: empty slot, then each skill, then wrap.
+pub const SKILL_LOADOUT_CHOICES: &[Option<SkillId>] = &[
+    None,
+    Some(SkillId::LifestealStrike),
+    Some(SkillId::Guard),
+    Some(SkillId::HeavyStrike),
+    Some(SkillId::PoisonEdge),
+    Some(SkillId::ThornSkin),
+    Some(SkillId::BarrierPulse),
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SkillTag {
     Attack,

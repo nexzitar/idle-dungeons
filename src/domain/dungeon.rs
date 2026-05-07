@@ -39,7 +39,7 @@ impl Encounter {
                 max_health: (24 + depth as i32 * 6) * multiplier,
                 damage: (3 + depth as i32 / 2) * multiplier,
                 armor: depth as i32 / 5,
-                attack_speed: 1.0,
+                attack_speed: if elite { 0.9 } else { 1.05 },
             },
         }
     }

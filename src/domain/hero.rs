@@ -1,4 +1,4 @@
-use crate::domain::items::{GearSlot, ItemInstance};
+use crate::domain::items::{GearSlot, ItemAffix, ItemInstance};
 use crate::domain::skills::SkillId;
 use crate::domain::stats::Stats;
 use serde::{Deserialize, Serialize};
@@ -51,6 +51,17 @@ impl HeroProfile {
         Ok(())
     }
 
+    pub fn clear_skill_slot(&mut self, slot: usize) -> Result<(), HeroError> {
+        if slot >= self.unlocked_skill_slots {
+            return Err(HeroError::SkillSlotLocked { slot });
+        }
+        if slot >= self.equipped_skills.len() {
+            return Err(HeroError::SkillSlotUnavailable { slot });
+        }
+        self.equipped_skills[slot] = None;
+        Ok(())
+    }
+
     pub fn equip_item(&mut self, item: ItemInstance) -> Result<(), HeroError> {
         self.equipped_items.insert(item.slot, item);
         Ok(())
@@ -58,6 +69,12 @@ impl HeroProfile {
 
     pub fn equipped_item(&self, slot: GearSlot) -> Option<&ItemInstance> {
         self.equipped_items.get(&slot)
+    }
+
+    pub fn has_affix(&self, affix: ItemAffix) -> bool {
+        self.equipped_items
+            .values()
+            .any(|item| item.affixes.iter().any(|a| *a == affix))
     }
 
     pub fn equipped_skill_ids(&self) -> impl Iterator<Item = SkillId> + '_ {
@@ -80,6 +97,16 @@ mod tests {
     use crate::domain::skills::SkillId;
     use crate::domain::stats::Stats;
     use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    #[test]
+    fn has_affix_detects_gear_affix() {
+        let mut hero = HeroProfile::default();
+        let mut blade = ItemInstance::basic(1, "Test", GearSlot::Weapon);
+        blade.affixes.push(ItemAffix::Vampiric);
+        hero.equip_item(blade).unwrap();
+        assert!(hero.has_affix(ItemAffix::Vampiric));
+        assert!(!hero.has_affix(ItemAffix::Heavy));
+    }
 
     #[test]
     fn derived_stats_include_base_stats_and_gear() {
@@ -125,6 +152,15 @@ mod tests {
         let result = hero.equip_skill(1, SkillId::Guard);
 
         assert_eq!(result, Err(HeroError::SkillSlotLocked { slot: 1 }));
+    }
+
+    #[test]
+    fn clear_skill_slot_empties_slot() {
+        let mut hero = HeroProfile::default();
+        hero.unlock_skill_slots(1);
+        hero.equip_skill(0, SkillId::Guard).unwrap();
+        hero.clear_skill_slot(0).unwrap();
+        assert_eq!(hero.equipped_skills[0], None);
     }
 
     #[test]
