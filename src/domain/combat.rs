@@ -676,6 +676,125 @@ mod tests {
     }
 
     #[test]
+    fn barrier_pulse_fully_absorbs_hit_that_would_empty_hp() {
+        let mut hero = HeroProfile::new(Stats {
+            max_health: 100,
+            healing_power: 20,
+            ..Stats::default()
+        });
+        hero.unlock_skill_slots(1);
+        hero.equip_skill(0, SkillId::BarrierPulse).unwrap();
+
+        let enemy = Enemy {
+            name: "Alpha".into(),
+            max_health: 99,
+            damage: 40,
+            armor: 0,
+            attack_speed: 1.0,
+        };
+
+        let start = 12;
+        let r = simulate_combat(&hero, &enemy, 1, start);
+        assert_eq!(
+            r.hero_health, start,
+            "barrier should eat the full strike so hero hp is unchanged"
+        );
+        assert_eq!(
+            r.outcome,
+            CombatOutcome::TimedOut,
+            "enemy still alive after one swing each side in this setup"
+        );
+    }
+
+    #[test]
+    fn barrier_absorb_all_skips_thorns_when_no_hp_loss() {
+        let mut hero = HeroProfile::new(Stats {
+            max_health: 100,
+            healing_power: 20,
+            ..Stats::default()
+        });
+        hero.unlock_skill_slots(2);
+        hero.equip_skill(0, SkillId::BarrierPulse).unwrap();
+        hero.equip_skill(1, SkillId::ThornSkin).unwrap();
+
+        let enemy = Enemy {
+            name: "Chip".into(),
+            max_health: 999,
+            damage: 10,
+            armor: 0,
+            attack_speed: 1.0,
+        };
+
+        let r = simulate_combat(&hero, &enemy, 1, 100);
+        assert!(
+            !r.events
+                .iter()
+                .any(|e| matches!(e, CombatEvent::ThornsReflect { .. })),
+            "thorns should not proc when barrier absorbs all incoming damage (hp_loss == 0)"
+        );
+    }
+
+    #[test]
+    fn thorns_reflect_defeats_enemy_after_enemy_attack() {
+        let mut hero = HeroProfile::default();
+        hero.base_stats.attack_speed = 0.12;
+        hero.unlock_skill_slots(1);
+        hero.equip_skill(0, SkillId::ThornSkin).unwrap();
+
+        let enemy = Enemy {
+            name: "Glass".into(),
+            max_health: 10,
+            damage: 30,
+            armor: 0,
+            attack_speed: 1.0,
+        };
+
+        let r = simulate_combat(&hero, &enemy, 5, 100);
+        assert_eq!(r.outcome, CombatOutcome::HeroWon);
+        assert!(
+            r.events.iter().any(|e| matches!(
+                e,
+                CombatEvent::ThornsReflect { damage } if *damage >= 10
+            )),
+            "reflect should kill the low-HP enemy before the hero swings this fight"
+        );
+        assert!(
+            r.events
+                .iter()
+                .any(|e| matches!(e, CombatEvent::EnemyDefeated)),
+            "defeat should be attributed after thorns damage"
+        );
+    }
+
+    #[test]
+    fn spiked_affix_thorns_reflect_kills_low_hp_enemy() {
+        let mut hero = HeroProfile::default();
+        hero.base_stats.attack_speed = 0.12;
+        hero.unlock_skill_slots(1);
+        hero.equip_skill(0, SkillId::ThornSkin).unwrap();
+        let mut mail = ItemInstance::basic(9, "Spiked mail", GearSlot::Armor);
+        mail.affixes.push(ItemAffix::Spiked);
+        hero.equip_item(mail).unwrap();
+
+        let enemy = Enemy {
+            name: "Splinter target".into(),
+            max_health: 15,
+            damage: 30,
+            armor: 0,
+            attack_speed: 1.0,
+        };
+
+        let r = simulate_combat(&hero, &enemy, 15, 100);
+        assert_eq!(r.outcome, CombatOutcome::HeroWon);
+        assert!(
+            r.events
+                .iter()
+                .any(|e| matches!(e, CombatEvent::ThornsReflect { .. })),
+            "spiked should still route through hp_loss -> thorns (after barrier 0 here)"
+        );
+    }
+
+    #[test]
     fn high_attack_speed_hero_strikes_more_per_clock_tick() {
         let mut fast = HeroProfile::default();
         fast.base_stats.attack_speed = 2.0;

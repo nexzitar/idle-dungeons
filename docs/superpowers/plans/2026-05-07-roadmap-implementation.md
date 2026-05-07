@@ -92,11 +92,11 @@ cargo test poison_deals_damage_across_clock_ticks -- --nocapture
 **Files:**
 - `src/domain/combat.rs`
 
-- [ ] **Step 1:** Tests: barrier fully absorbs lethal strike; thorns kill enemy after reflect; affix + skill synergy order documented in test names.
+- [x] **Step 1:** Tests: barrier fully absorbs lethal strike; thorns kill enemy after reflect; affix + skill synergy order documented in test names.
 
-- [ ] **Step 2:** Fix any order-of-operations bugs found.
+- [x] **Step 2:** Fix any order-of-operations bugs found. (None; `hp_loss == 0` correctly skips thorns.)
 
-- [ ] **Step 3:** Commit `fix(combat): barrier and thorns edge cases`
+- [x] **Step 3:** Commit `test(combat): barrier and thorns edge cases`
 
 ---
 
