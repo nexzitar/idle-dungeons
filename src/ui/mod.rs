@@ -6,6 +6,7 @@ pub mod mockup_layout;
 pub mod run_panel;
 pub mod summary_panel;
 pub mod theme;
+pub mod tooltip;
 pub mod upgrade_panel;
 pub mod widgets;
 
@@ -25,7 +26,8 @@ use crate::ui::components::{
     RunPlaybackScreen, SalvageItemButton, SettingsButton, SettingsModalBackdrop,
     SettingsModalCloseButton, SettingsModalRoot, SettingsModalSpeedButton, SettingsModalSpeedLabel,
     SkillSlotButton, SkipPlaybackButton, StartRunButton, SummaryScreen, TopBarField,
-    UiButtonPalette, UiRoot, UiScrollContent, UiScrollRegion, UiScrollState, UpgradeScreen,
+    UiButtonPalette, UiRoot, UiScrollContent, UiScrollRegion, UiScrollState, UiTooltip,
+    UpgradeScreen,
 };
 use crate::ui::mockup_layout::RightPanelTab;
 use crate::ui::theme::{body_text, caption_text, format_item_stat_summary, rarity_color, UiTheme};
@@ -34,7 +36,7 @@ use bevy::input::mouse::{MouseButton, MouseWheel};
 use bevy::input::InputPlugin;
 use bevy::prelude::*;
 use bevy::transform::TransformSystem;
-use bevy::ui::RelativeCursorPosition;
+use bevy::ui::{RelativeCursorPosition, UiSystem};
 
 /// Button that received [`Interaction::Pressed`] on press; used to confirm click on mouse-up.
 #[derive(Resource, Default)]
@@ -49,6 +51,7 @@ impl Plugin for UiPlugin {
         }
         app.init_resource::<RightPanelTab>();
         app.init_resource::<UiClickPress>();
+        app.init_resource::<crate::ui::tooltip::TooltipState>();
         app.add_systems(Startup, spawn_camera)
             .add_systems(
                 OnEnter(GameState::Build),
@@ -104,6 +107,7 @@ impl Plugin for UiPlugin {
                         .after(apply_ui_scroll),
                     refresh_build_screen_on_profile_change.run_if(in_state(GameState::Build)),
                     refresh_upgrade_screen_on_profile_change.run_if(in_state(GameState::Upgrades)),
+                    crate::ui::tooltip::update_tooltip.after(UiSystem::Layout),
                 ),
             );
     }
@@ -258,6 +262,7 @@ fn spawn_running_screen_root(
                     crate::ui::mockup_layout::FooterMode::DelvePlayback,
                 );
             });
+            crate::ui::tooltip::spawn_tooltip_layer(root);
         });
 }
 
@@ -327,6 +332,7 @@ fn spawn_build_screen_root(
                     crate::ui::mockup_layout::FooterMode::Briefing,
                 );
             });
+            crate::ui::tooltip::spawn_tooltip_layer(root);
         });
 }
 
@@ -401,6 +407,7 @@ fn spawn_summary_screen_root(
                     crate::ui::mockup_layout::FooterMode::Summary,
                 );
             });
+            crate::ui::tooltip::spawn_tooltip_layer(root);
         });
 }
 
@@ -464,6 +471,7 @@ fn spawn_upgrade_screen_root(
                     crate::ui::mockup_layout::FooterMode::Camp,
                 );
             });
+            crate::ui::tooltip::spawn_tooltip_layer(root);
         });
 }
 
@@ -623,6 +631,9 @@ pub(crate) fn spawn_item_card(parent: &mut ChildBuilder, item: &ItemInstance) {
                     },
                     EquipItemButton { item_id: item.id },
                     equip_pal,
+                    UiTooltip::txt(
+                        "Equip this item on your hero. It replaces whatever is currently in this gear slot.",
+                    ),
                 ))
                 .with_children(|b| {
                     b.spawn(TextBundle::from_section(
@@ -651,6 +662,9 @@ pub(crate) fn spawn_item_card(parent: &mut ChildBuilder, item: &ItemInstance) {
                     },
                     SalvageItemButton { item_id: item.id },
                     salvage_pal,
+                    UiTooltip::txt(
+                        "Salvage this item for currency. The item is removed from your stash permanently.",
+                    ),
                 ))
                 .with_children(|b| {
                     b.spawn(TextBundle::from_section(

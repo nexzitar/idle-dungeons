@@ -107,6 +107,16 @@ pub struct SettingsModalSpeedLabel;
 #[derive(Component)]
 pub struct PlaybackLogScrollRegion;
 
+/// Text shown after a short hover delay (`crate::ui::tooltip`).
+#[derive(Component, Clone)]
+pub struct UiTooltip(pub String);
+
+impl UiTooltip {
+    pub fn txt(s: impl Into<String>) -> Self {
+        UiTooltip(s.into())
+    }
+}
+
 /// Driving colors for [`crate::ui::apply_ui_button_palettes`]. Attach next to [`Button`].
 #[derive(Component, Clone, Copy)]
 pub struct UiButtonPalette {

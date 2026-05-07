@@ -1,0 +1,174 @@
+//! Cursor-following hover tooltips with a short delay.
+
+use bevy::prelude::*;
+use bevy::ui::{FocusPolicy, ZIndex};
+use bevy::window::PrimaryWindow;
+
+use crate::ui::components::UiTooltip;
+use crate::ui::theme::UiTheme;
+
+/// Root node for the tooltip panel (one per [`crate::ui::components::UiRoot`]).
+#[derive(Component)]
+pub struct TooltipLayer;
+
+/// Text entity updated by [`update_tooltip`].
+#[derive(Component)]
+pub struct TooltipText;
+
+#[derive(Resource)]
+pub struct TooltipState {
+    delay: Timer,
+    tracked: Option<Entity>,
+}
+
+impl Default for TooltipState {
+    fn default() -> Self {
+        Self {
+            delay: Timer::from_seconds(0.38, TimerMode::Once),
+            tracked: None,
+        }
+    }
+}
+
+/// Spawn last under [`crate::ui::components::UiRoot`] so it draws above gameplay UI.
+pub fn spawn_tooltip_layer(parent: &mut ChildBuilder) {
+    parent
+        .spawn((
+            NodeBundle {
+                style: Style {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(0.0),
+                    top: Val::Px(0.0),
+                    width: Val::Auto,
+                    max_width: Val::Px(280.0),
+                    padding: UiRect::all(Val::Px(10.0)),
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                visibility: Visibility::Hidden,
+                background_color: UiTheme::panel_bg_deep().into(),
+                border_color: BorderColor(UiTheme::ornate_gold()),
+                z_index: ZIndex::Global(4096),
+                focus_policy: FocusPolicy::Pass,
+                ..default()
+            },
+            TooltipLayer,
+        ))
+        .with_children(|layer| {
+            layer.spawn((
+                TextBundle::from_section(
+                    "",
+                    TextStyle {
+                        font_size: 13.0,
+                        color: UiTheme::body(),
+                        ..default()
+                    },
+                ),
+                TooltipText,
+            ));
+        });
+}
+
+pub fn upgrade_tooltip(id: crate::domain::progression::UpgradeId) -> &'static str {
+    use crate::domain::progression::UpgradeId;
+    match id {
+        UpgradeId::MaxHealth => {
+            "Increases your hero's max health for future runs. Each level adds +10 max HP."
+        }
+        UpgradeId::BaseDamage => {
+            "Increases attack damage for future runs. Each level adds +2 damage."
+        }
+        UpgradeId::Armor => "Reduces damage taken. Each level adds +1 armor.",
+        UpgradeId::HealingPower => {
+            "Improves heals and poison scaling from skills. Each level adds +1 healing power."
+        }
+        UpgradeId::GoldGain => {
+            "Increases gold earned from runs (applied when rewards are accepted)."
+        }
+    }
+}
+
+fn tooltip_interaction_ok(i: Interaction) -> bool {
+    matches!(i, Interaction::Hovered | Interaction::Pressed)
+}
+
+pub fn update_tooltip(
+    time: Res<Time>,
+    mut state: ResMut<TooltipState>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mut layer_q: Query<(&mut Style, &mut Visibility, &Node), With<TooltipLayer>>,
+    mut text_q: Query<&mut Text, With<TooltipText>>,
+    tooltip_targets: Query<(Entity, &Interaction, &UiTooltip), With<UiTooltip>>,
+) {
+    let Ok(window) = windows.get_single() else {
+        return;
+    };
+    let cursor = window.cursor_position();
+
+    let mut hovered: Option<(Entity, &str)> = None;
+    for (entity, interaction, tip) in &tooltip_targets {
+        if tooltip_interaction_ok(*interaction) {
+            hovered = Some((entity, tip.0.as_str()));
+        }
+    }
+
+    let Ok((mut style, mut vis, node)) = layer_q.get_single_mut() else {
+        return;
+    };
+    let Ok(mut text) = text_q.get_single_mut() else {
+        return;
+    };
+
+    let mut hide = || {
+        *vis = Visibility::Hidden;
+    };
+
+    match hovered {
+        None => {
+            state.tracked = None;
+            state.delay.reset();
+            hide();
+        }
+        Some((e, content)) => {
+            if state.tracked != Some(e) {
+                state.tracked = Some(e);
+                state.delay.reset();
+                hide();
+            }
+            state.delay.tick(time.delta());
+            if !state.delay.finished() {
+                return;
+            }
+            if text.sections[0].value != content {
+                text.sections[0].value = content.to_string();
+            }
+            let Some(pos) = cursor else {
+                hide();
+                return;
+            };
+            let w = window.width();
+            let h = window.height();
+            let m = 12.0;
+            let offset = 14.0;
+            let mut x = pos.x + offset;
+            let mut y = pos.y + offset;
+            let tw = node.size().x.max(120.0);
+            let th = node.size().y.max(36.0);
+            if x + tw + m > w {
+                x = (w - tw - m).max(m);
+            }
+            if y + th + m > h {
+                y = (h - th - m).max(m);
+            }
+            if x < m {
+                x = m;
+            }
+            if y < m {
+                y = m;
+            }
+            style.left = Val::Px(x);
+            style.top = Val::Px(y);
+            *vis = Visibility::Visible;
+        }
+    }
+}

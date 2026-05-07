@@ -1,56 +1,36 @@
 # Idle Dungeons
 
-Idle Dungeons is a Bevy-based roguelike incremental game about building an automated dungeon delver. The player configures a hero, starts a mostly idle run, watches the hero push through a dark fantasy dungeon, then spends the results on better gear, skills, and permanent upgrades.
+Idle Dungeons is a Bevy-based roguelike incremental game: you configure a hero, run a seeded delve with automated combat, then spend gold and loot on gear, skills, and permanent upgrades. Progress is saved locally (default: `saves/profile.json`).
 
-The project ships a playable MVP loop: configure skills on the briefing and camp screens, run the delve, collect rewards, manage stash, and buy upgrades—with progress saved to `saves/profile.json`.
+**Stack:** Rust, **Bevy 0.14**, serde JSON saves. Crate name: `idle_dungeons`.
 
-## Game Concept
+## Playable loop (today)
 
-The hero is not defined by a fixed class. Instead, their role emerges from unlocked skill slots, equipped skills, gear stats, and item affixes. A fast weapon might empower lifesteal or poison builds, while cursed armor might strengthen barrier builds but weaken sustain-heavy ones.
+1. **Briefing** — Inspect the hero column; **click unlocked skill slots** to cycle through available skills (build + camp). Start a run when ready.
+2. **Run** — Watch playback or **skip to results**.
+3. **Summary** — **Accept rewards** once; gold and loot merge into your profile.
+4. **Camp / upgrades** — **Equip** or **salvage** stash items; buy **caravan upgrades** with gold (including **Gold Gain**, which scales run gold). **Return to briefing** to change loadout again.
 
-Over time, the game should grow from one configurable hero into a full party-building incremental roguelike. More skill slots, gear slots, heroes, dungeon biomes, bosses, and reset layers can be added after the MVP loop is working.
+**UI:** Mockup-style three-column shell (hero · delve / summary · stash), settings (speed toggle, reset progress), hover **tooltips** on most controls, and reliable primary-click handling on buttons. Footer “RUN / CAMP / …” pills are decorative for now.
 
-## MVP Scope
+## Project layout
 
-The first playable milestone should include:
+| Path | Role |
+|------|------|
+| `src/app.rs` | `GameState`, events (start run, rewards, equip, salvage, upgrades, skill cycling), profile resource, save hooks |
+| `src/domain/` | Hero, skills, combat simulation, dungeon, loot, run summarization |
+| `src/save.rs` | Load/save `SaveProfile` |
+| `src/ui/` | `UiPlugin`, mockup layout, theme, tooltips, panels |
 
-- One automated hero.
-- Two starting skill slots.
-- A small pool of skills.
-- Weapon, armor, and trinket gear slots.
-- A linear dungeon with normal encounters, elites, treasure, shrines, and a milestone boss.
-- Automated fixed-tick combat.
-- Loot, salvage, gold, permanent upgrades, and skill slot progression.
-- Local save/load.
-- Functional Bevy UI for build management, runs, inventory, upgrades, combat log, and run summaries.
+The **run simulation** (domain + `simulate_run_with_playback`) is the source of truth; the UI sends intents via events and reflects `ProfileState`.
 
-Out of scope for the MVP are multiple heroes, full party formation, complex procedural maps, active tactical combat, online systems, and asset-heavy visuals.
+## Design documentation
 
-## Technical Direction
-
-The game should be organized around focused Bevy plugins:
-
-- `GameStatePlugin` for high-level app states.
-- `RunSimulationPlugin` for dungeon progression, combat ticks, deaths, and rewards.
-- `HeroPlugin` for base stats, skills, gear, and derived stats.
-- `SkillPlugin` for triggers, tags, scaling, and slot validation.
-- `DungeonPlugin` for room generation and encounter scaling.
-- `LootPlugin` for item rolls, rarity, affixes, equipment, and salvage.
-- `MetaProgressionPlugin` for currencies, upgrades, and unlocks.
-- `UiPlugin` for readable run, build, inventory, upgrade, and summary screens.
-- `SavePlugin` for persistent local profile data.
-
-The run simulation should be the source of truth. UI should observe simulation state and events rather than drive combat directly, which keeps the game easier to test and leaves room for fast-forward, offline progress, and deterministic seeded runs later.
-
-## Design Documentation
-
-The full design document lives at:
-
-`docs/superpowers/specs/2026-05-06-roguelike-incremental-bevy-design.md`
+- Full design: `docs/superpowers/specs/2026-05-06-roguelike-incremental-bevy-design.md`
+- MVP checklist: `docs/mvp-acceptance.md`
+- Gap / future tasks (partially outdated; see **Roadmap** below): `docs/superpowers/plans/2026-05-06-mvp-remaining-work.md`
 
 ## Development
-
-Common commands:
 
 ```sh
 cargo fmt --check
@@ -59,8 +39,21 @@ cargo check
 cargo run
 ```
 
-The MVP should be built one testable slice at a time. Each behavior change should start with a failing test, then minimal implementation, then a passing verification run.
+Prefer small, tested changes in `src/domain/` first, then wire through Bevy events and UI.
 
-## Current Playable Loop
+## Roadmap
 
-The MVP opens to the briefing screen. Assign skills by clicking unlocked slots—they cycle through each skill and an empty slot—then start a run. Skip or watch playback, accept rewards on the summary, and at camp equip or salvage loot and buy upgrades. The **Gold Gain** permanent upgrade increases gold earned from delves. Use **Return to briefing** to change skills again. Progress is saved locally to `saves/profile.json`.
+Near-term goals to deepen the MVP:
+
+- **Combat vs skill catalog** — Most skills have definitions and UI copy; extend `simulate_combat` so Guard, Heavy Strike, Poison, Thorns, Barrier, etc. change outcomes in tested ways (not only Lifesteal).
+- **Stash honesty** — Either implement minimal filter/sort for inventory/loot or replace placeholder “Filters | Sort” copy with neutral text.
+- **Run / world variety** — More room types, affix interplay, and clarity of risk/reward on the briefing screen.
+- **Presentation** — Art pass, clearer typography, animation on playback; keep simulation-driven architecture.
+
+Longer-term (post-MVP direction):
+
+- Multiple heroes / party ideas from the design doc
+- Deeper procedural dungeon structure (not only linear depth)
+- Optional meta layers (prestige, biome unlocks) once the core loop feels rich
+
+Contributions welcome; open an issue or PR with a short note on scope.
