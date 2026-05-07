@@ -17,7 +17,7 @@ pub fn summary_panel_text(summary: &RunSummary) -> String {
     out.push_str(&outcome_headline(summary));
     out.push('\n');
     out.push_str(&reward_digest(summary));
-    out.push_str("\n\n— Chronicle —\n");
+    out.push_str("\n\n- Chronicle -\n");
     for line in narrative_highlights(summary) {
         out.push_str(&line);
         out.push('\n');
@@ -25,7 +25,7 @@ pub fn summary_panel_text(summary: &RunSummary) -> String {
     if summary.log.len() > 8 {
         out.push_str("\n… full log on the scroll …\n");
     }
-    out.push_str("\n— Full log —\n");
+    out.push_str("\n- Full log -\n");
     for line in summary.log.iter().take(12) {
         out.push_str(line);
         out.push('\n');
@@ -36,7 +36,7 @@ pub fn summary_panel_text(summary: &RunSummary) -> String {
 pub fn outcome_headline(summary: &RunSummary) -> String {
     match summary.outcome {
         crate::domain::run::RunOutcome::BossDefeated => format!(
-            "Victory — reached depth {} before sealing the gate.",
+            "Victory - reached depth {} before sealing the gate.",
             summary.deepest_depth
         ),
         crate::domain::run::RunOutcome::HeroDied => {
@@ -44,14 +44,14 @@ pub fn outcome_headline(summary: &RunSummary) -> String {
                 .death_reason
                 .clone()
                 .unwrap_or_else(|| "The delve ends in darkness.".to_string());
-            format!("Fallen — depth {}. {}", summary.deepest_depth, reason)
+            format!("Fallen - depth {}. {}", summary.deepest_depth, reason)
         }
     }
 }
 
 pub fn reward_digest(summary: &RunSummary) -> String {
     format!(
-        "Rewards pending — Gold +{} · Salvage +{} · Loot pieces: {}",
+        "Rewards pending - Gold +{} · Salvage +{} · Loot pieces: {}",
         summary.gold_earned,
         summary.salvage_earned,
         summary.loot.len()

@@ -47,6 +47,11 @@ impl UiTheme {
         Color::srgb(0.78, 0.64, 0.38)
     }
 
+    /// Ornamental bronze / gold for mockup-style panel frames.
+    pub fn ornate_gold() -> Color {
+        Color::srgb(0.62, 0.48, 0.22)
+    }
+
     pub fn muted_cream() -> Color {
         Color::srgb(0.82, 0.78, 0.72)
     }
