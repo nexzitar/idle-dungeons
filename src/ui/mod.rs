@@ -53,6 +53,10 @@ impl Plugin for UiPlugin {
         app.init_resource::<RightPanelTab>();
         app.init_resource::<UiClickPress>();
         app.init_resource::<crate::ui::tooltip::TooltipState>();
+        app.add_systems(
+            Update,
+            crate::ui::tooltip::hide_tooltip_layer_before_pointer_focus.before(UiSystem::Focus),
+        );
         app.add_systems(Startup, spawn_camera)
             .add_systems(
                 OnEnter(GameState::Build),
@@ -649,7 +653,7 @@ pub(crate) fn spawn_item_card(parent: &mut ChildBuilder, item: &ItemInstance) {
         .spawn(NodeBundle {
             style: Style {
                 width: Val::Percent(100.0),
-                padding: UiRect::all(Val::Px(12.0)),
+                padding: UiRect::all(Val::Px(UiTheme::PANEL_INSET)),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::FlexStart,
                 row_gap: Val::Px(8.0),
@@ -664,7 +668,7 @@ pub(crate) fn spawn_item_card(parent: &mut ChildBuilder, item: &ItemInstance) {
             card.spawn(TextBundle::from_section(
                 &item.name,
                 TextStyle {
-                    font_size: 17.0,
+                    font_size: UiTheme::FONT_SECTION,
                     color: rarity_color(item.rarity),
                     ..default()
                 },
@@ -706,7 +710,7 @@ pub(crate) fn spawn_item_card(parent: &mut ChildBuilder, item: &ItemInstance) {
                     b.spawn(TextBundle::from_section(
                         "Equip",
                         TextStyle {
-                            font_size: 15.0,
+                            font_size: UiTheme::FONT_BODY,
                             color: Color::WHITE,
                             ..default()
                         },
@@ -737,7 +741,7 @@ pub(crate) fn spawn_item_card(parent: &mut ChildBuilder, item: &ItemInstance) {
                     b.spawn(TextBundle::from_section(
                         "Salvage",
                         TextStyle {
-                            font_size: 15.0,
+                            font_size: UiTheme::FONT_BODY,
                             color: UiTheme::body(),
                             ..default()
                         },
@@ -1029,8 +1033,9 @@ fn sync_run_playback_ui(
 
     let depth_s = format!("Depth: {}", frame.depth);
     let kind_s = format!(
-        "Type: {}",
-        crate::ui::mockup_layout::room_kind_label(frame.room_kind)
+        "Type: {} · Risk: {}",
+        crate::ui::mockup_layout::room_kind_label(frame.room_kind),
+        frame.risk_hint
     );
 
     let hero_max_snap = frame.hero_snapshot_max_hp.max(1) as f32;

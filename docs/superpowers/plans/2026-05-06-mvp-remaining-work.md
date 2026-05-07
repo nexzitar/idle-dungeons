@@ -18,23 +18,23 @@
 | Gear equip/salvage, upgrades, deterministic runs | Working |
 | `docs/mvp-acceptance.md` | All items checked |
 | **In-game skill loadout** | **Working** — `CycleHeroSkillSlot` / skill slot buttons on Build & Camp; see `src/app.rs`, `src/ui/mod.rs` |
-| **Combat uses skill catalog** | **Partial (implementation exists; deepen & align)** — `simulate_combat` applies Lifesteal, Guard (flat reduction on hits), Heavy (+damage on swing), Poison (`PoisonTick` on hero swing), Thorns (reflect), Barrier (shield). See mapping table below; poison-as-DoT-over-ticks and Heavy “slow” tradeoff are roadmap items in `docs/superpowers/plans/2026-05-07-roadmap-implementation.md`. |
+| **Combat uses skill catalog** | **Aligned (MVP)** — `simulate_combat` matches the catalog for all `SkillId` entries; see **`docs/superpowers/plans/2026-05-07-skill-combat-catalog-mapping.md`**. |
 | **Gold gain upgrade** | **Working** — `gold_gain_multiplier` on `RunConfig` from meta in `src/app.rs`; applied in `src/domain/run.rs` |
-| Stash “Filters / Sort” | Decorative copy only |
+| Stash “Filters / Sort” | **Sort** — rarity/name + persisted order (`SaveProfile.stash_sort`); filters still future. |
 | README | Updated (`README.md`); roadmap + layout |
 
-### Skill definitions vs `simulate_combat` (authoritative as of 2026-05)
+### Skill definitions vs `simulate_combat` (catalog)
 
-| Skill | `SkillTrigger` (catalog) | Behavior in `simulate_combat` |
-|-------|--------------------------|--------------------------------|
-| LifestealStrike | OnAttack | Heal on hero attack (`HeroHealed`). |
-| Guard | OnHitTaken | Reduces enemy hit damage by flat amount (currently hardcoded offset). |
-| HeavyStrike | OnAttack | Bonus damage on hero swing; **no** attack-speed penalty yet (description says “slow”). |
-| PoisonEdge | OnAttack | Extra damage via `PoisonTick` on each hero swing — **burst-on-swing**, not periodic room DoT yet. |
-| ThornSkin | OnHitTaken | Reflect after hero takes HP loss from enemy hit. |
-| BarrierPulse | OnRoomStart | Shield at combat start, absorbs before HP loss. |
+See **`docs/superpowers/plans/2026-05-07-skill-combat-catalog-mapping.md`** for the full table. Priority B combat-deepening items (poison ticks, guard scaling, heavy slow, barrier/thorns tests) are **done** per roadmap Phase A.
 
-**Execution plan:** `docs/superpowers/plans/2026-05-07-roadmap-implementation.md` (Phase A–E).
+| Skill | `SkillTrigger` (catalog) | Behavior in `simulate_combat` (summary) |
+|-------|--------------------------|----------------------------------------|
+| LifestealStrike | OnAttack | Heal on hero attack. |
+| Guard | OnHitTaken | Flat reduction scales with `healing_power`. |
+| HeavyStrike | OnAttack | Bonus damage; attack-speed tradeoff. |
+| PoisonEdge | OnAttack | Stacks + poison ticks each clock iteration (`PoisonTick`). |
+| ThornSkin | OnHitTaken | Reflect after HP loss from enemy hit. |
+| BarrierPulse | OnRoomStart | Shield absorbs before HP. |
 
 ---
 
@@ -64,14 +64,14 @@ The interactive loadout described below is implemented (cycle slots, `equip_skil
 
 ### Priority B — Combat reflects the skill roster (depth, not just labels)
 
-**Status:** Baseline behaviors exist; **deepen** per roadmap Phase A (poison over ticks, guard scaling, heavy tradeoff, tests).
+**Status:** **Done** for roadmap Phase A (poison over ticks, guard scaling, heavy tradeoff, barrier/thorns tests). Further tuning is balance, not gap closure.
 
-**Problem (narrowed):** Some catalog text (DoT, “slow” heavy) does not fully match tick-level simulation; add tests and tune.
+**Problem (narrowed):** ~~Some catalog text (DoT, “slow” heavy) does not fully match tick-level simulation.~~ Addressed.
 
 **Approach (incremental):**
-1. ~~Inventory desired behaviors~~ — see table above.
-2. Add focused tests per skill (**especially** poison across clock ticks without extra swings).
-3. Extend `simulate_combat` in small steps — follow `2026-05-07-roadmap-implementation.md`.
+1. Catalog mapping: `2026-05-07-skill-combat-catalog-mapping.md`.
+2. Focused tests per skill in `src/domain/combat.rs`.
+3. Future tweaks via same file + tests.
 
 **Files:** `src/domain/combat.rs`, possibly `src/domain/skills.rs` if shared helpers.
 
@@ -90,9 +90,9 @@ Multiplier is threaded into run simulation. This section is kept for history.
 
 ### Priority D — UX honesty and polish
 
-- **Stash filters:** Implement minimal sort (rarity, name) and/or filter toggles, **or** replace static line with neutral placeholder so UI doesn’t promise controls that don’t exist.
-- **Skill row:** After Priority A, show full skill names in tooltips or secondary text (first-letter chips are cute but opaque).
-- **README:** Update “early planning” + point at `mvp-acceptance.md` and current loop.
+- **Stash:** Sort implemented; filter toggles still optional.
+- **Skill row:** Tooltips / build panel list skill names where helpful.
+- **README:** Points at `mvp-acceptance.md` and current loop.
 
 ---
 

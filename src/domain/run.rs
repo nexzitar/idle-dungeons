@@ -1,7 +1,9 @@
 use crate::domain::combat::{
     combat_playback_frames_from_result, simulate_combat, CombatOutcome, CombatPlaybackFrame,
 };
-use crate::domain::dungeon::{generate_dungeon, RoomKind};
+use crate::domain::dungeon::{
+    generate_dungeon, peak_risk_note, room_risk_hint, room_risk_rank, RoomKind,
+};
 use crate::domain::hero::HeroProfile;
 use crate::domain::items::ItemInstance;
 use crate::domain::loot::{roll_loot, salvage_value};
@@ -50,6 +52,8 @@ pub struct RunSummary {
     pub loot: Vec<ItemInstance>,
     pub death_reason: Option<String>,
     pub log: Vec<String>,
+    #[serde(default)]
+    pub peak_risk_note: String,
 }
 
 fn default_summary_dungeon_cap() -> u32 {
@@ -73,6 +77,8 @@ pub struct RunPlaybackFrame {
     pub delve_floors_cleared: u32,
     /// Same as run max depth (`RunConfig.max_depth`).
     pub delve_floors_cap: u32,
+    /// Encounter pressure label for this step (matches [`crate::domain::dungeon::room_risk_hint`]).
+    pub risk_hint: String,
     pub kind: RunPlaybackFrameKind,
 }
 
@@ -85,6 +91,27 @@ pub struct RunPlayback {
 pub struct RunSimulation {
     pub summary: RunSummary,
     pub playback: RunPlayback,
+}
+
+fn playback_frame(
+    depth: u32,
+    room_kind: RoomKind,
+    hero_hp: i32,
+    hero_max: i32,
+    floors_cleared: u32,
+    cap: u32,
+    kind: RunPlaybackFrameKind,
+) -> RunPlaybackFrame {
+    RunPlaybackFrame {
+        depth,
+        room_kind,
+        hero_snapshot_hp: hero_hp,
+        hero_snapshot_max_hp: hero_max,
+        delve_floors_cleared: floors_cleared,
+        delve_floors_cap: cap,
+        risk_hint: room_risk_hint(room_kind).to_string(),
+        kind,
+    }
 }
 
 pub fn simulate_run_with_playback(hero: &HeroProfile, config: RunConfig) -> RunSimulation {
@@ -108,9 +135,11 @@ fn simulate_run_with_playback_inner(hero: &HeroProfile, config: RunConfig) -> Ru
     let hero_max_hp = hero.derived_stats().max_health;
     let mut hero_current_hp = hero_max_hp;
     let mut floors_cleared = 0u32;
+    let mut peak_risk_rank = 0u8;
 
     for room in rooms {
         deepest_depth = room.depth;
+        peak_risk_rank = peak_risk_rank.max(room_risk_rank(room.kind));
         let is_boss = room.kind == RoomKind::Boss;
         match room.kind {
             RoomKind::Monster | RoomKind::Elite | RoomKind::Boss => {
@@ -124,15 +153,15 @@ fn simulate_run_with_playback_inner(hero: &HeroProfile, config: RunConfig) -> Ru
                     enemy.max_health,
                     at_start,
                 ) {
-                    playback.frames.push(RunPlaybackFrame {
-                        depth: room.depth,
-                        room_kind: room.kind,
-                        hero_snapshot_hp: frame.hero_hp,
-                        hero_snapshot_max_hp: frame.hero_max_hp,
-                        delve_floors_cleared: floors_cleared,
-                        delve_floors_cap: cap,
-                        kind: RunPlaybackFrameKind::Combat(frame),
-                    });
+                    playback.frames.push(playback_frame(
+                        room.depth,
+                        room.kind,
+                        frame.hero_hp,
+                        frame.hero_max_hp,
+                        floors_cleared,
+                        cap,
+                        RunPlaybackFrameKind::Combat(frame),
+                    ));
                 }
                 match combat.outcome {
                     CombatOutcome::HeroWon => {
@@ -142,17 +171,17 @@ fn simulate_run_with_playback_inner(hero: &HeroProfile, config: RunConfig) -> Ru
                         floors_cleared += 1;
                         if is_boss {
                             log.push("The Gate Warden falls. The delve is victorious.".to_string());
-                            playback.frames.push(RunPlaybackFrame {
-                                depth: room.depth,
-                                room_kind: room.kind,
-                                hero_snapshot_hp: hero_current_hp,
-                                hero_snapshot_max_hp: hero_max_hp,
-                                delve_floors_cleared: floors_cleared,
-                                delve_floors_cap: cap,
-                                kind: RunPlaybackFrameKind::Narration {
+                            playback.frames.push(playback_frame(
+                                room.depth,
+                                room.kind,
+                                hero_current_hp,
+                                hero_max_hp,
+                                floors_cleared,
+                                cap,
+                                RunPlaybackFrameKind::Narration {
                                     text: "The Gate Warden falls. The delve is victorious.".into(),
                                 },
-                            });
+                            ));
                             return RunSimulation {
                                 summary: RunSummary {
                                     outcome: RunOutcome::BossDefeated,
@@ -164,6 +193,7 @@ fn simulate_run_with_playback_inner(hero: &HeroProfile, config: RunConfig) -> Ru
                                     loot,
                                     death_reason: None,
                                     log,
+                                    peak_risk_note: peak_risk_note(peak_risk_rank),
                                 },
                                 playback,
                             };
@@ -182,6 +212,7 @@ fn simulate_run_with_playback_inner(hero: &HeroProfile, config: RunConfig) -> Ru
                                 loot,
                                 death_reason: Some(format!("Defeated by {}", enemy.name)),
                                 log,
+                                peak_risk_note: peak_risk_note(peak_risk_rank),
                             },
                             playback,
                         };
@@ -196,30 +227,30 @@ fn simulate_run_with_playback_inner(hero: &HeroProfile, config: RunConfig) -> Ru
                 loot.push(item);
                 gold_earned += room.depth * 2;
                 floors_cleared += 1;
-                playback.frames.push(RunPlaybackFrame {
-                    depth: room.depth,
-                    room_kind: room.kind,
-                    hero_snapshot_hp: hero_current_hp,
-                    hero_snapshot_max_hp: hero_max_hp,
-                    delve_floors_cleared: floors_cleared,
-                    delve_floors_cap: cap,
-                    kind: RunPlaybackFrameKind::Narration { text: line },
-                });
+                playback.frames.push(playback_frame(
+                    room.depth,
+                    room.kind,
+                    hero_current_hp,
+                    hero_max_hp,
+                    floors_cleared,
+                    cap,
+                    RunPlaybackFrameKind::Narration { text: line },
+                ));
             }
             RoomKind::Shrine => {
                 let line = format!("Depth {}: shrine grants {} gold", room.depth, room.depth);
                 log.push(line.clone());
                 gold_earned += room.depth;
                 floors_cleared += 1;
-                playback.frames.push(RunPlaybackFrame {
-                    depth: room.depth,
-                    room_kind: room.kind,
-                    hero_snapshot_hp: hero_current_hp,
-                    hero_snapshot_max_hp: hero_max_hp,
-                    delve_floors_cleared: floors_cleared,
-                    delve_floors_cap: cap,
-                    kind: RunPlaybackFrameKind::Narration { text: line },
-                });
+                playback.frames.push(playback_frame(
+                    room.depth,
+                    room.kind,
+                    hero_current_hp,
+                    hero_max_hp,
+                    floors_cleared,
+                    cap,
+                    RunPlaybackFrameKind::Narration { text: line },
+                ));
             }
         }
     }
@@ -235,6 +266,7 @@ fn simulate_run_with_playback_inner(hero: &HeroProfile, config: RunConfig) -> Ru
             loot,
             death_reason: None,
             log,
+            peak_risk_note: peak_risk_note(peak_risk_rank),
         },
         playback,
     }

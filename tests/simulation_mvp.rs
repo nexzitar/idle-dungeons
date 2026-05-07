@@ -23,6 +23,10 @@ fn run_summary_reports_depth_gold_and_outcome() {
         result.outcome,
         RunOutcome::HeroDied | RunOutcome::BossDefeated
     ));
+    assert!(
+        !result.peak_risk_note.is_empty(),
+        "peak risk hint should summarize room pressure"
+    );
 }
 
 #[test]

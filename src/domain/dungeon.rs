@@ -103,6 +103,37 @@ pub fn generate_dungeon(depth_count: u32, seed: u64) -> Vec<DungeonRoom> {
         .collect()
 }
 
+/// Short risk tier for UI (playback type line, tooltips).
+pub fn room_risk_hint(kind: RoomKind) -> &'static str {
+    match kind {
+        RoomKind::Treasure | RoomKind::Shrine => "Low",
+        RoomKind::Monster => "Moderate",
+        RoomKind::Elite => "High",
+        RoomKind::Boss => "Boss",
+    }
+}
+
+/// Ordinal for comparing danger across a delve (0 = calm, 3 = boss).
+pub fn room_risk_rank(kind: RoomKind) -> u8 {
+    match kind {
+        RoomKind::Treasure | RoomKind::Shrine => 0,
+        RoomKind::Monster => 1,
+        RoomKind::Elite => 2,
+        RoomKind::Boss => 3,
+    }
+}
+
+/// Summary line after a full or partial run (based on max rank seen).
+pub fn peak_risk_note(max_rank: u8) -> String {
+    match max_rank {
+        0 => "Peak room risk: low (loot or shrines only).".to_string(),
+        1 => "Peak room risk: moderate (standard combat).".to_string(),
+        2 => "Peak room risk: high (elite encounters).".to_string(),
+        3 => "Peak room risk: boss.".to_string(),
+        _ => "Peak room risk: —".to_string(),
+    }
+}
+
 impl From<&Enemy> for Stats {
     fn from(enemy: &Enemy) -> Self {
         Self {

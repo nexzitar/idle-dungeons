@@ -1,10 +1,62 @@
 //! Muted dark-fantasy palette and typography for readable, grounded UI.
+//!
+//! ## Typography scale (px)
+//!
+//! | Constant | px | Typical use |
+//! |----------|-----|-------------|
+//! | `FONT_DISPLAY_HERO` | 38 | Running playback clock |
+//! | `FONT_DISPLAY_SUB` | 34 | Alternate large numerics |
+//! | `FONT_HEADLINE` | 26 | Screen titles |
+//! | `FONT_TITLE` | 22 | Brand / top bar title |
+//! | `FONT_STRONG` | 20 | High-emphasis labels (log boss, purchase) |
+//! | `FONT_SECTION` | 17 | Section headers |
+//! | `FONT_SKILL_ACTIVE` | 18 | Unlocked skill slot label |
+//! | `FONT_SKILL_DIM` | 16 | Locked skill slot / secondary buttons |
+//! | `FONT_BODY` | 15 | Default reading text |
+//! | `FONT_SUBLINE` | 16 | Log lines, treasure/shrine emphasis |
+//! | `FONT_COMPACT` | 14 | Dense lists, chips |
+//! | `FONT_CAPTION` | 13 | Captions, tooltips |
+//! | `FONT_LABEL` | 12 | Table/sort hints |
+//! | `FONT_MICRO` | 11 | Fine print |
+//!
+//! ## Spacing (px, suggested)
+//!
+//! | Constant | Value | Typical use |
+//! |----------|-------|-------------|
+//! | `PAD_ROOT` | 20 | Outer mockup inset, top bar horizontal |
+//! | `PAD_BAR_Y` | 10 | Top bar vertical padding |
+//! | `PANEL_INSET_LG` | 14–16 | Primary panel body padding |
+//! | `PANEL_INSET` | 12 | Cards, scroll regions |
+//! | `PANEL_INSET_SM` | 8 | Tight stacks, chips |
+//! | `PAD_TOOLTIP` | 10 | Tooltip panel padding |
+//!
 
 use bevy::prelude::*;
 
 pub struct UiTheme;
 
 impl UiTheme {
+    pub const FONT_DISPLAY_HERO: f32 = 38.0;
+    pub const FONT_DISPLAY_SUB: f32 = 34.0;
+    pub const FONT_HEADLINE: f32 = 26.0;
+    pub const FONT_TITLE: f32 = 22.0;
+    pub const FONT_STRONG: f32 = 20.0;
+    pub const FONT_SECTION: f32 = 17.0;
+    pub const FONT_SKILL_ACTIVE: f32 = 18.0;
+    pub const FONT_SKILL_DIM: f32 = 16.0;
+    pub const FONT_BODY: f32 = 15.0;
+    pub const FONT_SUBLINE: f32 = 16.0;
+    pub const FONT_COMPACT: f32 = 14.0;
+    pub const FONT_CAPTION: f32 = 13.0;
+    pub const FONT_LABEL: f32 = 12.0;
+    pub const FONT_MICRO: f32 = 11.0;
+
+    pub const PAD_ROOT: f32 = 20.0;
+    pub const PAD_BAR_Y: f32 = 10.0;
+    pub const PANEL_INSET: f32 = 12.0;
+    pub const PANEL_INSET_SM: f32 = 8.0;
+    pub const PANEL_INSET_LG: f32 = 14.0;
+    pub const PAD_TOOLTIP: f32 = 10.0;
     pub fn void_black() -> Color {
         Color::srgb(0.04, 0.035, 0.042)
     }
@@ -61,7 +113,8 @@ impl UiTheme {
     }
 
     pub fn body_dim() -> Color {
-        Color::srgb(0.5, 0.48, 0.46)
+        // Slightly lifted vs older stone grays so captions stay legible on `panel_bg_deep`.
+        Color::srgb(0.56, 0.54, 0.51)
     }
 
     pub fn muted_red() -> Color {
@@ -102,31 +155,31 @@ pub fn rarity_color(rarity: crate::domain::items::ItemRarity) -> Color {
 pub fn log_line_present(line: &str) -> (Color, f32) {
     let lower = line.to_lowercase();
     if line.contains("Warden") || line.contains("Gate Warden") {
-        return (UiTheme::muted_gold(), 20.0);
+        return (UiTheme::muted_gold(), UiTheme::FONT_STRONG);
     }
     if lower.contains("defeated by") {
-        return (UiTheme::danger(), 16.0);
+        return (UiTheme::danger(), UiTheme::FONT_SUBLINE);
     }
     if lower.contains("elite") {
-        return (UiTheme::elite(), 17.0);
+        return (UiTheme::elite(), UiTheme::FONT_SECTION);
     }
     if lower.contains("shrine") {
-        return (UiTheme::healing(), 16.0);
+        return (UiTheme::healing(), UiTheme::FONT_SUBLINE);
     }
     if lower.contains("found ") || lower.contains("treasure") {
-        return (UiTheme::treasure(), 16.0);
+        return (UiTheme::treasure(), UiTheme::FONT_SUBLINE);
     }
     if lower.contains("defeated") {
-        return (UiTheme::body(), 15.0);
+        return (UiTheme::body(), UiTheme::FONT_BODY);
     }
-    (UiTheme::body_dim(), 14.0)
+    (UiTheme::body_dim(), UiTheme::FONT_COMPACT)
 }
 
 pub fn headline_text(text: impl Into<String>) -> TextBundle {
     TextBundle::from_section(
         text,
         TextStyle {
-            font_size: 26.0,
+            font_size: UiTheme::FONT_HEADLINE,
             color: UiTheme::muted_gold(),
             ..default()
         },
@@ -137,7 +190,7 @@ pub fn section_title(text: impl Into<String>) -> TextBundle {
     TextBundle::from_section(
         text,
         TextStyle {
-            font_size: 17.0,
+            font_size: UiTheme::FONT_SECTION,
             color: UiTheme::muted_cream(),
             ..default()
         },
@@ -148,7 +201,7 @@ pub fn body_text(text: impl Into<String>) -> TextBundle {
     TextBundle::from_section(
         text,
         TextStyle {
-            font_size: 15.0,
+            font_size: UiTheme::FONT_BODY,
             color: UiTheme::body(),
             ..default()
         },
@@ -159,7 +212,7 @@ pub fn caption_text(text: impl Into<String>) -> TextBundle {
     TextBundle::from_section(
         text,
         TextStyle {
-            font_size: 13.0,
+            font_size: UiTheme::FONT_CAPTION,
             color: UiTheme::body_dim(),
             ..default()
         },
