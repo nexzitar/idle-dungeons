@@ -10,9 +10,14 @@ use crate::ui::components::{
     SkillBookBackdrop, SkillBookCloseButton, SkillBookPickButton, SkillBookRoot, UiButtonPalette,
     UiScrollContent, UiScrollRegion, UiScrollState, UiTooltip,
 };
+use crate::ui::placeholder_graphics::UiPlaceholderImages;
 use crate::ui::theme::{caption_text, headline_text, section_title, UiTheme};
 
-pub fn spawn_skill_book_modal(parent: &mut ChildBuilder, target_slot: usize) {
+pub fn spawn_skill_book_modal(
+    parent: &mut ChildBuilder,
+    target_slot: usize,
+    ph: &UiPlaceholderImages,
+) {
     parent
         .spawn((
             NodeBundle {
@@ -134,6 +139,7 @@ pub fn spawn_skill_book_modal(parent: &mut ChildBuilder, target_slot: usize) {
                                 .with_children(|inner| {
                                     spawn_pick_row(
                                         inner,
+                                        ph,
                                         target_slot,
                                         None,
                                         "(Clear slot)",
@@ -159,7 +165,7 @@ pub fn spawn_skill_book_modal(parent: &mut ChildBuilder, target_slot: usize) {
                                             d.synergy_hint
                                         );
                                         spawn_pick_row(
-                                            inner, target_slot, Some(id), &label, &tip,
+                                            inner, ph, target_slot, Some(id), &label, &tip,
                                         );
                                     }
                                 });
@@ -198,8 +204,19 @@ pub fn spawn_skill_book_modal(parent: &mut ChildBuilder, target_slot: usize) {
         });
 }
 
+fn pick_row_icon(ph: &UiPlaceholderImages, skill: Option<SkillId>) -> Handle<Image> {
+    match skill {
+        None => ph.skill_empty.clone(),
+        Some(id) => match skill_definition(id).kind {
+            SkillKind::Active => ph.skill_active.clone(),
+            SkillKind::Passive => ph.skill_passive.clone(),
+        },
+    }
+}
+
 fn spawn_pick_row(
     inner: &mut ChildBuilder,
+    ph: &UiPlaceholderImages,
     target_slot: usize,
     skill: Option<SkillId>,
     label: &str,
@@ -230,13 +247,36 @@ fn spawn_pick_row(
             UiTooltip::txt(tip.to_string()),
         ))
         .with_children(|b| {
-            b.spawn(TextBundle::from_section(
-                label,
-                TextStyle {
-                    font_size: UiTheme::FONT_COMPACT,
-                    color: UiTheme::body(),
+            b.spawn(NodeBundle {
+                style: Style {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(10.0),
+                    align_items: AlignItems::Center,
                     ..default()
                 },
-            ));
+                ..default()
+            })
+            .with_children(|row| {
+                row.spawn(ImageBundle {
+                    style: Style {
+                        width: Val::Px(22.0),
+                        height: Val::Px(22.0),
+                        flex_shrink: 0.0,
+                        ..default()
+                    },
+                    image: UiImage::new(pick_row_icon(ph, skill)),
+                    background_color: Color::NONE.into(),
+                    ..default()
+                });
+                row.spawn(TextBundle::from_section(
+                    label,
+                    TextStyle {
+                        font_size: UiTheme::FONT_COMPACT,
+                        color: UiTheme::body(),
+                        ..default()
+                    },
+                ));
+            });
         });
 }

@@ -3,6 +3,7 @@ pub mod components;
 pub mod inventory_panel;
 pub mod log_panel;
 pub mod mockup_layout;
+pub mod placeholder_graphics;
 pub mod run_panel;
 pub mod skill_book;
 pub mod stash_sort;
@@ -33,8 +34,12 @@ use crate::ui::components::{
     UiScrollState, UiTooltip, UpgradeScreen,
 };
 use crate::ui::mockup_layout::RightPanelTab;
+use crate::ui::placeholder_graphics::UiPlaceholderImages;
 use crate::ui::theme::{body_text, caption_text, format_item_stat_summary, rarity_color, UiTheme};
 use crate::ui::widgets::spawn_atmosphere;
+use bevy::app::MainScheduleOrder;
+use bevy::asset::AssetPlugin;
+use bevy::ecs::schedule::ScheduleLabel;
 use bevy::input::mouse::{MouseButton, MouseWheel};
 use bevy::input::InputPlugin;
 use bevy::prelude::*;
@@ -47,8 +52,17 @@ struct UiClickPress(Option<Entity>);
 
 pub struct UiPlugin;
 
+#[derive(ScheduleLabel, Clone, Debug, Hash, PartialEq, Eq)]
+struct RegisterUiPlaceholderImages;
+
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
+        if !app.is_plugin_added::<AssetPlugin>() {
+            app.add_plugins(AssetPlugin::default());
+        }
+        if !app.world().contains_resource::<Assets<Image>>() {
+            app.init_asset::<Image>();
+        }
         if !app.is_plugin_added::<InputPlugin>() {
             app.add_plugins(InputPlugin);
         }
@@ -59,6 +73,14 @@ impl Plugin for UiPlugin {
             Update,
             crate::ui::tooltip::hide_tooltip_layer_before_pointer_focus.before(UiSystem::Focus),
         );
+        app.add_schedule(Schedule::new(RegisterUiPlaceholderImages));
+        app.add_systems(
+            RegisterUiPlaceholderImages,
+            crate::ui::placeholder_graphics::register_ui_placeholder_images,
+        );
+        app.world_mut()
+            .resource_mut::<MainScheduleOrder>()
+            .insert_startup_before(StateTransition, RegisterUiPlaceholderImages);
         app.add_systems(Startup, spawn_camera)
             .add_systems(
                 OnEnter(GameState::Build),
@@ -220,8 +242,9 @@ fn spawn_running_screen(
     profile: Res<ProfileState>,
     speed: Res<RunSpeedSetting>,
     tab: Res<RightPanelTab>,
+    ph: Res<UiPlaceholderImages>,
 ) {
-    spawn_running_screen_root(&mut commands, &profile, speed.0, *tab);
+    spawn_running_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
 }
 
 fn spawn_running_screen_root(
@@ -229,6 +252,7 @@ fn spawn_running_screen_root(
     profile: &ProfileState,
     speed_mult: f32,
     tab: RightPanelTab,
+    ph: &UiPlaceholderImages,
 ) {
     let hero = profile.effective_hero();
     let meta = &profile.profile.meta;
@@ -244,6 +268,7 @@ fn spawn_running_screen_root(
             root.spawn(content_column_bundle()).with_children(|col| {
                 crate::ui::mockup_layout::spawn_mockup_header(
                     col,
+                    ph,
                     meta.gold,
                     meta.salvage,
                     meta.unlocked_skill_slots,
@@ -255,6 +280,7 @@ fn spawn_running_screen_root(
                     crate::ui::mockup_layout::spawn_ornate_column(row, 0.95, |panel| {
                         crate::ui::mockup_layout::spawn_hero_column_mockup(
                             panel,
+                            ph,
                             &hero,
                             &loadout_lines,
                             false,
@@ -266,6 +292,7 @@ fn spawn_running_screen_root(
                     crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
                         crate::ui::mockup_layout::spawn_right_management_column(
                             panel,
+                            ph,
                             tab,
                             meta,
                             profile,
@@ -289,8 +316,9 @@ fn spawn_build_screen(
     profile: Res<ProfileState>,
     speed: Res<RunSpeedSetting>,
     tab: Res<RightPanelTab>,
+    ph: Res<UiPlaceholderImages>,
 ) {
-    spawn_build_screen_root(&mut commands, &profile, speed.0, *tab);
+    spawn_build_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
 }
 
 fn spawn_build_screen_root(
@@ -298,6 +326,7 @@ fn spawn_build_screen_root(
     profile: &ProfileState,
     speed_mult: f32,
     tab: RightPanelTab,
+    ph: &UiPlaceholderImages,
 ) {
     let hero = profile.effective_hero();
     let meta = &profile.profile.meta;
@@ -314,6 +343,7 @@ fn spawn_build_screen_root(
             root.spawn(content_column_bundle()).with_children(|col| {
                 crate::ui::mockup_layout::spawn_mockup_header(
                     col,
+                    ph,
                     meta.gold,
                     meta.salvage,
                     meta.unlocked_skill_slots,
@@ -325,6 +355,7 @@ fn spawn_build_screen_root(
                     crate::ui::mockup_layout::spawn_ornate_column(row, 0.95, |panel| {
                         crate::ui::mockup_layout::spawn_hero_column_mockup(
                             panel,
+                            ph,
                             &hero,
                             &loadout_lines,
                             true,
@@ -336,6 +367,7 @@ fn spawn_build_screen_root(
                     crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
                         crate::ui::mockup_layout::spawn_right_management_column(
                             panel,
+                            ph,
                             tab,
                             meta,
                             profile,
@@ -360,12 +392,13 @@ fn spawn_summary_screen(
     latest_summary: Option<Res<LatestRunSummary>>,
     speed: Res<RunSpeedSetting>,
     tab: Res<RightPanelTab>,
+    ph: Res<UiPlaceholderImages>,
 ) {
     let summary = latest_summary
         .as_deref()
         .map(|s| s.summary.clone())
         .unwrap_or_else(crate::ui::summary_panel::empty_run_summary);
-    spawn_summary_screen_root(&mut commands, &profile, &summary, speed.0, *tab);
+    spawn_summary_screen_root(&mut commands, &profile, &summary, speed.0, *tab, &ph);
 }
 
 fn spawn_summary_screen_root(
@@ -374,6 +407,7 @@ fn spawn_summary_screen_root(
     summary: &RunSummary,
     speed_mult: f32,
     tab: RightPanelTab,
+    ph: &UiPlaceholderImages,
 ) {
     let meta = &profile.profile.meta;
     let hero = profile.effective_hero();
@@ -389,6 +423,7 @@ fn spawn_summary_screen_root(
             root.spawn(content_column_bundle()).with_children(|col| {
                 crate::ui::mockup_layout::spawn_mockup_header(
                     col,
+                    ph,
                     meta.gold,
                     meta.salvage,
                     meta.unlocked_skill_slots,
@@ -400,6 +435,7 @@ fn spawn_summary_screen_root(
                     crate::ui::mockup_layout::spawn_ornate_column(row, 0.95, |panel| {
                         crate::ui::mockup_layout::spawn_hero_column_mockup(
                             panel,
+                            ph,
                             &hero,
                             &loadout_lines,
                             false,
@@ -411,6 +447,7 @@ fn spawn_summary_screen_root(
                     crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
                         crate::ui::mockup_layout::spawn_right_management_column(
                             panel,
+                            ph,
                             tab,
                             meta,
                             profile,
@@ -434,8 +471,9 @@ fn spawn_upgrade_screen(
     profile: Res<ProfileState>,
     speed: Res<RunSpeedSetting>,
     tab: Res<RightPanelTab>,
+    ph: Res<UiPlaceholderImages>,
 ) {
-    spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab);
+    spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
 }
 
 fn spawn_upgrade_screen_root(
@@ -443,6 +481,7 @@ fn spawn_upgrade_screen_root(
     profile: &ProfileState,
     speed_mult: f32,
     tab: RightPanelTab,
+    ph: &UiPlaceholderImages,
 ) {
     let hero = profile.effective_hero();
     let meta = &profile.profile.meta;
@@ -459,6 +498,7 @@ fn spawn_upgrade_screen_root(
             root.spawn(content_column_bundle()).with_children(|col| {
                 crate::ui::mockup_layout::spawn_mockup_header(
                     col,
+                    ph,
                     meta.gold,
                     meta.salvage,
                     meta.unlocked_skill_slots,
@@ -470,6 +510,7 @@ fn spawn_upgrade_screen_root(
                     crate::ui::mockup_layout::spawn_ornate_column(row, 0.95, |panel| {
                         crate::ui::mockup_layout::spawn_hero_column_mockup(
                             panel,
+                            ph,
                             &hero,
                             &loadout_lines,
                             true,
@@ -480,7 +521,7 @@ fn spawn_upgrade_screen_root(
                     });
                     crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
                         crate::ui::mockup_layout::spawn_right_management_column(
-                            panel, tab, meta, profile, inventory, None, true,
+                            panel, ph, tab, meta, profile, inventory, None, true,
                         );
                     });
                 });
@@ -511,6 +552,7 @@ fn handle_right_panel_tab_buttons(
     upgrade_roots: Query<Entity, With<UpgradeScreen>>,
     summary_roots: Query<Entity, With<SummaryScreen>>,
     running_roots: Query<Entity, With<RunPlaybackScreen>>,
+    ph: Res<UiPlaceholderImages>,
 ) {
     if !mouse.just_released(MouseButton::Left) {
         return;
@@ -532,13 +574,13 @@ fn handle_right_panel_tab_buttons(
                 for e in &build_roots {
                     commands.entity(e).despawn_recursive();
                 }
-                spawn_build_screen_root(&mut commands, &profile, speed.0, *tab);
+                spawn_build_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
             }
             GameState::Upgrades => {
                 for e in &upgrade_roots {
                     commands.entity(e).despawn_recursive();
                 }
-                spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab);
+                spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
             }
             GameState::Summary => {
                 let summary = latest_summary
@@ -548,13 +590,13 @@ fn handle_right_panel_tab_buttons(
                 for e in &summary_roots {
                     commands.entity(e).despawn_recursive();
                 }
-                spawn_summary_screen_root(&mut commands, &profile, &summary, speed.0, *tab);
+                spawn_summary_screen_root(&mut commands, &profile, &summary, speed.0, *tab, &ph);
             }
             GameState::Running => {
                 for e in &running_roots {
                     commands.entity(e).despawn_recursive();
                 }
-                spawn_running_screen_root(&mut commands, &profile, speed.0, *tab);
+                spawn_running_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
             }
         }
         break;
@@ -576,6 +618,7 @@ fn handle_stash_sort_button(
     upgrade_roots: Query<Entity, With<UpgradeScreen>>,
     summary_roots: Query<Entity, With<SummaryScreen>>,
     running_roots: Query<Entity, With<RunPlaybackScreen>>,
+    ph: Res<UiPlaceholderImages>,
 ) {
     if !mouse.just_released(MouseButton::Left) {
         return;
@@ -597,13 +640,13 @@ fn handle_stash_sort_button(
                 for e in &build_roots {
                     commands.entity(e).despawn_recursive();
                 }
-                spawn_build_screen_root(&mut commands, &profile, speed.0, *tab);
+                spawn_build_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
             }
             GameState::Upgrades => {
                 for e in &upgrade_roots {
                     commands.entity(e).despawn_recursive();
                 }
-                spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab);
+                spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
             }
             GameState::Summary => {
                 let summary = latest_summary
@@ -613,13 +656,13 @@ fn handle_stash_sort_button(
                 for e in &summary_roots {
                     commands.entity(e).despawn_recursive();
                 }
-                spawn_summary_screen_root(&mut commands, &profile, &summary, speed.0, *tab);
+                spawn_summary_screen_root(&mut commands, &profile, &summary, speed.0, *tab, &ph);
             }
             GameState::Running => {
                 for e in &running_roots {
                     commands.entity(e).despawn_recursive();
                 }
-                spawn_running_screen_root(&mut commands, &profile, speed.0, *tab);
+                spawn_running_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
             }
         }
         break;
@@ -632,6 +675,7 @@ fn refresh_upgrade_screen_on_profile_change(
     speed: Res<RunSpeedSetting>,
     tab: Res<RightPanelTab>,
     upgrade_roots: Query<Entity, With<UpgradeScreen>>,
+    ph: Res<UiPlaceholderImages>,
 ) {
     if !profile.is_changed() || upgrade_roots.is_empty() {
         return;
@@ -640,7 +684,7 @@ fn refresh_upgrade_screen_on_profile_change(
     for root in &upgrade_roots {
         commands.entity(root).despawn_recursive();
     }
-    spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab);
+    spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
 }
 
 fn refresh_build_screen_on_profile_change(
@@ -649,6 +693,7 @@ fn refresh_build_screen_on_profile_change(
     speed: Res<RunSpeedSetting>,
     tab: Res<RightPanelTab>,
     build_roots: Query<Entity, With<BuildScreen>>,
+    ph: Res<UiPlaceholderImages>,
 ) {
     if !profile.is_changed() || build_roots.is_empty() {
         return;
@@ -657,10 +702,14 @@ fn refresh_build_screen_on_profile_change(
     for root in &build_roots {
         commands.entity(root).despawn_recursive();
     }
-    spawn_build_screen_root(&mut commands, &profile, speed.0, *tab);
+    spawn_build_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
 }
 
-pub(crate) fn spawn_item_card(parent: &mut ChildBuilder, item: &ItemInstance) {
+pub(crate) fn spawn_item_card(
+    parent: &mut ChildBuilder,
+    item: &ItemInstance,
+    ph: &UiPlaceholderImages,
+) {
     parent
         .spawn(NodeBundle {
             style: Style {
@@ -677,16 +726,53 @@ pub(crate) fn spawn_item_card(parent: &mut ChildBuilder, item: &ItemInstance) {
             ..default()
         })
         .with_children(|card| {
-            card.spawn(TextBundle::from_section(
-                &item.name,
-                TextStyle {
-                    font_size: UiTheme::FONT_SECTION,
-                    color: rarity_color(item.rarity),
+            card.spawn(NodeBundle {
+                style: Style {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(10.0),
+                    align_items: AlignItems::FlexStart,
                     ..default()
                 },
-            ));
-            card.spawn(caption_text(format!("{:?} · {:?}", item.rarity, item.slot)));
-            card.spawn(body_text(format_item_stat_summary(item)));
+                ..default()
+            })
+            .with_children(|head| {
+                head.spawn(ImageBundle {
+                    style: Style {
+                        width: Val::Px(40.0),
+                        height: Val::Px(40.0),
+                        flex_shrink: 0.0,
+                        ..default()
+                    },
+                    image: UiImage::new(ph.item_generic.clone())
+                        .with_color(rarity_color(item.rarity).mix(&Color::WHITE, 0.35)),
+                    background_color: Color::NONE.into(),
+                    ..default()
+                });
+                head.spawn(NodeBundle {
+                    style: Style {
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::FlexStart,
+                        row_gap: Val::Px(4.0),
+                        flex_grow: 1.0,
+                        min_width: Val::Px(0.0),
+                        ..default()
+                    },
+                    ..default()
+                })
+                .with_children(|txt| {
+                    txt.spawn(TextBundle::from_section(
+                        &item.name,
+                        TextStyle {
+                            font_size: UiTheme::FONT_SECTION,
+                            color: rarity_color(item.rarity),
+                            ..default()
+                        },
+                    ));
+                    txt.spawn(caption_text(format!("{:?} · {:?}", item.rarity, item.slot)));
+                    txt.spawn(body_text(format_item_stat_summary(item)));
+                });
+            });
             card.spawn(NodeBundle {
                 style: Style {
                     flex_direction: FlexDirection::Row,
@@ -867,6 +953,7 @@ fn fulfill_reset_progress(
     state: Res<State<GameState>>,
     speed: Res<RunSpeedSetting>,
     build_roots: Query<Entity, With<BuildScreen>>,
+    ph: Res<UiPlaceholderImages>,
 ) {
     for _ in events.read() {
         profile.profile = crate::save::SaveProfile::default();
@@ -881,7 +968,7 @@ fn fulfill_reset_progress(
             for e in &build_roots {
                 commands.entity(e).despawn_recursive();
             }
-            spawn_build_screen_root(&mut commands, &profile, speed.0, *tab);
+            spawn_build_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
         } else {
             next_state.set(GameState::Build);
         }
@@ -952,6 +1039,7 @@ fn handle_open_skill_book(
     roots: Query<Entity, With<UiRoot>>,
     existing: Query<(), With<SkillBookRoot>>,
     mut commands: Commands,
+    ph: Res<UiPlaceholderImages>,
 ) {
     for ev in events.read() {
         if !existing.is_empty() {
@@ -960,9 +1048,9 @@ fn handle_open_skill_book(
         let Ok(root) = roots.get_single() else {
             continue;
         };
-        commands
-            .entity(root)
-            .with_children(|parent| crate::ui::skill_book::spawn_skill_book_modal(parent, ev.slot));
+        commands.entity(root).with_children(|parent| {
+            crate::ui::skill_book::spawn_skill_book_modal(parent, ev.slot, &ph);
+        });
     }
 }
 
