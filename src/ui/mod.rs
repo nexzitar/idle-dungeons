@@ -30,17 +30,25 @@ use crate::ui::components::{
 use crate::ui::mockup_layout::RightPanelTab;
 use crate::ui::theme::{body_text, caption_text, format_item_stat_summary, rarity_color, UiTheme};
 use crate::ui::widgets::spawn_atmosphere;
-use bevy::input::mouse::MouseWheel;
+use bevy::input::mouse::{MouseButton, MouseWheel};
+use bevy::input::InputPlugin;
 use bevy::prelude::*;
 use bevy::transform::TransformSystem;
 use bevy::ui::RelativeCursorPosition;
+
+/// Button that received [`Interaction::Pressed`] on press; used to confirm click on mouse-up.
+#[derive(Resource, Default)]
+struct UiClickPress(Option<Entity>);
 
 pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
+        if !app.is_plugin_added::<InputPlugin>() {
+            app.add_plugins(InputPlugin);
+        }
         app.init_resource::<RightPanelTab>();
-        app.add_event::<MouseWheel>();
+        app.init_resource::<UiClickPress>();
         app.add_systems(Startup, spawn_camera)
             .add_systems(
                 OnEnter(GameState::Build),
@@ -52,18 +60,29 @@ impl Plugin for UiPlugin {
             .add_systems(
                 Update,
                 (
-                    apply_ui_button_palettes,
-                    handle_start_button.run_if(in_state(GameState::Build)),
-                    handle_skip_playback_button.run_if(in_state(GameState::Running)),
-                    (send_reset_progress_requests, fulfill_reset_progress).chain(),
+                    (
+                        capture_ui_click_start,
+                        apply_ui_button_palettes,
+                        handle_start_button.run_if(in_state(GameState::Build)),
+                        handle_skip_playback_button.run_if(in_state(GameState::Running)),
+                        send_reset_progress_requests,
+                        fulfill_reset_progress,
+                        open_settings_modal,
+                        close_settings_modal,
+                        handle_settings_modal_speed,
+                        handle_right_panel_tab_buttons,
+                        handle_skill_slot_buttons,
+                        handle_accept_button.run_if(in_state(GameState::Summary)),
+                        handle_equip_buttons.run_if(in_state(GameState::Upgrades)),
+                        handle_salvage_buttons.run_if(in_state(GameState::Upgrades)),
+                        handle_buy_upgrade_buttons.run_if(in_state(GameState::Upgrades)),
+                        handle_return_to_build_button.run_if(in_state(GameState::Upgrades)),
+                        clear_ui_click_after_release,
+                    )
+                        .chain(),
                     sync_top_bar,
                     sync_run_playback_ui.run_if(in_state(GameState::Running)),
                     sync_playback_delve_progress_bar.run_if(in_state(GameState::Running)),
-                    open_settings_modal,
-                    close_settings_modal,
-                    handle_settings_modal_speed,
-                    handle_right_panel_tab_buttons,
-                    handle_skill_slot_buttons,
                 ),
             )
             .add_systems(
@@ -76,20 +95,6 @@ impl Plugin for UiPlugin {
                 (reset_right_tab_camp, spawn_upgrade_screen).chain(),
             )
             .add_systems(OnExit(GameState::Upgrades), cleanup_ui)
-            .add_systems(
-                Update,
-                handle_accept_button.run_if(in_state(GameState::Summary)),
-            )
-            .add_systems(
-                Update,
-                (
-                    handle_equip_buttons,
-                    handle_salvage_buttons,
-                    handle_buy_upgrade_buttons,
-                    handle_return_to_build_button,
-                )
-                    .run_if(in_state(GameState::Upgrades)),
-            )
             .add_systems(
                 PostUpdate,
                 (
@@ -106,6 +111,36 @@ impl Plugin for UiPlugin {
 
 fn spawn_camera(mut commands: Commands) {
     commands.spawn((Camera2dBundle::default(), MainCamera));
+}
+
+fn capture_ui_click_start(
+    mouse: Res<ButtonInput<MouseButton>>,
+    mut press: ResMut<UiClickPress>,
+    buttons: Query<(Entity, &Interaction), With<Button>>,
+) {
+    if !mouse.just_pressed(MouseButton::Left) {
+        return;
+    }
+    press.0 = buttons
+        .iter()
+        .find_map(|(e, i)| (*i == Interaction::Pressed).then_some(e));
+}
+
+/// Bevy UI's `ui_focus_system` may leave [`Interaction::Pressed`] on the frame where the
+/// mouse button is released if press and release occur in the same update (common with quick taps).
+/// After a longer hold, release instead becomes [`Interaction::Hovered`].
+#[inline]
+fn ui_click_release_confirms(interaction: Interaction) -> bool {
+    matches!(interaction, Interaction::Hovered | Interaction::Pressed)
+}
+
+fn clear_ui_click_after_release(
+    mouse: Res<ButtonInput<MouseButton>>,
+    mut press: ResMut<UiClickPress>,
+) {
+    if mouse.just_released(MouseButton::Left) {
+        press.0 = None;
+    }
 }
 
 fn root_shell() -> NodeBundle {
@@ -433,10 +468,13 @@ fn spawn_upgrade_screen_root(
 }
 
 fn handle_right_panel_tab_buttons(
-    mut interactions: Query<
-        (&Interaction, &crate::ui::mockup_layout::RightTabButton),
-        Changed<Interaction>,
-    >,
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    tab_buttons: Query<(
+        Entity,
+        &Interaction,
+        &crate::ui::mockup_layout::RightTabButton,
+    )>,
     mut tab: ResMut<RightPanelTab>,
     mut commands: Commands,
     profile: Res<ProfileState>,
@@ -448,12 +486,18 @@ fn handle_right_panel_tab_buttons(
     summary_roots: Query<Entity, With<SummaryScreen>>,
     running_roots: Query<Entity, With<RunPlaybackScreen>>,
 ) {
-    for (interaction, btn) in &mut interactions {
-        if *interaction != Interaction::Pressed {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction, btn) in &tab_buttons {
+        if entity != target || !ui_click_release_confirms(*interaction) {
             continue;
         }
         if *tab == btn.0 {
-            continue;
+            return;
         }
         *tab = btn.0;
 
@@ -487,6 +531,7 @@ fn handle_right_panel_tab_buttons(
                 spawn_running_screen_root(&mut commands, &profile, speed.0, *tab);
             }
         }
+        break;
     }
 }
 
@@ -696,12 +741,21 @@ fn apply_ui_button_palettes(
 }
 
 fn send_reset_progress_requests(
-    mut interactions: Query<&Interaction, (Changed<Interaction>, With<ResetProgressButton>)>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    interactions: Query<(Entity, &Interaction), With<ResetProgressButton>>,
     mut events: EventWriter<ResetProgress>,
 ) {
-    for interaction in &mut interactions {
-        if *interaction == Interaction::Pressed {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction) in &interactions {
+        if entity == target && ui_click_release_confirms(*interaction) {
             events.send(ResetProgress);
+            break;
         }
     }
 }
@@ -738,49 +792,57 @@ fn fulfill_reset_progress(
 }
 
 fn open_settings_modal(
-    mut interactions: Query<&Interaction, (Changed<Interaction>, With<SettingsButton>)>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    interactions: Query<(Entity, &Interaction), With<SettingsButton>>,
     roots: Query<Entity, With<UiRoot>>,
     existing: Query<(), With<SettingsModalRoot>>,
     speed: Res<RunSpeedSetting>,
     mut commands: Commands,
 ) {
-    for interaction in &mut interactions {
-        if *interaction != Interaction::Pressed {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction) in &interactions {
+        if entity != target || !ui_click_release_confirms(*interaction) {
             continue;
         }
         if !existing.is_empty() {
-            continue;
+            return;
         }
         let Ok(root) = roots.get_single() else {
-            continue;
+            return;
         };
         commands.entity(root).with_children(|parent| {
             crate::ui::mockup_layout::spawn_settings_modal(parent, speed.0);
         });
+        break;
     }
 }
 
 fn close_settings_modal(
-    mut backdrop: Query<&Interaction, (Changed<Interaction>, With<SettingsModalBackdrop>)>,
-    mut close_btn: Query<&Interaction, (Changed<Interaction>, With<SettingsModalCloseButton>)>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    backdrop: Query<(Entity, &Interaction), With<SettingsModalBackdrop>>,
+    close_btn: Query<(Entity, &Interaction), With<SettingsModalCloseButton>>,
     modal: Query<Entity, With<SettingsModalRoot>>,
     mut commands: Commands,
 ) {
-    let mut should_close = false;
-    for interaction in &mut backdrop {
-        if *interaction == Interaction::Pressed {
-            should_close = true;
-            break;
-        }
+    if !mouse.just_released(MouseButton::Left) {
+        return;
     }
-    if !should_close {
-        for interaction in &mut close_btn {
-            if *interaction == Interaction::Pressed {
-                should_close = true;
-                break;
-            }
-        }
-    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    let should_close = backdrop
+        .iter()
+        .any(|(e, i)| e == target && ui_click_release_confirms(*i))
+        || close_btn
+            .iter()
+            .any(|(e, i)| e == target && ui_click_release_confirms(*i));
     if should_close {
         for entity in &modal {
             commands.entity(entity).despawn_recursive();
@@ -789,12 +851,20 @@ fn close_settings_modal(
 }
 
 fn handle_settings_modal_speed(
-    mut interactions: Query<&Interaction, (Changed<Interaction>, With<SettingsModalSpeedButton>)>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    interactions: Query<(Entity, &Interaction), With<SettingsModalSpeedButton>>,
     mut speed: ResMut<RunSpeedSetting>,
     mut labels: Query<&mut Text, With<SettingsModalSpeedLabel>>,
 ) {
-    for interaction in &mut interactions {
-        if *interaction != Interaction::Pressed {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction) in &interactions {
+        if entity != target || !ui_click_release_confirms(*interaction) {
             continue;
         }
         speed.0 = if (speed.0 - 1.0).abs() < f32::EPSILON {
@@ -812,27 +882,46 @@ fn handle_settings_modal_speed(
         for mut text in &mut labels {
             text.sections[0].value = format!("Speed: {speed_label} (click to toggle)");
         }
+        break;
     }
 }
 
 fn handle_start_button(
-    mut interactions: Query<&Interaction, (Changed<Interaction>, With<StartRunButton>)>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    buttons: Query<(Entity, &Interaction), With<StartRunButton>>,
     mut start_run_events: EventWriter<StartRun>,
 ) {
-    for interaction in &mut interactions {
-        if *interaction == Interaction::Pressed {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction) in &buttons {
+        if entity == target && ui_click_release_confirms(*interaction) {
             start_run_events.send(StartRun { seed: 1 });
+            break;
         }
     }
 }
 
 fn handle_skip_playback_button(
-    mut interactions: Query<&Interaction, (Changed<Interaction>, With<SkipPlaybackButton>)>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    buttons: Query<(Entity, &Interaction), With<SkipPlaybackButton>>,
     mut events: EventWriter<SkipRunPlayback>,
 ) {
-    for interaction in &mut interactions {
-        if *interaction == Interaction::Pressed {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction) in &buttons {
+        if entity == target && ui_click_release_confirms(*interaction) {
             events.send(SkipRunPlayback);
+            break;
         }
     }
 }
@@ -935,31 +1024,51 @@ fn sync_playback_delve_progress_bar(
 }
 
 fn handle_accept_button(
-    mut interactions: Query<&Interaction, (Changed<Interaction>, With<AcceptRewardsButton>)>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    buttons: Query<(Entity, &Interaction), With<AcceptRewardsButton>>,
     mut events: EventWriter<AcceptRunRewards>,
 ) {
-    for interaction in &mut interactions {
-        if *interaction == Interaction::Pressed {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction) in &buttons {
+        if entity == target && ui_click_release_confirms(*interaction) {
             events.send(AcceptRunRewards);
+            break;
         }
     }
 }
 
 fn handle_equip_buttons(
-    mut interactions: Query<(&Interaction, &EquipItemButton), Changed<Interaction>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    buttons: Query<(Entity, &Interaction, &EquipItemButton)>,
     mut events: EventWriter<EquipInventoryItem>,
 ) {
-    for (interaction, button) in &mut interactions {
-        if *interaction == Interaction::Pressed {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction, button) in &buttons {
+        if entity == target && ui_click_release_confirms(*interaction) {
             events.send(EquipInventoryItem {
                 item_id: button.item_id,
             });
+            break;
         }
     }
 }
 
 fn handle_skill_slot_buttons(
-    mut interactions: Query<(&Interaction, &SkillSlotButton), Changed<Interaction>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    buttons: Query<(Entity, &Interaction, &SkillSlotButton)>,
     mut events: EventWriter<CycleHeroSkillSlot>,
     state: Res<State<GameState>>,
 ) {
@@ -967,47 +1076,80 @@ fn handle_skill_slot_buttons(
         GameState::Build | GameState::Upgrades => {}
         _ => return,
     }
-    for (interaction, btn) in &mut interactions {
-        if *interaction != Interaction::Pressed {
-            continue;
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction, btn) in &buttons {
+        if entity == target && ui_click_release_confirms(*interaction) {
+            events.send(CycleHeroSkillSlot { slot: btn.slot });
+            break;
         }
-        events.send(CycleHeroSkillSlot { slot: btn.slot });
     }
 }
 
 fn handle_salvage_buttons(
-    mut interactions: Query<(&Interaction, &SalvageItemButton), Changed<Interaction>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    buttons: Query<(Entity, &Interaction, &SalvageItemButton)>,
     mut events: EventWriter<SalvageInventoryItem>,
 ) {
-    for (interaction, button) in &mut interactions {
-        if *interaction == Interaction::Pressed {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction, button) in &buttons {
+        if entity == target && ui_click_release_confirms(*interaction) {
             events.send(SalvageInventoryItem {
                 item_id: button.item_id,
             });
+            break;
         }
     }
 }
 
 fn handle_buy_upgrade_buttons(
-    mut interactions: Query<(&Interaction, &BuyUpgradeButton), Changed<Interaction>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    buttons: Query<(Entity, &Interaction, &BuyUpgradeButton)>,
     mut events: EventWriter<BuyUpgrade>,
 ) {
-    for (interaction, button) in &mut interactions {
-        if *interaction == Interaction::Pressed {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction, button) in &buttons {
+        if entity == target && ui_click_release_confirms(*interaction) {
             events.send(BuyUpgrade {
                 upgrade: button.upgrade,
             });
+            break;
         }
     }
 }
 
 fn handle_return_to_build_button(
-    mut interactions: Query<&Interaction, (Changed<Interaction>, With<ReturnToBuildButton>)>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    buttons: Query<(Entity, &Interaction), With<ReturnToBuildButton>>,
     mut events: EventWriter<ReturnToBuild>,
 ) {
-    for interaction in &mut interactions {
-        if *interaction == Interaction::Pressed {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction) in &buttons {
+        if entity == target && ui_click_release_confirms(*interaction) {
             events.send(ReturnToBuild);
+            break;
         }
     }
 }
@@ -1114,6 +1256,8 @@ mod tests {
     use crate::domain::items::{GearSlot, ItemInstance};
     use crate::domain::progression::UpgradeId;
     use crate::ui::mockup_layout::{RightPanelTab, RightTabButton};
+    use bevy::input::mouse::MouseButtonInput;
+    use bevy::input::ButtonState;
     use bevy::state::app::StatesPlugin;
     use tempfile::tempdir;
 
@@ -1131,6 +1275,30 @@ mod tests {
         assert_eq!(entity_count::<StartRunButton>(app.world_mut()), 1);
     }
 
+    fn simulate_primary_click(app: &mut App, button: Entity) {
+        // `mouse_button_input_system` clears `just_*` each frame and repopulates from events only,
+        // so tests must submit `MouseButtonInput` (manual `press()`/`release()` is not visible as `just_pressed`/`just_released`).
+        let window = app.world_mut().spawn_empty().id();
+        app.world_mut().send_event(MouseButtonInput {
+            button: MouseButton::Left,
+            state: ButtonState::Pressed,
+            window,
+        });
+        app.world_mut()
+            .entity_mut(button)
+            .insert(Interaction::Pressed);
+        app.update();
+        app.world_mut().send_event(MouseButtonInput {
+            button: MouseButton::Left,
+            state: ButtonState::Released,
+            window,
+        });
+        app.world_mut()
+            .entity_mut(button)
+            .insert(Interaction::Hovered);
+        app.update();
+    }
+
     #[test]
     fn pressing_start_button_sends_start_run_event() {
         let mut app = App::new();
@@ -1141,11 +1309,7 @@ mod tests {
         app.update();
 
         let button = single_entity::<StartRunButton>(app.world_mut());
-        app.world_mut()
-            .entity_mut(button)
-            .insert(Interaction::Pressed);
-
-        app.update();
+        simulate_primary_click(&mut app, button);
 
         let events = app.world().resource::<Events<StartRun>>();
         assert_eq!(events.len(), 1);
@@ -1204,10 +1368,7 @@ mod tests {
         app.update();
 
         let button = single_entity::<AcceptRewardsButton>(app.world_mut());
-        app.world_mut()
-            .entity_mut(button)
-            .insert(Interaction::Pressed);
-        app.update();
+        simulate_primary_click(&mut app, button);
 
         assert_eq!(app.world().resource::<Events<AcceptRunRewards>>().len(), 1);
     }
@@ -1271,11 +1432,7 @@ mod tests {
                 (button.upgrade == UpgradeId::BaseDamage).then_some(entity)
             })
             .unwrap();
-        app.world_mut()
-            .entity_mut(button)
-            .insert(Interaction::Pressed);
-
-        app.update();
+        simulate_primary_click(&mut app, button);
         app.update();
 
         let profile = app.world().resource::<ProfileState>();
@@ -1316,10 +1473,7 @@ mod tests {
                 (button.upgrade == UpgradeId::BaseDamage).then_some(entity)
             })
             .unwrap();
-        app.world_mut()
-            .entity_mut(button)
-            .insert(Interaction::Pressed);
-        app.update();
+        simulate_primary_click(&mut app, button);
 
         assert_eq!(
             app.world()
@@ -1336,10 +1490,7 @@ mod tests {
             .iter(app.world())
             .find_map(|(e, b)| (b.0 == tab).then_some(e))
             .expect("tab header button");
-        app.world_mut()
-            .entity_mut(entity)
-            .insert(Interaction::Pressed);
-        app.update();
+        simulate_primary_click(app, entity);
     }
 
     fn entity_count<T: Component>(world: &mut World) -> usize {

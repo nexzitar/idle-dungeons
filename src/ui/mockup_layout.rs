@@ -92,9 +92,9 @@ fn spawn_column_flex_scroll(parent: &mut ChildBuilder, content: impl FnOnce(&mut
                     overflow: Overflow::clip_y(),
                     ..default()
                 },
+                focus_policy: FocusPolicy::Pass,
                 ..default()
             },
-            Interaction::default(),
             RelativeCursorPosition::default(),
             UiScrollState::default(),
             UiScrollRegion,
@@ -137,9 +137,9 @@ fn spawn_playback_combat_log_scroll(
                     overflow: Overflow::clip_y(),
                     ..default()
                 },
+                focus_policy: FocusPolicy::Pass,
                 ..default()
             },
-            Interaction::default(),
             RelativeCursorPosition::default(),
             UiScrollState::default(),
             UiScrollRegion,
@@ -1379,9 +1379,9 @@ fn spawn_right_scroll_body(
                     overflow: Overflow::clip_y(),
                     ..default()
                 },
+                focus_policy: FocusPolicy::Pass,
                 ..default()
             },
-            Interaction::default(),
             RelativeCursorPosition::default(),
             UiScrollState::default(),
             UiScrollRegion,
