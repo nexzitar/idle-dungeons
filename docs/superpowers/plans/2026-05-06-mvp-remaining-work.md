@@ -17,18 +17,35 @@
 | Loop (build → run → summary → camp → save) | Working |
 | Gear equip/salvage, upgrades, deterministic runs | Working |
 | `docs/mvp-acceptance.md` | All items checked |
-| **In-game skill loadout** | **Missing** — no `equip_skill` from UI/app; saves can have empty slots forever |
-| **Combat uses skill catalog** | **Partial** — `simulate_combat` only special-cases `LifestealStrike`; other skills are definitions + UI labels |
-| **Gold gain upgrade** | **Likely ineffectual** — `UpgradeId::GoldGain` exists in UI/meta; `simulate_run_with_playback` does not apply a gold multiplier |
+| **In-game skill loadout** | **Working** — `CycleHeroSkillSlot` / skill slot buttons on Build & Camp; see `src/app.rs`, `src/ui/mod.rs` |
+| **Combat uses skill catalog** | **Partial (implementation exists; deepen & align)** — `simulate_combat` applies Lifesteal, Guard (flat reduction on hits), Heavy (+damage on swing), Poison (`PoisonTick` on hero swing), Thorns (reflect), Barrier (shield). See mapping table below; poison-as-DoT-over-ticks and Heavy “slow” tradeoff are roadmap items in `docs/superpowers/plans/2026-05-07-roadmap-implementation.md`. |
+| **Gold gain upgrade** | **Working** — `gold_gain_multiplier` on `RunConfig` from meta in `src/app.rs`; applied in `src/domain/run.rs` |
 | Stash “Filters / Sort” | Decorative copy only |
-| README “early planning” | Out of date vs playable loop |
-| README plugin split (`HeroPlugin`, etc.) | Not reflected in crate layout (acceptable for MVP; optional cleanup later) |
+| README | Updated (`README.md`); roadmap + layout |
+
+### Skill definitions vs `simulate_combat` (authoritative as of 2026-05)
+
+| Skill | `SkillTrigger` (catalog) | Behavior in `simulate_combat` |
+|-------|--------------------------|--------------------------------|
+| LifestealStrike | OnAttack | Heal on hero attack (`HeroHealed`). |
+| Guard | OnHitTaken | Reduces enemy hit damage by flat amount (currently hardcoded offset). |
+| HeavyStrike | OnAttack | Bonus damage on hero swing; **no** attack-speed penalty yet (description says “slow”). |
+| PoisonEdge | OnAttack | Extra damage via `PoisonTick` on each hero swing — **burst-on-swing**, not periodic room DoT yet. |
+| ThornSkin | OnHitTaken | Reflect after hero takes HP loss from enemy hit. |
+| BarrierPulse | OnRoomStart | Shield at combat start, absorbs before HP loss. |
+
+**Execution plan:** `docs/superpowers/plans/2026-05-07-roadmap-implementation.md` (Phase A–E).
 
 ---
 
-### Priority A — Skill loadout (player-facing core)
+### Priority A — Skill loadout (player-facing core) — **DONE**
 
-**Problem:** The design promises “configure the hero” with unlocked slots and a six-skill pool; today slots unlock in meta but assignments are not editable in-game.
+The interactive loadout described below is implemented (cycle slots, `equip_skill`, persistence). This section is kept for history.
+
+<details>
+<summary>Original gap text (archived)</summary>
+
+**Problem (resolved):** The design promises “configure the hero” with unlocked slots and a six-skill pool; today slots unlock in meta but assignments are not editable in-game.
 
 **Files (typical):**
 - `src/app.rs` — e.g. `ChangeHeroSkill { slot: usize, skill: Option<SkillId> }` or `EquipSkill` / `ClearSkillSlot`; validate with `HeroProfile::equip_skill`; save after change.
@@ -41,32 +58,35 @@
 2. Minimal UI: assign/clear for slot 0–1 on Build (and optionally Camp).
 3. Save on change (same pattern as equip/salvage).
 
+</details>
+
 ---
 
 ### Priority B — Combat reflects the skill roster (depth, not just labels)
 
-**Problem:** `src/domain/combat.rs` `simulate_combat` only branches on Lifesteal; Guard, Heavy Strike, Poison, Thorn Skin, Barrier Pulse do not alter outcomes, so “build” choices barely matter.
+**Status:** Baseline behaviors exist; **deepen** per roadmap Phase A (poison over ticks, guard scaling, heavy tradeoff, tests).
+
+**Problem (narrowed):** Some catalog text (DoT, “slow” heavy) does not fully match tick-level simulation; add tests and tune.
 
 **Approach (incremental):**
-1. Inventory desired behaviors from `skill_definition` (triggers/tags).
-2. Add focused tests per skill (similar to `lifesteal_skill_restores_health_on_attack`).
-3. Extend `simulate_combat` in small steps: e.g. Guard → flat damage reduction on hit; Barrier → temporary shield at room start; Poison → DoT ticks; Thorn → reflect on hit taken; Heavy → trade attack speed or burst damage — **align with design doc** and keep ticks bounded.
+1. ~~Inventory desired behaviors~~ — see table above.
+2. Add focused tests per skill (**especially** poison across clock ticks without extra swings).
+3. Extend `simulate_combat` in small steps — follow `2026-05-07-roadmap-implementation.md`.
 
 **Files:** `src/domain/combat.rs`, possibly `src/domain/skills.rs` if shared helpers.
 
 ---
 
-### Priority C — Gold gain upgrade does something
+### Priority C — Gold gain upgrade does something — **DONE**
 
-**Problem:** Players can buy `GoldGain` but run gold may ignore it.
+Multiplier is threaded into run simulation. This section is kept for history.
 
-**Options:**
-- Pass `meta` or a `gold_multiplier: f32` into `simulate_run_with_playback` / `RunConfig`, or
-- Apply multiplier only when merging rewards in `accept_run_rewards` (document which matches UI copy).
+<details>
+<summary>Original gap text (archived)</summary>
 
-**Files:** `src/domain/run.rs`, `src/app.rs` (`start_run` / reward acceptance), tests for deterministic scaling with upgrade level.
+**Problem (resolved):** Players can buy `GoldGain` but run gold may ignore it.
 
----
+</details>
 
 ### Priority D — UX honesty and polish
 
@@ -86,11 +106,9 @@
 
 ## Suggested milestone ordering
 
-1. **MVP “feels playable”:** Priority A + C + README (skill choices + gold upgrade meaning + honest docs).
-2. **MVP “matches fantasy”:** Priority B (at least 3–4 skills materially change fights or logs).
-3. **MVP “polished shell”:** Priority D.
-
----
+1. **Combat depth + honesty:** Roadmap Phase A (`simulate_combat` alignment) + Phase B stash copy or sort (`2026-05-07-roadmap-implementation.md`).
+2. **World + shell:** Roadmap Phase C–D (dungeon/briefing, presentation).
+3. **Post-MVP:** Priority E + roadmap Phase E.
 
 ## Verification
 
