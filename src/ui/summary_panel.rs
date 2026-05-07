@@ -1,31 +1,82 @@
 use crate::domain::run::RunSummary;
 
-pub fn summary_panel_text(summary: &RunSummary) -> String {
-    let log_preview = if summary.log.is_empty() {
-        "No run log.".to_string()
-    } else {
-        summary
-            .log
-            .iter()
-            .take(6)
-            .cloned()
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
+pub fn empty_run_summary() -> RunSummary {
+    RunSummary {
+        outcome: crate::domain::run::RunOutcome::HeroDied,
+        deepest_depth: 0,
+        gold_earned: 0,
+        salvage_earned: 0,
+        loot: Vec::new(),
+        death_reason: Some("No chronicle available.".to_string()),
+        log: Vec::new(),
+    }
+}
 
+pub fn summary_panel_text(summary: &RunSummary) -> String {
+    let mut out = String::new();
+    out.push_str(&outcome_headline(summary));
+    out.push('\n');
+    out.push_str(&reward_digest(summary));
+    out.push_str("\n\n— Chronicle —\n");
+    for line in narrative_highlights(summary) {
+        out.push_str(&line);
+        out.push('\n');
+    }
+    if summary.log.len() > 8 {
+        out.push_str("\n… full log on the scroll …\n");
+    }
+    out.push_str("\n— Full log —\n");
+    for line in summary.log.iter().take(12) {
+        out.push_str(line);
+        out.push('\n');
+    }
+    out
+}
+
+pub fn outcome_headline(summary: &RunSummary) -> String {
+    match summary.outcome {
+        crate::domain::run::RunOutcome::BossDefeated => format!(
+            "Victory — reached depth {} before sealing the gate.",
+            summary.deepest_depth
+        ),
+        crate::domain::run::RunOutcome::HeroDied => {
+            let reason = summary
+                .death_reason
+                .clone()
+                .unwrap_or_else(|| "The delve ends in darkness.".to_string());
+            format!("Fallen — depth {}. {}", summary.deepest_depth, reason)
+        }
+    }
+}
+
+pub fn reward_digest(summary: &RunSummary) -> String {
     format!(
-        "Outcome: {:?}\nDepth {}\nGold {}\nSalvage {}\nLoot {}\n{}\n\nRun Log\n{}",
-        summary.outcome,
-        summary.deepest_depth,
+        "Rewards pending — Gold +{} · Salvage +{} · Loot pieces: {}",
         summary.gold_earned,
         summary.salvage_earned,
-        summary.loot.len(),
-        summary
-            .death_reason
-            .clone()
-            .unwrap_or_else(|| "Victory".to_string()),
-        log_preview
+        summary.loot.len()
     )
+}
+
+/// Curated beats for scan-friendly storytelling (subset of the run log).
+pub fn narrative_highlights(summary: &RunSummary) -> Vec<String> {
+    let mut picks = Vec::new();
+    for line in &summary.log {
+        let l = line.to_lowercase();
+        if l.contains("warden")
+            || l.contains("shrine")
+            || l.contains("found ")
+            || l.contains("elite")
+            || l.contains("defeated by")
+        {
+            picks.push(line.clone());
+        }
+    }
+    if picks.is_empty() {
+        summary.log.first().cloned().into_iter().collect()
+    } else {
+        picks
+    }
 }
 
 #[cfg(test)]
@@ -47,9 +98,9 @@ mod tests {
 
         let text = summary_panel_text(&summary);
 
-        assert!(text.contains("Depth 8"));
-        assert!(text.contains("Gold 30"));
+        assert!(text.contains("depth 8"));
+        assert!(text.contains("Gold +30"));
         assert!(text.contains("Defeated by Hollow"));
-        assert!(text.contains("Run Log"));
+        assert!(text.contains("Chronicle"));
     }
 }
