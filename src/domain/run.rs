@@ -147,6 +147,7 @@ fn simulate_run_with_playback_inner(hero: &HeroProfile, config: RunConfig) -> Ru
                 let at_start = hero_current_hp;
                 let combat = simulate_combat(hero, &enemy, 240, at_start);
                 for frame in combat_playback_frames_from_result(
+                    hero,
                     &combat,
                     &enemy.name,
                     hero_max_hp,

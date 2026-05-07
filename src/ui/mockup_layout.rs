@@ -10,12 +10,13 @@ use crate::domain::run::{RunOutcome, RunSummary, DEFAULT_RUN_MAX_DEPTH, DEFAULT_
 use crate::save::StashSortOrder;
 use crate::ui::components::{
     AcceptRewardsButton, BuyUpgradeButton, PlaybackCaptionText, PlaybackDepthText,
-    PlaybackEnemyBarFill, PlaybackEnemyNameText, PlaybackHeroBarFill, PlaybackLogScrollRegion,
-    PlaybackLogText, PlaybackProgressBarFill, PlaybackProgressLabel, PlaybackRoomKindText,
-    ResetProgressButton, ReturnToBuildButton, SettingsButton, SettingsModalBackdrop,
-    SettingsModalCloseButton, SettingsModalRoot, SettingsModalSpeedButton, SettingsModalSpeedLabel,
-    SkillSlotButton, SkipPlaybackButton, StashSortCycleButton, TopBarField, UiButtonPalette,
-    UiScrollContent, UiScrollRegion, UiScrollState, UiTooltip,
+    PlaybackEnemyBarFill, PlaybackEnemyDebuffLine, PlaybackEnemyNameText, PlaybackHeroBarFill,
+    PlaybackHeroDebuffLine, PlaybackLogScrollRegion, PlaybackLogText, PlaybackProgressBarFill,
+    PlaybackProgressLabel, PlaybackRoomKindText, ResetProgressButton, ReturnToBuildButton,
+    SettingsButton, SettingsModalBackdrop, SettingsModalCloseButton, SettingsModalRoot,
+    SettingsModalSpeedButton, SettingsModalSpeedLabel, SkillSlotButton, SkipPlaybackButton,
+    StashSortCycleButton, TopBarField, UiButtonPalette, UiScrollContent, UiScrollRegion,
+    UiScrollState, UiTooltip,
 };
 use crate::ui::theme::{
     body_text, caption_text, format_item_stat_summary, headline_text, log_line_present,
@@ -1020,8 +1021,12 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildBuilder) {
                 col.spawn((headline_text("—"), PlaybackEnemyNameText));
                 col.spawn(caption_text("Your health"));
                 playback_hero_bar(col, 1.0);
+                col.spawn(caption_text("Hero statuses"));
+                col.spawn((caption_text("—  ·  —  ·  —  ·  —"), PlaybackHeroDebuffLine));
                 col.spawn(caption_text("Foe"));
                 playback_enemy_bar(col, 1.0);
+                col.spawn(caption_text("Enemy statuses"));
+                col.spawn((caption_text("—  ·  —  ·  —  ·  —"), PlaybackEnemyDebuffLine));
             });
         });
         p.spawn(section_title("NOW"));

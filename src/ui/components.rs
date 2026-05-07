@@ -48,6 +48,12 @@ pub struct PlaybackHeroBarFill;
 pub struct PlaybackEnemyBarFill;
 
 #[derive(Component)]
+pub struct PlaybackHeroDebuffLine;
+
+#[derive(Component)]
+pub struct PlaybackEnemyDebuffLine;
+
+#[derive(Component)]
 pub struct PlaybackCaptionText;
 
 #[derive(Component)]

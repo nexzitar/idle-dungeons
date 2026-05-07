@@ -7,7 +7,7 @@ Authoritative crosswalk between `SkillTrigger` / descriptions in `src/domain/ski
 | `LifestealStrike` | `OnAttack` | Hero attack resolution → heal (`HeroHealed`) | Matches text. |
 | `Guard` | `OnHitTaken` | Flat reduction on incoming enemy hit damage | Scales with hero `healing_power` (see combat module). |
 | `HeavyStrike` | `OnAttack` | Bonus damage on hero swing; reduced effective attack speed | Tradeoff: slower pacing (`hero_as` factor) per “slow attacks hit harder”. |
-| `PoisonEdge` | `OnAttack` | Poison stacks on hero hit; stacks tick each clock iteration as `PoisonTick` | DoT across ticks without extra swings; capped stack. |
+| `PoisonEdge` | `OnAttack` | Poison stacks on hero hit; each end-of-tick pulse deals `poison_tick × min(stacks, 12)` then burns **1** stack (`PoisonTick` records potency) | Stacks extend duration and ramp tick damage (cap **12** on multiplier). |
 | `ThornSkin` | `OnHitTaken` | Reflect after hero loses HP from an enemy hit | Skipped when barrier absorbs all (`hp_loss == 0`). |
 | `BarrierPulse` | `OnRoomStart` | Shield at combat start; absorbs before HP | One pulse per combat. |
 

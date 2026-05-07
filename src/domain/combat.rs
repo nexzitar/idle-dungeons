@@ -12,11 +12,23 @@ pub enum CombatOutcome {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CombatEvent {
-    HeroAttacked { damage: i32 },
-    PoisonTick { damage: i32 },
-    EnemyAttacked { damage: i32 },
-    ThornsReflect { damage: i32 },
-    HeroHealed { amount: i32 },
+    HeroAttacked {
+        damage: i32,
+    },
+    /// Poison at end of clock iteration. `stacks` is potency **before** this tick (and before decrement).
+    PoisonTick {
+        damage: i32,
+        stacks: u32,
+    },
+    EnemyAttacked {
+        damage: i32,
+    },
+    ThornsReflect {
+        damage: i32,
+    },
+    HeroHealed {
+        amount: i32,
+    },
     EnemyDefeated,
     HeroDefeated,
 }
@@ -24,7 +36,9 @@ pub enum CombatEvent {
 fn combat_event_caption(event: &CombatEvent) -> String {
     match event {
         CombatEvent::HeroAttacked { damage } => format!("You strike for {} damage.", damage),
-        CombatEvent::PoisonTick { damage } => format!("Poison deals {} damage.", damage),
+        CombatEvent::PoisonTick { damage, stacks } => {
+            format!("Poison deals {} damage ({} stacks).", damage, stacks)
+        }
         CombatEvent::EnemyAttacked { damage } => {
             format!("{} hits you for {} damage.", "The foe", damage)
         }
@@ -46,6 +60,9 @@ pub struct CombatPlaybackFrame {
     pub enemy_hp: i32,
     pub enemy_max_hp: i32,
     pub caption: String,
+    /// Up to four debuff / status chips per side (e.g. `Poison ×4`, or `—` for empty).
+    pub hero_debuff_slots: [String; 4],
+    pub enemy_debuff_slots: [String; 4],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -117,8 +134,9 @@ pub fn simulate_combat(
     let mut hero_meter = 0.0_f32;
     let mut enemy_meter = 0.0_f32;
 
-    // Poison Edge: stacks on hit; one stack consumed at end of each clock iteration (DoT).
+    // Poison Edge: stacks on hit; end-of-tick damage scales with current stacks (capped), then one stack burns off.
     let mut poison_stacks: u32 = 0;
+    const POISON_DAMAGE_STACK_CAP: u32 = 12;
 
     let mut events = Vec::new();
 
@@ -234,10 +252,15 @@ pub fn simulate_combat(
             if events.len() >= MAX_EVENTS {
                 break;
             }
-            let d = poison_tick.min(enemy_health);
-            enemy_health -= d;
+            let potency = poison_stacks.min(POISON_DAMAGE_STACK_CAP);
+            let mult = potency.max(1) as i32;
+            let d = (poison_tick * mult).min(enemy_health);
+            events.push(CombatEvent::PoisonTick {
+                damage: d,
+                stacks: poison_stacks,
+            });
             poison_stacks -= 1;
-            events.push(CombatEvent::PoisonTick { damage: d });
+            enemy_health -= d;
             if enemy_health <= 0 {
                 events.push(CombatEvent::EnemyDefeated);
                 hero_win!();
@@ -261,15 +284,43 @@ pub fn simulate_combat(
     }
 }
 
+fn empty_debuff_slots() -> [String; 4] {
+    [
+        "—".to_string(),
+        "—".to_string(),
+        "—".to_string(),
+        "—".to_string(),
+    ]
+}
+
+fn debuff_slots_from_poison(hero_poison: u32, enemy_poison: u32) -> ([String; 4], [String; 4]) {
+    let mut hero = empty_debuff_slots();
+    let mut enemy = empty_debuff_slots();
+    if enemy_poison > 0 {
+        enemy[0] = format!("Poison ×{}", enemy_poison);
+    }
+    if hero_poison > 0 {
+        hero[0] = format!("Poison ×{}", hero_poison);
+    }
+    (hero, enemy)
+}
+
 pub fn combat_playback_frames_from_result(
+    hero: &HeroProfile,
     result: &CombatResult,
     enemy_name: &str,
     hero_max_hp: i32,
     enemy_max_hp: i32,
     hero_hp_at_start: i32,
 ) -> Vec<CombatPlaybackFrame> {
+    let has_poison = hero.equipped_skill_ids().any(|s| s == SkillId::PoisonEdge);
+
     let mut hero_hp = hero_hp_at_start.clamp(0, hero_max_hp);
     let mut enemy_hp = enemy_max_hp;
+    let mut enemy_poison_stacks = 0u32;
+    let hero_poison_stacks = 0u32;
+
+    let (h0, e0) = debuff_slots_from_poison(hero_poison_stacks, enemy_poison_stacks);
 
     let mut frames = vec![CombatPlaybackFrame {
         enemy_name: enemy_name.to_string(),
@@ -278,14 +329,23 @@ pub fn combat_playback_frames_from_result(
         enemy_hp,
         enemy_max_hp,
         caption: format!("Engaging {enemy_name}."),
+        hero_debuff_slots: h0,
+        enemy_debuff_slots: e0,
     }];
 
     for event in &result.events {
         match event {
             CombatEvent::HeroAttacked { damage } => {
                 enemy_hp -= damage;
+                if has_poison {
+                    enemy_poison_stacks = (enemy_poison_stacks + 2).min(40);
+                }
             }
-            CombatEvent::PoisonTick { damage } | CombatEvent::ThornsReflect { damage } => {
+            CombatEvent::PoisonTick { damage, stacks } => {
+                enemy_hp -= damage;
+                enemy_poison_stacks = stacks.saturating_sub(1);
+            }
+            CombatEvent::ThornsReflect { damage } => {
                 enemy_hp -= damage;
             }
             CombatEvent::HeroHealed { amount } => {
@@ -296,6 +356,7 @@ pub fn combat_playback_frames_from_result(
             }
             CombatEvent::EnemyDefeated | CombatEvent::HeroDefeated => {}
         }
+        let (hd, ed) = debuff_slots_from_poison(hero_poison_stacks, enemy_poison_stacks);
         frames.push(CombatPlaybackFrame {
             enemy_name: enemy_name.to_string(),
             hero_hp: hero_hp.clamp(0, hero_max_hp),
@@ -303,6 +364,8 @@ pub fn combat_playback_frames_from_result(
             enemy_hp: enemy_hp.clamp(0, enemy_max_hp),
             enemy_max_hp,
             caption: combat_event_caption(event),
+            hero_debuff_slots: hd,
+            enemy_debuff_slots: ed,
         });
     }
     frames
@@ -317,6 +380,7 @@ pub fn combat_playback_frames(
     let hero_start = stats.max_health;
     let result = simulate_combat(hero, enemy, max_ticks, hero_start);
     combat_playback_frames_from_result(
+        hero,
         &result,
         &enemy.name,
         stats.max_health,
@@ -588,7 +652,7 @@ mod tests {
         let result = simulate_combat(&hero, &enemy, 1, 100);
         assert!(result.events.iter().any(|e| matches!(
             e,
-            CombatEvent::PoisonTick { damage } if *damage > 0
+            CombatEvent::PoisonTick { damage, .. } if *damage > 0
         )));
     }
 
@@ -626,6 +690,46 @@ mod tests {
         assert!(
             poison_ticks >= 2,
             "poison should tick on later clock iterations without a second hero swing, got {poison_ticks} PoisonTick events"
+        );
+    }
+
+    #[test]
+    fn poison_tick_damage_increases_with_stack_potency() {
+        let mut hero = HeroProfile::default();
+        hero.base_stats.attack_speed = 0.12;
+        hero.unlock_skill_slots(1);
+        hero.equip_skill(0, SkillId::PoisonEdge).unwrap();
+
+        let enemy = Enemy {
+            name: "Pacer".into(),
+            max_health: 999,
+            damage: 1,
+            armor: 0,
+            attack_speed: 1.0,
+        };
+
+        let result = simulate_combat(&hero, &enemy, 12, hero.derived_stats().max_health);
+        let damages: Vec<i32> = result
+            .events
+            .iter()
+            .filter_map(|e| {
+                if let CombatEvent::PoisonTick { damage, .. } = e {
+                    Some(*damage)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        assert!(
+            damages.len() >= 2,
+            "expected at least two poison ticks, got {:?}",
+            damages
+        );
+        assert!(
+            damages[0] > damages[1],
+            "first tick at higher stack count should deal more: {:?}",
+            damages
         );
     }
 
@@ -829,7 +933,7 @@ mod tests {
         tuned.equip_skill(0, SkillId::PoisonEdge).unwrap();
         let weak = simulate_combat(&tuned, &dummy_enemy(), 1, 100);
         let weak_poison = weak.events.iter().find_map(|e| {
-            if let CombatEvent::PoisonTick { damage } = e {
+            if let CombatEvent::PoisonTick { damage, .. } = e {
                 Some(*damage)
             } else {
                 None
@@ -841,7 +945,7 @@ mod tests {
         plain.equip_skill(0, SkillId::PoisonEdge).unwrap();
         let base = simulate_combat(&plain, &dummy_enemy(), 1, 100);
         let base_poison = base.events.iter().find_map(|e| {
-            if let CombatEvent::PoisonTick { damage } = e {
+            if let CombatEvent::PoisonTick { damage, .. } = e {
                 Some(*damage)
             } else {
                 None

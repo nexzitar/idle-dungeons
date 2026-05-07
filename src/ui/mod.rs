@@ -21,14 +21,14 @@ use crate::domain::run::{RunPlaybackFrameKind, RunSummary};
 use crate::ui::build_panel::build_panel_text;
 use crate::ui::components::{
     AcceptRewardsButton, BuildScreen, BuyUpgradeButton, EquipItemButton, MainCamera,
-    PlaybackCaptionText, PlaybackDepthText, PlaybackEnemyBarFill, PlaybackEnemyNameText,
-    PlaybackHeroBarFill, PlaybackLogScrollRegion, PlaybackLogText, PlaybackProgressBarFill,
-    PlaybackProgressLabel, PlaybackRoomKindText, ResetProgressButton, ReturnToBuildButton,
-    RunPlaybackScreen, SalvageItemButton, SettingsButton, SettingsModalBackdrop,
-    SettingsModalCloseButton, SettingsModalRoot, SettingsModalSpeedButton, SettingsModalSpeedLabel,
-    SkillSlotButton, SkipPlaybackButton, StartRunButton, StashSortCycleButton, SummaryScreen,
-    TopBarField, UiButtonPalette, UiRoot, UiScrollContent, UiScrollRegion, UiScrollState,
-    UiTooltip, UpgradeScreen,
+    PlaybackCaptionText, PlaybackDepthText, PlaybackEnemyBarFill, PlaybackEnemyDebuffLine,
+    PlaybackEnemyNameText, PlaybackHeroBarFill, PlaybackHeroDebuffLine, PlaybackLogScrollRegion,
+    PlaybackLogText, PlaybackProgressBarFill, PlaybackProgressLabel, PlaybackRoomKindText,
+    ResetProgressButton, ReturnToBuildButton, RunPlaybackScreen, SalvageItemButton, SettingsButton,
+    SettingsModalBackdrop, SettingsModalCloseButton, SettingsModalRoot, SettingsModalSpeedButton,
+    SettingsModalSpeedLabel, SkillSlotButton, SkipPlaybackButton, StartRunButton,
+    StashSortCycleButton, SummaryScreen, TopBarField, UiButtonPalette, UiRoot, UiScrollContent,
+    UiScrollRegion, UiScrollState, UiTooltip, UpgradeScreen,
 };
 use crate::ui::mockup_layout::RightPanelTab;
 use crate::ui::theme::{body_text, caption_text, format_item_stat_summary, rarity_color, UiTheme};
@@ -91,6 +91,9 @@ impl Plugin for UiPlugin {
                         .chain(),
                     sync_top_bar,
                     sync_run_playback_ui.run_if(in_state(GameState::Running)),
+                    sync_run_playback_debuff_slots
+                        .run_if(in_state(GameState::Running))
+                        .after(sync_run_playback_ui),
                     sync_playback_delve_progress_bar.run_if(in_state(GameState::Running)),
                 ),
             )
@@ -1084,6 +1087,50 @@ fn sync_run_playback_ui(
     }
     for mut style in params.p6().iter_mut() {
         style.width = enemy_w;
+    }
+}
+
+fn sync_run_playback_debuff_slots(
+    playback: Res<ActiveRunPlayback>,
+    mut hero: Query<
+        &mut Text,
+        (
+            With<PlaybackHeroDebuffLine>,
+            Without<PlaybackEnemyDebuffLine>,
+        ),
+    >,
+    mut foe: Query<
+        &mut Text,
+        (
+            With<PlaybackEnemyDebuffLine>,
+            Without<PlaybackHeroDebuffLine>,
+        ),
+    >,
+) {
+    if playback.frames.is_empty() {
+        return;
+    }
+    let idx = playback.display_index.min(playback.frames.len() - 1);
+    let frame = &playback.frames[idx];
+    const EMPTY_DEBUFF: &str = "—  ·  —  ·  —  ·  —";
+    let (hero_line, foe_line) = match &frame.kind {
+        RunPlaybackFrameKind::Narration { .. } => {
+            (EMPTY_DEBUFF.to_string(), EMPTY_DEBUFF.to_string())
+        }
+        RunPlaybackFrameKind::Combat(c) => (
+            c.hero_debuff_slots.join("  ·  "),
+            c.enemy_debuff_slots.join("  ·  "),
+        ),
+    };
+    for mut text in &mut hero {
+        if text.sections[0].value != hero_line {
+            text.sections[0].value = hero_line.clone();
+        }
+    }
+    for mut text in &mut foe {
+        if text.sections[0].value != foe_line {
+            text.sections[0].value = foe_line.clone();
+        }
     }
 }
 
