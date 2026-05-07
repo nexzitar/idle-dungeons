@@ -78,6 +78,9 @@ pub struct BuyUpgradeButton {
 }
 
 #[derive(Component)]
+pub struct StashSortCycleButton;
+
+#[derive(Component)]
 pub struct ReturnToBuildButton;
 
 #[derive(Component)]

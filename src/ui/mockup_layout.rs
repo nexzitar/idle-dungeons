@@ -13,9 +13,10 @@ use crate::ui::components::{
     PlaybackLogText, PlaybackProgressBarFill, PlaybackProgressLabel, PlaybackRoomKindText,
     ResetProgressButton, ReturnToBuildButton, SettingsButton, SettingsModalBackdrop,
     SettingsModalCloseButton, SettingsModalRoot, SettingsModalSpeedButton, SettingsModalSpeedLabel,
-    SkillSlotButton, SkipPlaybackButton, TopBarField, UiButtonPalette, UiScrollContent,
-    UiScrollRegion, UiScrollState, UiTooltip,
+    SkillSlotButton, SkipPlaybackButton, StashSortCycleButton, TopBarField, UiButtonPalette,
+    UiScrollContent, UiScrollRegion, UiScrollState, UiTooltip,
 };
+use crate::ui::stash_sort::StashSortOrder;
 use crate::ui::theme::{
     body_text, caption_text, format_item_stat_summary, headline_text, log_line_present,
     rarity_color, section_title, UiTheme,
@@ -1335,6 +1336,57 @@ fn health_bar(parent: &mut ChildBuilder, frac: f32, fill: Color) {
         });
 }
 
+fn spawn_stash_filters_and_sort_row(parent: &mut ChildBuilder, stash_sort: StashSortOrder) {
+    parent
+        .spawn(NodeBundle {
+            style: Style {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(10.0),
+                justify_content: JustifyContent::SpaceBetween,
+                flex_wrap: FlexWrap::Wrap,
+                margin: UiRect::bottom(Val::Px(2.0)),
+                ..default()
+            },
+            ..default()
+        })
+        .with_children(|row| {
+            row.spawn(caption_text("Stash filters: —"));
+            let p = UiButtonPalette::panel_secondary();
+            row.spawn((
+                ButtonBundle {
+                    style: Style {
+                        min_width: Val::Px(168.0),
+                        height: Val::Px(28.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        padding: UiRect::horizontal(Val::Px(8.0)),
+                        border: UiRect::all(Val::Px(1.0)),
+                        ..default()
+                    },
+                    background_color: p.idle_bg.into(),
+                    border_color: BorderColor(p.idle_border),
+                    ..default()
+                },
+                StashSortCycleButton,
+                p,
+                UiTooltip::txt(
+                    "Cycle stash sort. Newest-first follows save-file order (last appended = newest). Rarity: Rare → Uncommon → Common, then name A–Z, then item id.",
+                ),
+            ))
+            .with_children(|b| {
+                b.spawn(TextBundle::from_section(
+                    stash_sort.button_label(),
+                    TextStyle {
+                        font_size: 12.0,
+                        color: UiTheme::body_dim(),
+                        ..default()
+                    },
+                ));
+            });
+        });
+}
+
 pub fn spawn_right_management_column(
     parent: &mut ChildBuilder,
     tab: RightPanelTab,
@@ -1343,6 +1395,7 @@ pub fn spawn_right_management_column(
     inventory: &[crate::domain::items::ItemInstance],
     summary_loot: Option<&[crate::domain::items::ItemInstance]>,
     interactive_inventory: bool,
+    stash_sort: StashSortOrder,
 ) {
     parent
         .spawn(NodeBundle {
@@ -1391,7 +1444,7 @@ pub fn spawn_right_management_column(
                     "Treasure from the latest run—review before you accept rewards to your profile.",
                 );
             });
-            col.spawn(caption_text("Filters: all rarities   |   Sort: newest"));
+            spawn_stash_filters_and_sort_row(col, stash_sort);
             if matches!(tab, RightPanelTab::Inventory | RightPanelTab::Loot) {
                 col.spawn(section_title("EQUIPMENT"));
                 mockup_gear_cards(col, profile);
@@ -1403,6 +1456,7 @@ pub fn spawn_right_management_column(
                 inventory,
                 summary_loot,
                 interactive_inventory,
+                stash_sort,
             );
         });
 }
@@ -1459,6 +1513,7 @@ fn spawn_right_scroll_body(
     inventory: &[crate::domain::items::ItemInstance],
     summary_loot: Option<&[crate::domain::items::ItemInstance]>,
     interactive_inventory: bool,
+    stash_sort: StashSortOrder,
 ) {
     parent
         .spawn((
@@ -1500,7 +1555,10 @@ fn spawn_right_scroll_body(
                     if inventory.is_empty() {
                         body.spawn(caption_text("No items in stash."));
                     } else {
-                        for item in inventory.iter().take(14) {
+                        let ix =
+                            crate::ui::stash_sort::stash_display_indices(inventory, stash_sort);
+                        for &i in ix.iter().take(14) {
+                            let item = &inventory[i];
                             if interactive_inventory {
                                 super::spawn_item_card(body, item);
                             } else {
@@ -1562,7 +1620,9 @@ fn spawn_right_scroll_body(
                     if loot.is_empty() {
                         body.spawn(caption_text("No loot in this view yet."));
                     } else {
-                        for item in loot {
+                        let ix = crate::ui::stash_sort::stash_display_indices(loot, stash_sort);
+                        for &i in ix.iter() {
+                            let item = &loot[i];
                             body.spawn(caption_text(format!(
                                 "\u{2728} {} ({:?})",
                                 item.name, item.rarity

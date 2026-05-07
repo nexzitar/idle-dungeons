@@ -4,6 +4,7 @@ pub mod inventory_panel;
 pub mod log_panel;
 pub mod mockup_layout;
 pub mod run_panel;
+pub mod stash_sort;
 pub mod summary_panel;
 pub mod theme;
 pub mod tooltip;
@@ -25,11 +26,12 @@ use crate::ui::components::{
     PlaybackProgressLabel, PlaybackRoomKindText, ResetProgressButton, ReturnToBuildButton,
     RunPlaybackScreen, SalvageItemButton, SettingsButton, SettingsModalBackdrop,
     SettingsModalCloseButton, SettingsModalRoot, SettingsModalSpeedButton, SettingsModalSpeedLabel,
-    SkillSlotButton, SkipPlaybackButton, StartRunButton, SummaryScreen, TopBarField,
-    UiButtonPalette, UiRoot, UiScrollContent, UiScrollRegion, UiScrollState, UiTooltip,
-    UpgradeScreen,
+    SkillSlotButton, SkipPlaybackButton, StartRunButton, StashSortCycleButton, SummaryScreen,
+    TopBarField, UiButtonPalette, UiRoot, UiScrollContent, UiScrollRegion, UiScrollState,
+    UiTooltip, UpgradeScreen,
 };
 use crate::ui::mockup_layout::RightPanelTab;
+use crate::ui::stash_sort::StashSortOrder;
 use crate::ui::theme::{body_text, caption_text, format_item_stat_summary, rarity_color, UiTheme};
 use crate::ui::widgets::spawn_atmosphere;
 use bevy::input::mouse::{MouseButton, MouseWheel};
@@ -50,6 +52,7 @@ impl Plugin for UiPlugin {
             app.add_plugins(InputPlugin);
         }
         app.init_resource::<RightPanelTab>();
+        app.init_resource::<StashSortOrder>();
         app.init_resource::<UiClickPress>();
         app.init_resource::<crate::ui::tooltip::TooltipState>();
         app.add_systems(Startup, spawn_camera)
@@ -74,6 +77,7 @@ impl Plugin for UiPlugin {
                         close_settings_modal,
                         handle_settings_modal_speed,
                         handle_right_panel_tab_buttons,
+                        handle_stash_sort_button,
                         handle_skill_slot_buttons,
                         handle_accept_button.run_if(in_state(GameState::Summary)),
                         handle_equip_buttons.run_if(in_state(GameState::Upgrades)),
@@ -202,8 +206,9 @@ fn spawn_running_screen(
     profile: Res<ProfileState>,
     speed: Res<RunSpeedSetting>,
     tab: Res<RightPanelTab>,
+    stash_sort: Res<StashSortOrder>,
 ) {
-    spawn_running_screen_root(&mut commands, &profile, speed.0, *tab);
+    spawn_running_screen_root(&mut commands, &profile, speed.0, *tab, *stash_sort);
 }
 
 fn spawn_running_screen_root(
@@ -211,6 +216,7 @@ fn spawn_running_screen_root(
     profile: &ProfileState,
     speed_mult: f32,
     tab: RightPanelTab,
+    stash_sort: StashSortOrder,
 ) {
     let hero = profile.effective_hero();
     let meta = &profile.profile.meta;
@@ -254,6 +260,7 @@ fn spawn_running_screen_root(
                             &profile.profile.inventory,
                             None,
                             false,
+                            stash_sort,
                         );
                     });
                 });
@@ -271,8 +278,9 @@ fn spawn_build_screen(
     profile: Res<ProfileState>,
     speed: Res<RunSpeedSetting>,
     tab: Res<RightPanelTab>,
+    stash_sort: Res<StashSortOrder>,
 ) {
-    spawn_build_screen_root(&mut commands, &profile, speed.0, *tab);
+    spawn_build_screen_root(&mut commands, &profile, speed.0, *tab, *stash_sort);
 }
 
 fn spawn_build_screen_root(
@@ -280,6 +288,7 @@ fn spawn_build_screen_root(
     profile: &ProfileState,
     speed_mult: f32,
     tab: RightPanelTab,
+    stash_sort: StashSortOrder,
 ) {
     let hero = profile.effective_hero();
     let meta = &profile.profile.meta;
@@ -324,6 +333,7 @@ fn spawn_build_screen_root(
                             &profile.profile.inventory,
                             None,
                             false,
+                            stash_sort,
                         );
                     });
                 });
@@ -342,12 +352,20 @@ fn spawn_summary_screen(
     latest_summary: Option<Res<LatestRunSummary>>,
     speed: Res<RunSpeedSetting>,
     tab: Res<RightPanelTab>,
+    stash_sort: Res<StashSortOrder>,
 ) {
     let summary = latest_summary
         .as_deref()
         .map(|s| s.summary.clone())
         .unwrap_or_else(crate::ui::summary_panel::empty_run_summary);
-    spawn_summary_screen_root(&mut commands, &profile, &summary, speed.0, *tab);
+    spawn_summary_screen_root(
+        &mut commands,
+        &profile,
+        &summary,
+        speed.0,
+        *tab,
+        *stash_sort,
+    );
 }
 
 fn spawn_summary_screen_root(
@@ -356,6 +374,7 @@ fn spawn_summary_screen_root(
     summary: &RunSummary,
     speed_mult: f32,
     tab: RightPanelTab,
+    stash_sort: StashSortOrder,
 ) {
     let meta = &profile.profile.meta;
     let hero = profile.effective_hero();
@@ -399,6 +418,7 @@ fn spawn_summary_screen_root(
                             &profile.profile.inventory,
                             Some(summary.loot.as_slice()),
                             false,
+                            stash_sort,
                         );
                     });
                 });
@@ -416,8 +436,9 @@ fn spawn_upgrade_screen(
     profile: Res<ProfileState>,
     speed: Res<RunSpeedSetting>,
     tab: Res<RightPanelTab>,
+    stash_sort: Res<StashSortOrder>,
 ) {
-    spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab);
+    spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab, *stash_sort);
 }
 
 fn spawn_upgrade_screen_root(
@@ -425,6 +446,7 @@ fn spawn_upgrade_screen_root(
     profile: &ProfileState,
     speed_mult: f32,
     tab: RightPanelTab,
+    stash_sort: StashSortOrder,
 ) {
     let hero = profile.effective_hero();
     let meta = &profile.profile.meta;
@@ -462,7 +484,7 @@ fn spawn_upgrade_screen_root(
                     });
                     crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
                         crate::ui::mockup_layout::spawn_right_management_column(
-                            panel, tab, meta, profile, inventory, None, true,
+                            panel, tab, meta, profile, inventory, None, true, stash_sort,
                         );
                     });
                 });
@@ -487,6 +509,7 @@ fn handle_right_panel_tab_buttons(
     mut commands: Commands,
     profile: Res<ProfileState>,
     speed: Res<RunSpeedSetting>,
+    stash_sort: Res<StashSortOrder>,
     latest_summary: Option<Res<LatestRunSummary>>,
     state: Res<State<GameState>>,
     build_roots: Query<Entity, With<BuildScreen>>,
@@ -514,13 +537,13 @@ fn handle_right_panel_tab_buttons(
                 for e in &build_roots {
                     commands.entity(e).despawn_recursive();
                 }
-                spawn_build_screen_root(&mut commands, &profile, speed.0, *tab);
+                spawn_build_screen_root(&mut commands, &profile, speed.0, *tab, *stash_sort);
             }
             GameState::Upgrades => {
                 for e in &upgrade_roots {
                     commands.entity(e).despawn_recursive();
                 }
-                spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab);
+                spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab, *stash_sort);
             }
             GameState::Summary => {
                 let summary = latest_summary
@@ -530,13 +553,90 @@ fn handle_right_panel_tab_buttons(
                 for e in &summary_roots {
                     commands.entity(e).despawn_recursive();
                 }
-                spawn_summary_screen_root(&mut commands, &profile, &summary, speed.0, *tab);
+                spawn_summary_screen_root(
+                    &mut commands,
+                    &profile,
+                    &summary,
+                    speed.0,
+                    *tab,
+                    *stash_sort,
+                );
             }
             GameState::Running => {
                 for e in &running_roots {
                     commands.entity(e).despawn_recursive();
                 }
-                spawn_running_screen_root(&mut commands, &profile, speed.0, *tab);
+                spawn_running_screen_root(&mut commands, &profile, speed.0, *tab, *stash_sort);
+            }
+        }
+        break;
+    }
+}
+
+fn handle_stash_sort_button(
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    sort_buttons: Query<(Entity, &Interaction), With<StashSortCycleButton>>,
+    mut stash_sort: ResMut<StashSortOrder>,
+    mut commands: Commands,
+    profile: Res<ProfileState>,
+    speed: Res<RunSpeedSetting>,
+    tab: Res<RightPanelTab>,
+    latest_summary: Option<Res<LatestRunSummary>>,
+    state: Res<State<GameState>>,
+    build_roots: Query<Entity, With<BuildScreen>>,
+    upgrade_roots: Query<Entity, With<UpgradeScreen>>,
+    summary_roots: Query<Entity, With<SummaryScreen>>,
+    running_roots: Query<Entity, With<RunPlaybackScreen>>,
+) {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction) in &sort_buttons {
+        if entity != target || !ui_click_release_confirms(*interaction) {
+            continue;
+        }
+        let s = *stash_sort;
+        *stash_sort = s.toggle();
+
+        match state.get() {
+            GameState::Build => {
+                for e in &build_roots {
+                    commands.entity(e).despawn_recursive();
+                }
+                spawn_build_screen_root(&mut commands, &profile, speed.0, *tab, *stash_sort);
+            }
+            GameState::Upgrades => {
+                for e in &upgrade_roots {
+                    commands.entity(e).despawn_recursive();
+                }
+                spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab, *stash_sort);
+            }
+            GameState::Summary => {
+                let summary = latest_summary
+                    .as_deref()
+                    .map(|s| s.summary.clone())
+                    .unwrap_or_else(crate::ui::summary_panel::empty_run_summary);
+                for e in &summary_roots {
+                    commands.entity(e).despawn_recursive();
+                }
+                spawn_summary_screen_root(
+                    &mut commands,
+                    &profile,
+                    &summary,
+                    speed.0,
+                    *tab,
+                    *stash_sort,
+                );
+            }
+            GameState::Running => {
+                for e in &running_roots {
+                    commands.entity(e).despawn_recursive();
+                }
+                spawn_running_screen_root(&mut commands, &profile, speed.0, *tab, *stash_sort);
             }
         }
         break;
@@ -548,6 +648,7 @@ fn refresh_upgrade_screen_on_profile_change(
     profile: Res<ProfileState>,
     speed: Res<RunSpeedSetting>,
     tab: Res<RightPanelTab>,
+    stash_sort: Res<StashSortOrder>,
     upgrade_roots: Query<Entity, With<UpgradeScreen>>,
 ) {
     if !profile.is_changed() || upgrade_roots.is_empty() {
@@ -557,7 +658,7 @@ fn refresh_upgrade_screen_on_profile_change(
     for root in &upgrade_roots {
         commands.entity(root).despawn_recursive();
     }
-    spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab);
+    spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab, *stash_sort);
 }
 
 fn refresh_build_screen_on_profile_change(
@@ -565,6 +666,7 @@ fn refresh_build_screen_on_profile_change(
     profile: Res<ProfileState>,
     speed: Res<RunSpeedSetting>,
     tab: Res<RightPanelTab>,
+    stash_sort: Res<StashSortOrder>,
     build_roots: Query<Entity, With<BuildScreen>>,
 ) {
     if !profile.is_changed() || build_roots.is_empty() {
@@ -574,7 +676,7 @@ fn refresh_build_screen_on_profile_change(
     for root in &build_roots {
         commands.entity(root).despawn_recursive();
     }
-    spawn_build_screen_root(&mut commands, &profile, speed.0, *tab);
+    spawn_build_screen_root(&mut commands, &profile, speed.0, *tab, *stash_sort);
 }
 
 pub(crate) fn spawn_item_card(parent: &mut ChildBuilder, item: &ItemInstance) {
@@ -783,6 +885,7 @@ fn fulfill_reset_progress(
     mut tab: ResMut<RightPanelTab>,
     state: Res<State<GameState>>,
     speed: Res<RunSpeedSetting>,
+    stash_sort: Res<StashSortOrder>,
     build_roots: Query<Entity, With<BuildScreen>>,
 ) {
     for _ in events.read() {
@@ -798,7 +901,7 @@ fn fulfill_reset_progress(
             for e in &build_roots {
                 commands.entity(e).despawn_recursive();
             }
-            spawn_build_screen_root(&mut commands, &profile, speed.0, *tab);
+            spawn_build_screen_root(&mut commands, &profile, speed.0, *tab, *stash_sort);
         } else {
             next_state.set(GameState::Build);
         }

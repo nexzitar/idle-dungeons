@@ -106,14 +106,9 @@ Pick **one** path; do not leave misleading UI.
 
 #### Task B.1 (Path 1 — recommended minimal): Honest copy
 
-**Files:**
-- Modify: `src/ui/mockup_layout.rs` (~line 1394 caption)
+**Superseded for filter line by B.2:** stash column now shows `Stash filters: —` plus a real sort control. Remaining “filters” work is still future scope.
 
-- [ ] **Step 1:** Replace `Filters: all rarities | Sort: newest` with neutral text, e.g. `"Stash list (read-only filters for now)."` or remove line.
-
-- [ ] **Step 2:** `cargo test`
-
-- [ ] **Step 3:** Commit `fix(ui): remove misleading stash filter copy`
+- [ ] **Step 1–3:** Optional follow-up if you want to tweak copy further; not required after B.2.
 
 #### Task B.2 (Path 2 — functional minimal): Sort only
 
@@ -121,15 +116,23 @@ Pick **one** path; do not leave misleading UI.
 - Modify: `src/ui/mockup_layout.rs` / `src/ui/mod.rs`
 - Optional new: small `StashSortOrder` resource + toggle control
 
-- [ ] **Step 1:** Add resource `StashSort: enum { Recent, RarityName }` in `src/ui/mod.rs` or `components.rs`.
+- [x] **Step 1:** Add resource `StashSort: enum { Recent, RarityName }` in `src/ui/mod.rs` or `components.rs`.
 
-- [ ] **Step 2:** When spawning inventory rows OR in a sync system, sort `inventory: &[ItemInstance]` by chosen key before `spawn_item_card` (define “recent” as **file order** or `id` if no timestamp — document in comment).
+Implemented as `StashSortOrder` in `src/ui/stash_sort.rs` (`Recent` = reverse profile vec order / newest appended last; `RarityName` = rare first, name A–Z, `id` tie-break).
 
-- [ ] **Step 3:** Add tiny UI control “Sort: ···” that toggles sort (only if you commit to Path 2 fully).
+- [x] **Step 2:** When spawning inventory rows OR in a sync system, sort `inventory: &[ItemInstance]` by chosen key before `spawn_item_card` (define “recent” as **file order** or `id` if no timestamp — document in comment).
 
-- [ ] **Step 4:** Test: unit test sort helper in `src/domain/items` or `src/ui` with fake items.
+`stash_display_indices` used for Inventory (first 14), Loot tab, and non-interactive list rows.
 
-- [ ] **Step 5:** Commit `feat(ui): stash sort by rarity/name`
+- [x] **Step 3:** Add tiny UI control “Sort: ···” that toggles sort (only if you commit to Path 2 fully).
+
+`StashSortCycleButton` in stash column; toggles order and rebuilds the active menu screen.
+
+- [x] **Step 4:** Test: unit test sort helper in `src/domain/items` or `src/ui` with fake items.
+
+Tests in `src/ui/stash_sort.rs`.
+
+- [x] **Step 5:** Commit `feat(ui): stash sort by rarity/name`
 
 ---
 
