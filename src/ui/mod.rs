@@ -4,6 +4,7 @@ pub mod inventory_panel;
 pub mod log_panel;
 pub mod mockup_layout;
 pub mod run_panel;
+pub mod stash_sort;
 pub mod summary_panel;
 pub mod theme;
 pub mod tooltip;
@@ -25,9 +26,9 @@ use crate::ui::components::{
     PlaybackProgressLabel, PlaybackRoomKindText, ResetProgressButton, ReturnToBuildButton,
     RunPlaybackScreen, SalvageItemButton, SettingsButton, SettingsModalBackdrop,
     SettingsModalCloseButton, SettingsModalRoot, SettingsModalSpeedButton, SettingsModalSpeedLabel,
-    SkillSlotButton, SkipPlaybackButton, StartRunButton, SummaryScreen, TopBarField,
-    UiButtonPalette, UiRoot, UiScrollContent, UiScrollRegion, UiScrollState, UiTooltip,
-    UpgradeScreen,
+    SkillSlotButton, SkipPlaybackButton, StartRunButton, StashSortCycleButton, SummaryScreen,
+    TopBarField, UiButtonPalette, UiRoot, UiScrollContent, UiScrollRegion, UiScrollState,
+    UiTooltip, UpgradeScreen,
 };
 use crate::ui::mockup_layout::RightPanelTab;
 use crate::ui::theme::{body_text, caption_text, format_item_stat_summary, rarity_color, UiTheme};
@@ -74,6 +75,7 @@ impl Plugin for UiPlugin {
                         close_settings_modal,
                         handle_settings_modal_speed,
                         handle_right_panel_tab_buttons,
+                        handle_stash_sort_button,
                         handle_skill_slot_buttons,
                         handle_accept_button.run_if(in_state(GameState::Summary)),
                         handle_equip_buttons.run_if(in_state(GameState::Upgrades)),
@@ -543,6 +545,71 @@ fn handle_right_panel_tab_buttons(
     }
 }
 
+fn handle_stash_sort_button(
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    sort_buttons: Query<(Entity, &Interaction), With<StashSortCycleButton>>,
+    mut profile: ResMut<ProfileState>,
+    save_path: Res<ProfileSavePath>,
+    mut commands: Commands,
+    speed: Res<RunSpeedSetting>,
+    tab: Res<RightPanelTab>,
+    latest_summary: Option<Res<LatestRunSummary>>,
+    state: Res<State<GameState>>,
+    build_roots: Query<Entity, With<BuildScreen>>,
+    upgrade_roots: Query<Entity, With<UpgradeScreen>>,
+    summary_roots: Query<Entity, With<SummaryScreen>>,
+    running_roots: Query<Entity, With<RunPlaybackScreen>>,
+) {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction) in &sort_buttons {
+        if entity != target || !ui_click_release_confirms(*interaction) {
+            continue;
+        }
+        profile.profile.stash_sort = profile.profile.stash_sort.toggle();
+        if let Err(e) = crate::save::save_profile(&save_path.0, &profile.profile) {
+            warn!("failed to save stash sort preference: {e}");
+        }
+
+        match state.get() {
+            GameState::Build => {
+                for e in &build_roots {
+                    commands.entity(e).despawn_recursive();
+                }
+                spawn_build_screen_root(&mut commands, &profile, speed.0, *tab);
+            }
+            GameState::Upgrades => {
+                for e in &upgrade_roots {
+                    commands.entity(e).despawn_recursive();
+                }
+                spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab);
+            }
+            GameState::Summary => {
+                let summary = latest_summary
+                    .as_deref()
+                    .map(|s| s.summary.clone())
+                    .unwrap_or_else(crate::ui::summary_panel::empty_run_summary);
+                for e in &summary_roots {
+                    commands.entity(e).despawn_recursive();
+                }
+                spawn_summary_screen_root(&mut commands, &profile, &summary, speed.0, *tab);
+            }
+            GameState::Running => {
+                for e in &running_roots {
+                    commands.entity(e).despawn_recursive();
+                }
+                spawn_running_screen_root(&mut commands, &profile, speed.0, *tab);
+            }
+        }
+        break;
+    }
+}
+
 fn refresh_upgrade_screen_on_profile_change(
     mut commands: Commands,
     profile: Res<ProfileState>,
@@ -914,7 +981,9 @@ fn handle_start_button(
     };
     for (entity, interaction) in &buttons {
         if entity == target && ui_click_release_confirms(*interaction) {
-            start_run_events.send(StartRun { seed: 1 });
+            start_run_events.send(StartRun {
+                seed: crate::domain::run::DEFAULT_RUN_SEED,
+            });
             break;
         }
     }

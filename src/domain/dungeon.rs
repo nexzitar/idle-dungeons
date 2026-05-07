@@ -52,6 +52,14 @@ pub struct DungeonRoom {
     pub encounter: Option<Encounter>,
 }
 
+/// Builds a linear sequence `depth` = 1 ..= `depth_count`.
+///
+/// **Layout rules**
+/// - Final depth: [`RoomKind::Boss`] (fixed encounter).
+/// - Depths divisible by 10: [`RoomKind::Elite`].
+/// - **Seeded vein:** depth **11** is always [`RoomKind::Treasure`] when `seed % 97 == 11` (no combat).
+/// - All other non-boss depths: one RNG draw (ChaCha8, `seed`) — 10% [`Treasure`], 10% [`Shrine`],
+///   80% [`RoomKind::Monster`]. Treasure and shrine have no encounter; monster/elite/boss do.
 pub fn generate_dungeon(depth_count: u32, seed: u64) -> Vec<DungeonRoom> {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     (1..=depth_count)
@@ -60,6 +68,9 @@ pub fn generate_dungeon(depth_count: u32, seed: u64) -> Vec<DungeonRoom> {
                 RoomKind::Boss
             } else if depth % 10 == 0 {
                 RoomKind::Elite
+            } else if depth == 11 && seed % 97 == 11 {
+                // Deterministic “lucky vein” floor: same seed always sees treasure at depth 11.
+                RoomKind::Treasure
             } else {
                 match rng.gen_range(0..10) {
                     0 => RoomKind::Treasure,
@@ -107,6 +118,14 @@ impl From<&Enemy> for Stats {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn seeded_depth_11_treasure_when_seed_mod_97_eq_11() {
+        let rooms = generate_dungeon(25, 108);
+        let r11 = rooms.iter().find(|r| r.depth == 11).unwrap();
+        assert_eq!(r11.kind, RoomKind::Treasure);
+        assert!(r11.encounter.is_none());
+    }
 
     #[test]
     fn generated_dungeon_is_repeatable_for_seed() {

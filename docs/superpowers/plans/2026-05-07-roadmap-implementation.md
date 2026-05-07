@@ -77,26 +77,26 @@ cargo test poison_deals_damage_across_clock_ticks -- --nocapture
 
 **Goal:** Tie flat Guard reduction to `healing_power` or armor stat (small, testable), and document Heavy tradeoff if design calls for **attack speed penalty** (add test that hero swing count drops when Heavy equipped).
 
-- [ ] **Step 1:** Add test `guard_reduction_scales_with_healing_power` (or reuses existing test name if present — extend it) asserting higher `healing_power` lowers damage taken from a fixed enemy hit when Guard equipped.
+- [x] **Step 1:** Add test `guard_reduction_scales_with_healing_power` (or reuses existing test name if present — extend it) asserting higher `healing_power` lowers damage taken from a fixed enemy hit when Guard equipped.
 
-- [ ] **Step 2:** Implement: replace hardcoded `3` in `enemy_damage = (enemy_damage - 3).max(1)` with formula using `stats.healing_power` (floor/clamp so minimum 1 damage still possible).
+- [x] **Step 2:** Implement: replace hardcoded `3` in `enemy_damage = (enemy_damage - 3).max(1)` with formula using `stats.healing_power` (floor/clamp so minimum 1 damage still possible).
 
-- [ ] **Step 3:** Optional: If Heavy gets ASPD tradeoff, adjust `hero_as` when `has_heavy` and add test on swing count or time-to-kill.
+- [x] **Step 3:** Optional: If Heavy gets ASPD tradeoff, adjust `hero_as` when `has_heavy` and add test on swing count or time-to-kill. (`hero_as *= 0.75` then `.max(0.12)`; test `heavy_strike_slows_attack_pacing`.)
 
-- [ ] **Step 4:** `cargo test && cargo fmt`
+- [x] **Step 4:** `cargo test && cargo fmt`
 
-- [ ] **Step 5: Commit** `feat(combat): tune guard scaling (+ optional heavy ASPD tradeoff)`
+- [x] **Step 5: Commit** `feat(combat): tune guard scaling (+ optional heavy ASPD tradeoff)`
 
 #### Task A.4: Barrier / Thorns — edge cases
 
 **Files:**
 - `src/domain/combat.rs`
 
-- [ ] **Step 1:** Tests: barrier fully absorbs lethal strike; thorns kill enemy after reflect; affix + skill synergy order documented in test names.
+- [x] **Step 1:** Tests: barrier fully absorbs lethal strike; thorns kill enemy after reflect; affix + skill synergy order documented in test names.
 
-- [ ] **Step 2:** Fix any order-of-operations bugs found.
+- [x] **Step 2:** Fix any order-of-operations bugs found. (None; `hp_loss == 0` correctly skips thorns.)
 
-- [ ] **Step 3:** Commit `fix(combat): barrier and thorns edge cases`
+- [x] **Step 3:** Commit `test(combat): barrier and thorns edge cases`
 
 ---
 
@@ -106,14 +106,9 @@ Pick **one** path; do not leave misleading UI.
 
 #### Task B.1 (Path 1 — recommended minimal): Honest copy
 
-**Files:**
-- Modify: `src/ui/mockup_layout.rs` (~line 1394 caption)
+**Superseded for filter line by B.2:** stash column now shows `Stash filters: —` plus a real sort control. Remaining “filters” work is still future scope.
 
-- [ ] **Step 1:** Replace `Filters: all rarities | Sort: newest` with neutral text, e.g. `"Stash list (read-only filters for now)."` or remove line.
-
-- [ ] **Step 2:** `cargo test`
-
-- [ ] **Step 3:** Commit `fix(ui): remove misleading stash filter copy`
+- [ ] **Step 1–3:** Optional follow-up if you want to tweak copy further; not required after B.2.
 
 #### Task B.2 (Path 2 — functional minimal): Sort only
 
@@ -121,15 +116,23 @@ Pick **one** path; do not leave misleading UI.
 - Modify: `src/ui/mockup_layout.rs` / `src/ui/mod.rs`
 - Optional new: small `StashSortOrder` resource + toggle control
 
-- [ ] **Step 1:** Add resource `StashSort: enum { Recent, RarityName }` in `src/ui/mod.rs` or `components.rs`.
+- [x] **Step 1:** Add resource `StashSort: enum { Recent, RarityName }` in `src/ui/mod.rs` or `components.rs`.
 
-- [ ] **Step 2:** When spawning inventory rows OR in a sync system, sort `inventory: &[ItemInstance]` by chosen key before `spawn_item_card` (define “recent” as **file order** or `id` if no timestamp — document in comment).
+Implemented as `StashSortOrder` in `src/save.rs` on `SaveProfile` (`Recent` = reverse profile vec order / newest appended last; `RarityName` = rare first, name A–Z, `id` tie-break). Session `Resource` removed; UI reads `profile.profile.stash_sort`, toggles persist via `save_profile`.
 
-- [ ] **Step 3:** Add tiny UI control “Sort: ···” that toggles sort (only if you commit to Path 2 fully).
+- [x] **Step 2:** When spawning inventory rows OR in a sync system, sort `inventory: &[ItemInstance]` by chosen key before `spawn_item_card` (define “recent” as **file order** or `id` if no timestamp — document in comment).
 
-- [ ] **Step 4:** Test: unit test sort helper in `src/domain/items` or `src/ui` with fake items.
+`stash_display_indices` used for Inventory (first 14), Loot tab, and non-interactive list rows.
 
-- [ ] **Step 5:** Commit `feat(ui): stash sort by rarity/name`
+- [x] **Step 3:** Add tiny UI control “Sort: ···” that toggles sort (only if you commit to Path 2 fully).
+
+`StashSortCycleButton` in stash column; toggles order and rebuilds the active menu screen.
+
+- [x] **Step 4:** Test: unit test sort helper in `src/domain/items` or `src/ui` with fake items.
+
+Tests in `src/ui/stash_sort.rs`.
+
+- [x] **Step 5:** Commit `feat(ui): stash sort by rarity/name` (preference persisted in `SaveProfile.stash_sort` as of follow-up save change).
 
 ---
 
@@ -140,24 +143,34 @@ Pick **one** path; do not leave misleading UI.
 **Files:**
 - `src/domain/dungeon.rs`, `src/domain/run.rs`, tests under `src/domain/`
 
-- [ ] **Step 1:** Read `RoomKind` and generation; list which kinds appear at which depths today.
+- [x] **Step 1:** Read `RoomKind` and generation; list which kinds appear at which depths today.
 
-- [ ] **Step 2:** Add **one** new encounter pattern or weight tweak with deterministic seed test (e.g. depth 10 always sees X under seed Y unless design forbids).
+Documented in `generate_dungeon` rustdoc on `src/domain/dungeon.rs`.
+
+- [x] **Step 2:** Add **one** new encounter pattern or weight tweak with deterministic seed test (e.g. depth 10 always sees X under seed Y unless design forbids).
+
+Depth **11** is fixed **Treasure** when `seed % 97 == 11` (e.g. seed **108**). Test: `seeded_depth_11_treasure_when_seed_mod_97_eq_11`.
 
 - [ ] **Step 3:** Expose **risk hint** in run summary or `RunPlaybackFrame` caption if needed (small string field).
 
-- [ ] **Step 4:** Commit `feat(dungeon): tweak room table + test`
+Deferred (optional in plan).
+
+- [x] **Step 4:** Commit `feat(dungeon): tweak room table + test`
 
 #### Task C.2: Briefing UI
 
 **Files:**
 - `src/ui/mockup_layout.rs` (`spawn_dungeon_briefing_column`)
 
-- [ ] **Step 1:** Pull next-run info from `ProfileState` / default depth cap strings (e.g. `DEFAULT_RUN_MAX_DEPTH`).
+- [x] **Step 1:** Pull next-run info from `ProfileState` / default depth cap strings (e.g. `DEFAULT_RUN_MAX_DEPTH`).
 
-- [ ] **Step 2:** Show “Target depth”, “Boss at depth N”, “Seed (if fixed)” consistently.
+Uses `DEFAULT_RUN_MAX_DEPTH` and `DEFAULT_RUN_SEED` from `run.rs` (single source with Start button).
 
-- [ ] **Step 3:** Commit `feat(ui): clearer briefing stats`
+- [x] **Step 2:** Show “Target depth”, “Boss at depth N”, “Seed (if fixed)” consistently.
+
+Briefing column captions updated; seed labeled as MVP fixed value until picker exists.
+
+- [x] **Step 3:** Commit `feat(ui): clearer briefing stats`
 
 ---
 
