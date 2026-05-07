@@ -4,6 +4,7 @@ pub mod inventory_panel;
 pub mod log_panel;
 pub mod mockup_layout;
 pub mod run_panel;
+pub mod skill_book;
 pub mod stash_sort;
 pub mod summary_panel;
 pub mod theme;
@@ -12,9 +13,9 @@ pub mod upgrade_panel;
 pub mod widgets;
 
 use crate::app::{
-    AcceptRunRewards, ActiveRunPlayback, BuyUpgrade, CycleHeroSkillSlot, EquipInventoryItem,
-    GameState, LatestRunSummary, ProfileSavePath, ProfileState, ResetProgress, ReturnToBuild,
-    RunSpeedSetting, SalvageInventoryItem, SkipRunPlayback, StartRun,
+    AcceptRunRewards, ActiveRunPlayback, AssignHeroSkill, BuyUpgrade, EquipInventoryItem,
+    GameState, LatestRunSummary, OpenSkillBook, ProfileSavePath, ProfileState, ResetProgress,
+    ReturnToBuild, RunSpeedSetting, SalvageInventoryItem, SkipRunPlayback, StartRun,
 };
 use crate::domain::items::ItemInstance;
 use crate::domain::run::{RunPlaybackFrameKind, RunSummary};
@@ -26,9 +27,10 @@ use crate::ui::components::{
     PlaybackLogText, PlaybackProgressBarFill, PlaybackProgressLabel, PlaybackRoomKindText,
     ResetProgressButton, ReturnToBuildButton, RunPlaybackScreen, SalvageItemButton, SettingsButton,
     SettingsModalBackdrop, SettingsModalCloseButton, SettingsModalRoot, SettingsModalSpeedButton,
-    SettingsModalSpeedLabel, SkillSlotButton, SkipPlaybackButton, StartRunButton,
-    StashSortCycleButton, SummaryScreen, TopBarField, UiButtonPalette, UiRoot, UiScrollContent,
-    UiScrollRegion, UiScrollState, UiTooltip, UpgradeScreen,
+    SettingsModalSpeedLabel, SkillBookBackdrop, SkillBookCloseButton, SkillBookPickButton,
+    SkillBookRoot, SkillSlotButton, SkipPlaybackButton, StartRunButton, StashSortCycleButton,
+    SummaryScreen, TopBarField, UiButtonPalette, UiRoot, UiScrollContent, UiScrollRegion,
+    UiScrollState, UiTooltip, UpgradeScreen,
 };
 use crate::ui::mockup_layout::RightPanelTab;
 use crate::ui::theme::{body_text, caption_text, format_item_stat_summary, rarity_color, UiTheme};
@@ -78,9 +80,15 @@ impl Plugin for UiPlugin {
                         open_settings_modal,
                         close_settings_modal,
                         handle_settings_modal_speed,
+                        close_skill_book_modal,
+                        handle_skill_book_pick,
                         handle_right_panel_tab_buttons,
                         handle_stash_sort_button,
                         handle_skill_slot_buttons,
+                        handle_open_skill_book,
+                    )
+                        .chain(),
+                    (
                         handle_accept_button.run_if(in_state(GameState::Summary)),
                         handle_equip_buttons.run_if(in_state(GameState::Upgrades)),
                         handle_salvage_buttons.run_if(in_state(GameState::Upgrades)),
@@ -88,7 +96,8 @@ impl Plugin for UiPlugin {
                         handle_return_to_build_button.run_if(in_state(GameState::Upgrades)),
                         clear_ui_click_after_release,
                     )
-                        .chain(),
+                        .chain()
+                        .after(handle_open_skill_book),
                     sync_top_bar,
                     sync_run_playback_ui.run_if(in_state(GameState::Running)),
                     sync_run_playback_debuff_slots
@@ -938,6 +947,80 @@ fn close_settings_modal(
     }
 }
 
+fn handle_open_skill_book(
+    mut events: EventReader<OpenSkillBook>,
+    roots: Query<Entity, With<UiRoot>>,
+    existing: Query<(), With<SkillBookRoot>>,
+    mut commands: Commands,
+) {
+    for ev in events.read() {
+        if !existing.is_empty() {
+            continue;
+        }
+        let Ok(root) = roots.get_single() else {
+            continue;
+        };
+        commands
+            .entity(root)
+            .with_children(|parent| crate::ui::skill_book::spawn_skill_book_modal(parent, ev.slot));
+    }
+}
+
+fn close_skill_book_modal(
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    backdrop: Query<(Entity, &Interaction), With<SkillBookBackdrop>>,
+    close_btn: Query<(Entity, &Interaction), With<SkillBookCloseButton>>,
+    modal: Query<Entity, With<SkillBookRoot>>,
+    mut commands: Commands,
+) {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    let should_close = backdrop
+        .iter()
+        .any(|(e, i)| e == target && ui_click_release_confirms(*i))
+        || close_btn
+            .iter()
+            .any(|(e, i)| e == target && ui_click_release_confirms(*i));
+    if should_close {
+        for entity in &modal {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
+}
+
+fn handle_skill_book_pick(
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    buttons: Query<(Entity, &Interaction, &SkillBookPickButton)>,
+    mut writer: EventWriter<AssignHeroSkill>,
+    modal: Query<Entity, With<SkillBookRoot>>,
+    mut commands: Commands,
+) {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction, pick) in &buttons {
+        if entity == target && ui_click_release_confirms(*interaction) {
+            writer.send(AssignHeroSkill {
+                slot: pick.slot,
+                skill: pick.skill,
+            });
+            for e in &modal {
+                commands.entity(e).despawn_recursive();
+            }
+            break;
+        }
+    }
+}
+
 fn handle_settings_modal_speed(
     mouse: Res<ButtonInput<MouseButton>>,
     press: Res<UiClickPress>,
@@ -1207,7 +1290,7 @@ fn handle_skill_slot_buttons(
     mouse: Res<ButtonInput<MouseButton>>,
     press: Res<UiClickPress>,
     buttons: Query<(Entity, &Interaction, &SkillSlotButton)>,
-    mut events: EventWriter<CycleHeroSkillSlot>,
+    mut events: EventWriter<OpenSkillBook>,
     state: Res<State<GameState>>,
 ) {
     match state.get() {
@@ -1222,7 +1305,7 @@ fn handle_skill_slot_buttons(
     };
     for (entity, interaction, btn) in &buttons {
         if entity == target && ui_click_release_confirms(*interaction) {
-            events.send(CycleHeroSkillSlot { slot: btn.slot });
+            events.send(OpenSkillBook { slot: btn.slot });
             break;
         }
     }

@@ -21,8 +21,14 @@ pub enum GameState {
 }
 
 #[derive(Debug, Clone, Copy, Event)]
-pub struct CycleHeroSkillSlot {
+pub struct OpenSkillBook {
     pub slot: usize,
+}
+
+#[derive(Debug, Clone, Copy, Event)]
+pub struct AssignHeroSkill {
+    pub slot: usize,
+    pub skill: Option<crate::domain::skills::SkillId>,
 }
 
 #[derive(Debug, Clone, Copy, Event)]
@@ -138,7 +144,8 @@ impl Plugin for IdleDungeonsPlugin {
             .add_event::<ReturnToBuild>()
             .add_event::<SkipRunPlayback>()
             .add_event::<ResetProgress>()
-            .add_event::<CycleHeroSkillSlot>()
+            .add_event::<OpenSkillBook>()
+            .add_event::<AssignHeroSkill>()
             .add_systems(
                 Update,
                 (
@@ -152,7 +159,7 @@ impl Plugin for IdleDungeonsPlugin {
                     return_to_build,
                 ),
             )
-            .add_systems(PostUpdate, cycle_hero_skill_slot);
+            .add_systems(PostUpdate, assign_hero_skill_from_event);
     }
 }
 
@@ -321,40 +328,22 @@ fn apply_run_rewards(profile: &mut SaveProfile, summary: &RunSummary) {
     profile.sync_skill_slot_unlocks();
 }
 
-fn cycle_hero_skill_slot(
-    mut events: EventReader<CycleHeroSkillSlot>,
+fn assign_hero_skill_from_event(
+    mut events: EventReader<AssignHeroSkill>,
     mut profile: ResMut<ProfileState>,
     save_path: Res<ProfileSavePath>,
 ) {
-    use crate::domain::skills::SKILL_LOADOUT_CHOICES;
-
-    for event in events.read() {
+    for ev in events.read() {
         profile.profile.sync_skill_slot_unlocks();
-        let slot = event.slot;
-        if slot >= profile.profile.meta.unlocked_skill_slots {
+        if ev.slot >= profile.profile.meta.unlocked_skill_slots {
             continue;
         }
-        if slot >= profile.profile.hero.equipped_skills.len() {
-            continue;
-        }
-        let current = profile
+        if profile
             .profile
             .hero
-            .equipped_skills
-            .get(slot)
-            .copied()
-            .flatten();
-        let idx = SKILL_LOADOUT_CHOICES
-            .iter()
-            .position(|&c| c == current)
-            .unwrap_or(0);
-        let next = SKILL_LOADOUT_CHOICES[(idx + 1) % SKILL_LOADOUT_CHOICES.len()];
-
-        let changed = match next {
-            Some(skill) => profile.profile.hero.equip_skill(slot, skill).is_ok(),
-            None => profile.profile.hero.clear_skill_slot(slot).is_ok(),
-        };
-        if changed {
+            .assign_skill_to_slot(ev.slot, ev.skill)
+            .is_ok()
+        {
             save_current_profile(&save_path, &profile);
         }
     }
@@ -546,7 +535,7 @@ mod tests {
     }
 
     #[test]
-    fn cycle_hero_skill_slot_writes_save() {
+    fn assign_hero_skill_from_event_writes_save() {
         let dir = tempfile::tempdir().unwrap();
         let save_path = dir.path().join("profile.json");
         let mut app = App::new();
@@ -555,19 +544,22 @@ mod tests {
         app.add_plugins(IdleDungeonsPlugin);
         app.update();
 
-        app.world_mut().send_event(CycleHeroSkillSlot { slot: 0 });
+        app.world_mut().send_event(AssignHeroSkill {
+            slot: 0,
+            skill: Some(crate::domain::skills::SkillId::Guard),
+        });
         app.update();
 
         let profile = app.world().resource::<ProfileState>();
         assert_eq!(
             profile.profile.hero.equipped_skills[0],
-            Some(crate::domain::skills::SkillId::LifestealStrike)
+            Some(crate::domain::skills::SkillId::Guard)
         );
 
         let saved = crate::save::load_profile(&save_path).unwrap();
         assert_eq!(
             saved.hero.equipped_skills[0],
-            Some(crate::domain::skills::SkillId::LifestealStrike)
+            Some(crate::domain::skills::SkillId::Guard)
         );
     }
 }

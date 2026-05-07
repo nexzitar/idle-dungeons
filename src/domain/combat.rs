@@ -99,10 +99,13 @@ pub fn simulate_combat(
 
     let has_lifesteal = has(SkillId::LifestealStrike);
     let has_guard = has(SkillId::Guard);
-    let has_heavy = has(SkillId::HeavyStrike);
+    let has_heavy = has(SkillId::HeavyStrike) || has(SkillId::Cleave);
     let has_poison = has(SkillId::PoisonEdge);
     let has_thorns = has(SkillId::ThornSkin);
     let has_barrier = has(SkillId::BarrierPulse);
+    let has_second_wind = has(SkillId::SecondWind);
+    let has_toxic_mastery = has(SkillId::ToxicMastery);
+    let has_vampiric_aura = has(SkillId::VampiricAura);
 
     let affix_heavy = hero.has_affix(ItemAffix::Heavy);
     let affix_vamp = hero.has_affix(ItemAffix::Vampiric);
@@ -125,7 +128,7 @@ pub fn simulate_combat(
     let guard_flat = (3 + stats.healing_power.max(0) / 2).clamp(3, 25);
 
     let mut hero_as = stats.attack_speed.max(0.12);
-    // Heavy Strike: slower pacing (skill text); penalty after gear is summed into attack_speed.
+    // Heavy Strike / Cleave: slower pacing; penalty after gear is summed into attack_speed.
     if has_heavy {
         hero_as *= 0.75;
         hero_as = hero_as.max(0.12);
@@ -139,6 +142,14 @@ pub fn simulate_combat(
     const POISON_DAMAGE_STACK_CAP: u32 = 12;
 
     let mut events = Vec::new();
+
+    if has_second_wind && hero_health > 0 {
+        let h = (max_h / 20).max(1).min(8);
+        if h > 0 && hero_health < max_h {
+            hero_health = (hero_health + h).min(max_h);
+            events.push(CombatEvent::HeroHealed { amount: h });
+        }
+    }
 
     const MAX_EVENTS: usize = 600;
 
@@ -198,6 +209,9 @@ pub fn simulate_combat(
                 if affix_vamp {
                     amount = (hero_damage / 3).max(1);
                 }
+                if has_vampiric_aura {
+                    amount = ((amount as i64 * 6 / 5).max(1)) as i32;
+                }
                 hero_health = (hero_health + amount).min(max_h);
                 events.push(CombatEvent::HeroHealed { amount });
             }
@@ -254,7 +268,11 @@ pub fn simulate_combat(
             }
             let potency = poison_stacks.min(POISON_DAMAGE_STACK_CAP);
             let mult = potency.max(1) as i32;
-            let d = (poison_tick * mult).min(enemy_health);
+            let mut d = poison_tick * mult;
+            if has_toxic_mastery {
+                d = (d as i64 * 5 / 4).max(1) as i32;
+            }
+            d = d.min(enemy_health);
             events.push(CombatEvent::PoisonTick {
                 damage: d,
                 stacks: poison_stacks,
@@ -596,6 +614,36 @@ mod tests {
         });
         assert_eq!(plain_fist, Some(10));
         assert_eq!(heavy_fist, Some(15));
+    }
+
+    #[test]
+    fn cleave_matches_heavy_strike_damage_bonus() {
+        let mut heavy = HeroProfile::default();
+        heavy.unlock_skill_slots(1);
+        heavy.equip_skill(0, SkillId::HeavyStrike).unwrap();
+        let mut cleave = HeroProfile::default();
+        cleave.unlock_skill_slots(1);
+        cleave.equip_skill(0, SkillId::Cleave).unwrap();
+
+        let enemy = Enemy {
+            name: "Dummy".into(),
+            max_health: 999,
+            damage: 0,
+            armor: 0,
+            attack_speed: 1.0,
+        };
+
+        let h = simulate_combat(&heavy, &enemy, 2, 100);
+        let c = simulate_combat(&cleave, &enemy, 2, 100);
+        let heavy_dmg = h.events.iter().find_map(|e| match e {
+            CombatEvent::HeroAttacked { damage } => Some(*damage),
+            _ => None,
+        });
+        let cleave_dmg = c.events.iter().find_map(|e| match e {
+            CombatEvent::HeroAttacked { damage } => Some(*damage),
+            _ => None,
+        });
+        assert_eq!(heavy_dmg, cleave_dmg);
     }
 
     #[test]

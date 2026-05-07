@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::domain::progression::UpgradeId;
+use crate::domain::skills::SkillId;
 use crate::ui::theme::UiTheme;
 
 #[derive(Component)]
@@ -111,6 +112,22 @@ pub struct SettingsModalSpeedButton;
 
 #[derive(Component)]
 pub struct SettingsModalSpeedLabel;
+
+/// Root of the skill book overlay.
+#[derive(Component)]
+pub struct SkillBookRoot;
+
+#[derive(Component)]
+pub struct SkillBookBackdrop;
+
+#[derive(Component)]
+pub struct SkillBookCloseButton;
+
+#[derive(Component, Clone, Copy)]
+pub struct SkillBookPickButton {
+    pub slot: usize,
+    pub skill: Option<SkillId>,
+}
 
 /// Scroll region for the live delve combat log (auto-scroll to latest).
 #[derive(Component)]

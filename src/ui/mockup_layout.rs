@@ -684,7 +684,7 @@ fn skill_slot_row(
                             format!("{}\n{}", d.name, d.description)
                         })
                         .unwrap_or_else(|| {
-                            "Click to cycle this slot through your unlocked skills (or clear it)."
+                            "Open the skill book to assign or clear this slot (no duplicates across slots)."
                                 .to_string()
                         });
                     let p = UiButtonPalette::skill_slot_chip();
@@ -738,7 +738,7 @@ fn skill_slot_row(
                     "\u{1F512}".to_string()
                 };
                 let idle_tip = if !unlocked {
-                    "Locked skill slot. Improve your profile to unlock more active skills."
+                    "Locked skill slot. Gain delve progress milestones to unlock up to six slots."
                         .to_string()
                 } else {
                     hero.equipped_skills

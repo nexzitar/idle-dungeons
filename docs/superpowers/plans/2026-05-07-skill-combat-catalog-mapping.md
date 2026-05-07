@@ -14,3 +14,17 @@ Authoritative crosswalk between `SkillTrigger` / descriptions in `src/domain/ski
 **Mismatches resolved (roadmap Phase A):** poison periodic ticks, guard/heavy tuning, barrier/thorns ordering — covered by tests in `src/domain/combat.rs`.
 
 **Future nuance:** descriptions could mention stack caps or exact formulas if players need transparency; optional copy-only follow-ups.
+
+## Buildcraft Phase 1 roster (branch `feat/phase1-skill-book`)
+
+| `SkillId` | Kind | Combat / derived behavior |
+|-----------|------|---------------------------|
+| `Cleave` | Active | Same bonus damage and attack-speed penalty as `HeavyStrike`. |
+| `Taunt` | Active | Stub — no effect until threat/party (roadmap Phase 3). |
+| `SecondWind` | Passive | Heals a small % of max HP once at combat start (after barrier init). |
+| `ToxicMastery` | Passive | Multiplies poison tick damage (~25%). |
+| `VampiricAura` | Passive | Boosts lifesteal heal amount when `LifestealStrike` heals. |
+| `ThickHide` / `ArcaneOverflow` / `Berserker` / `SwiftStrikes` / `IronWill` / `BattleFocus` / `CautiousAdvance` | Passive | Flat stat modifiers folded in `HeroProfile::derived_stats`. |
+| `LuckyStrike` / `Predator` | Passive | Stubs — await crit / encounter metadata pipelines. |
+
+Single-hero combat remains authoritative; duplicates in two slots are prevented on assign (`assign_skill_to_slot`).
