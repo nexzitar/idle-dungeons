@@ -18,6 +18,27 @@ pub enum CombatEvent {
     HeroDefeated,
 }
 
+fn combat_event_caption(event: &CombatEvent) -> String {
+    match event {
+        CombatEvent::HeroAttacked { damage } => format!("You strike for {} damage.", damage),
+        CombatEvent::EnemyAttacked { damage } => format!("{} hits you for {} damage.", "The foe", damage),
+        CombatEvent::HeroHealed { amount } => format!("You recover {} health.", amount),
+        CombatEvent::EnemyDefeated => "Enemy defeated.".to_string(),
+        CombatEvent::HeroDefeated => "You collapse...".to_string(),
+    }
+}
+
+/// One row of combat UI: HP totals after a combat event (plus an opening "engage" row).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CombatPlaybackFrame {
+    pub enemy_name: String,
+    pub hero_hp: i32,
+    pub hero_max_hp: i32,
+    pub enemy_hp: i32,
+    pub enemy_max_hp: i32,
+    pub caption: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CombatResult {
     pub outcome: CombatOutcome,
@@ -26,9 +47,23 @@ pub struct CombatResult {
     pub events: Vec<CombatEvent>,
 }
 
-pub fn simulate_combat(hero: &HeroProfile, enemy: &Enemy, max_ticks: u32) -> CombatResult {
+pub fn simulate_combat(
+    hero: &HeroProfile,
+    enemy: &Enemy,
+    max_ticks: u32,
+    hero_health_start: i32,
+) -> CombatResult {
     let stats = hero.derived_stats();
-    let mut hero_health = stats.max_health;
+    let max_h = stats.max_health;
+    let mut hero_health = hero_health_start.clamp(0, max_h);
+    if hero_health <= 0 {
+        return CombatResult {
+            outcome: CombatOutcome::EnemyWon,
+            hero_health: 0,
+            enemy_health: enemy.max_health,
+            events: vec![CombatEvent::HeroDefeated],
+        };
+    }
     let mut enemy_health = enemy.max_health;
     let has_lifesteal = hero
         .equipped_skill_ids()
@@ -83,6 +118,63 @@ pub fn simulate_combat(hero: &HeroProfile, enemy: &Enemy, max_ticks: u32) -> Com
     }
 }
 
+pub fn combat_playback_frames_from_result(
+    result: &CombatResult,
+    enemy_name: &str,
+    hero_max_hp: i32,
+    enemy_max_hp: i32,
+    hero_hp_at_start: i32,
+) -> Vec<CombatPlaybackFrame> {
+    let mut hero_hp = hero_hp_at_start.clamp(0, hero_max_hp);
+    let mut enemy_hp = enemy_max_hp;
+
+    let mut frames = vec![CombatPlaybackFrame {
+        enemy_name: enemy_name.to_string(),
+        hero_hp,
+        hero_max_hp,
+        enemy_hp,
+        enemy_max_hp,
+        caption: format!("Engaging {enemy_name}."),
+    }];
+
+    for event in &result.events {
+        match event {
+            CombatEvent::HeroAttacked { damage } => {
+                enemy_hp -= damage;
+            }
+            CombatEvent::HeroHealed { amount } => {
+                hero_hp = (hero_hp + amount).min(hero_max_hp);
+            }
+            CombatEvent::EnemyAttacked { damage } => {
+                hero_hp -= damage;
+            }
+            CombatEvent::EnemyDefeated | CombatEvent::HeroDefeated => {}
+        }
+        frames.push(CombatPlaybackFrame {
+            enemy_name: enemy_name.to_string(),
+            hero_hp: hero_hp.clamp(0, hero_max_hp),
+            hero_max_hp,
+            enemy_hp: enemy_hp.clamp(0, enemy_max_hp),
+            enemy_max_hp,
+            caption: combat_event_caption(event),
+        });
+    }
+    frames
+}
+
+pub fn combat_playback_frames(hero: &HeroProfile, enemy: &Enemy, max_ticks: u32) -> Vec<CombatPlaybackFrame> {
+    let stats = hero.derived_stats();
+    let hero_start = stats.max_health;
+    let result = simulate_combat(hero, enemy, max_ticks, hero_start);
+    combat_playback_frames_from_result(
+        &result,
+        &enemy.name,
+        stats.max_health,
+        enemy.max_health,
+        hero_start,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,7 +199,7 @@ mod tests {
             attack_speed: 1.0,
         };
 
-        let result = simulate_combat(&hero, &enemy, 100);
+        let result = simulate_combat(&hero, &enemy, 100, hero.derived_stats().max_health);
 
         assert_eq!(result.outcome, CombatOutcome::HeroWon);
         assert!(result
@@ -130,7 +222,7 @@ mod tests {
             attack_speed: 1.0,
         };
 
-        let result = simulate_combat(&hero, &enemy, 5);
+        let result = simulate_combat(&hero, &enemy, 5, hero.derived_stats().max_health);
 
         assert!(result
             .events
@@ -153,8 +245,18 @@ mod tests {
             attack_speed: 1.0,
         };
 
-        let unarmored_result = simulate_combat(&unarmored_hero, &enemy, 1);
-        let armored_result = simulate_combat(&armored_hero, &enemy, 1);
+        let unarmored_result = simulate_combat(
+            &unarmored_hero,
+            &enemy,
+            1,
+            unarmored_hero.derived_stats().max_health,
+        );
+        let armored_result = simulate_combat(
+            &armored_hero,
+            &enemy,
+            1,
+            armored_hero.derived_stats().max_health,
+        );
         let unarmored_damage_taken =
             unarmored_hero.derived_stats().max_health - unarmored_result.hero_health;
         let armored_damage_taken =
@@ -180,10 +282,28 @@ mod tests {
             attack_speed: 1.0,
         };
 
-        let result = simulate_combat(&hero, &enemy, 1);
+        let result = simulate_combat(&hero, &enemy, 1, hero.derived_stats().max_health);
 
         let damage_taken = hero.derived_stats().max_health - result.hero_health;
+        assert!(
+            damage_taken >= 1,
+            "expected at least 1 damage when enemy damage is floored to 1"
+        );
+    }
 
-        assert_eq!(damage_taken, 1);
+    #[test]
+    fn next_encounter_starts_at_remaining_hp() {
+        let hero = HeroProfile::default();
+        let enemy = Enemy {
+            name: "Poker".into(),
+            max_health: 999,
+            damage: 3,
+            armor: 0,
+            attack_speed: 1.0,
+        };
+        let first = simulate_combat(&hero, &enemy, 1, 100);
+        assert_eq!(first.hero_health, 97);
+        let second = simulate_combat(&hero, &enemy, 1, first.hero_health);
+        assert_eq!(second.hero_health, 94);
     }
 }

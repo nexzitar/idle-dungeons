@@ -3,12 +3,16 @@
 use bevy::prelude::*;
 use bevy::ui::{FocusPolicy, RelativeCursorPosition};
 
+use crate::domain::dungeon::RoomKind;
 use crate::domain::progression::MetaProgression;
 use crate::domain::progression::UpgradeId;
-use crate::domain::run::RunOutcome;
-use crate::domain::run::RunSummary;
+use crate::domain::run::{RunOutcome, RunSummary, DEFAULT_RUN_MAX_DEPTH};
 use crate::ui::components::{
-    AcceptRewardsButton, BuyUpgradeButton, ReturnToBuildButton, SettingsButton, TopBarField,
+    AcceptRewardsButton, BuyUpgradeButton, PlaybackCaptionText, PlaybackDepthText,
+    PlaybackEnemyBarFill, PlaybackEnemyNameText, PlaybackHeroBarFill, PlaybackLogScrollRegion,
+    PlaybackLogText, PlaybackProgressBarFill, PlaybackProgressLabel, PlaybackRoomKindText, ResetProgressButton, ReturnToBuildButton,
+    SettingsButton, SettingsModalBackdrop, SettingsModalCloseButton, SettingsModalRoot,
+    SettingsModalSpeedButton, SettingsModalSpeedLabel, SkipPlaybackButton, TopBarField,
     UiButtonPalette, UiScrollContent, UiScrollRegion, UiScrollState,
 };
 use crate::ui::theme::{
@@ -115,6 +119,216 @@ fn spawn_column_flex_scroll(parent: &mut ChildBuilder, content: impl FnOnce(&mut
         });
 }
 
+/// Combat log during playback — pins scroll to the latest line when content grows.
+fn spawn_playback_combat_log_scroll(parent: &mut ChildBuilder, content: impl FnOnce(&mut ChildBuilder)) {
+    parent
+        .spawn((
+            NodeBundle {
+                style: Style {
+                    width: Val::Percent(100.0),
+                    flex_grow: 1.0,
+                    flex_shrink: 1.0,
+                    min_height: Val::Px(0.0),
+                    position_type: PositionType::Relative,
+                    overflow: Overflow::clip_y(),
+                    ..default()
+                },
+                ..default()
+            },
+            Interaction::default(),
+            RelativeCursorPosition::default(),
+            UiScrollState::default(),
+            UiScrollRegion,
+            PlaybackLogScrollRegion,
+        ))
+        .with_children(|vp| {
+            vp.spawn((
+                NodeBundle {
+                    style: Style {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(0.0),
+                        right: Val::Px(0.0),
+                        top: Val::Px(0.0),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(8.0),
+                        align_items: AlignItems::Stretch,
+                        ..default()
+                    },
+                    ..default()
+                },
+                UiScrollContent,
+            ))
+            .with_children(content);
+        });
+}
+
+/// Full-screen centered settings dialog (speed + reset). Spawn as a child of [`UiRoot`].
+pub fn spawn_settings_modal(parent: &mut ChildBuilder, speed_mult: f32) {
+    let speed_label = fmt_speed_label(speed_mult);
+    parent
+        .spawn((
+            NodeBundle {
+                style: Style {
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(0.0),
+                    top: Val::Px(0.0),
+                    ..default()
+                },
+                ..default()
+            },
+            SettingsModalRoot,
+        ))
+        .insert(FocusPolicy::Block)
+        .with_children(|layer| {
+            let backdrop_pal = UiButtonPalette {
+                idle_bg: Color::srgba(0.02, 0.02, 0.04, 0.58),
+                hover_bg: Color::srgba(0.04, 0.04, 0.06, 0.65),
+                pressed_bg: Color::srgba(0.06, 0.06, 0.08, 0.72),
+                idle_border: Color::NONE,
+                hover_border: Color::NONE,
+                pressed_border: Color::NONE,
+            };
+            layer.spawn((
+                ButtonBundle {
+                    style: Style {
+                        position_type: PositionType::Absolute,
+                        width: Val::Percent(100.0),
+                        height: Val::Percent(100.0),
+                        left: Val::Px(0.0),
+                        top: Val::Px(0.0),
+                        ..default()
+                    },
+                    background_color: backdrop_pal.idle_bg.into(),
+                    border_color: BorderColor(backdrop_pal.idle_border),
+                    ..default()
+                },
+                SettingsModalBackdrop,
+                backdrop_pal,
+            ));
+            layer
+                .spawn(NodeBundle {
+                    style: Style {
+                        position_type: PositionType::Absolute,
+                        left: Val::Percent(50.0),
+                        top: Val::Percent(50.0),
+                        margin: UiRect {
+                            left: Val::Px(-170.0),
+                            top: Val::Px(-155.0),
+                            right: Val::Auto,
+                            bottom: Val::Auto,
+                        },
+                        width: Val::Px(340.0),
+                        padding: UiRect::all(Val::Px(20.0)),
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Stretch,
+                        row_gap: Val::Px(12.0),
+                        border: UiRect::all(Val::Px(2.0)),
+                        ..default()
+                    },
+                    background_color: UiTheme::panel_bg_deep().into(),
+                    border_color: BorderColor(UiTheme::ornate_gold()),
+                    ..default()
+                })
+                .with_children(|dialog| {
+                    dialog.spawn(headline_text("Settings"));
+                    dialog.spawn(section_title("Run playback"));
+                    let speed_btn_pal = UiButtonPalette::panel_outlined();
+                    dialog
+                        .spawn((
+                            ButtonBundle {
+                                style: Style {
+                                    width: Val::Percent(100.0),
+                                    min_height: Val::Px(44.0),
+                                    justify_content: JustifyContent::Center,
+                                    align_items: AlignItems::Center,
+                                    border: UiRect::all(Val::Px(1.0)),
+                                    ..default()
+                                },
+                                background_color: speed_btn_pal.idle_bg.into(),
+                                border_color: BorderColor(speed_btn_pal.idle_border),
+                                ..default()
+                            },
+                            SettingsModalSpeedButton,
+                            speed_btn_pal,
+                        ))
+                        .with_children(|b| {
+                            b.spawn((
+                                TextBundle::from_section(
+                                    format!("Speed: {speed_label} (click to toggle)"),
+                                    TextStyle {
+                                        font_size: 15.0,
+                                        color: UiTheme::muted_cream(),
+                                        ..default()
+                                    },
+                                ),
+                                SettingsModalSpeedLabel,
+                            ));
+                        });
+                    dialog.spawn(section_title("Save"));
+                    let reset_pal = UiButtonPalette::salvage();
+                    dialog
+                        .spawn((
+                            ButtonBundle {
+                                style: Style {
+                                    width: Val::Percent(100.0),
+                                    min_height: Val::Px(44.0),
+                                    justify_content: JustifyContent::Center,
+                                    align_items: AlignItems::Center,
+                                    border: UiRect::all(Val::Px(1.0)),
+                                    ..default()
+                                },
+                                background_color: reset_pal.idle_bg.into(),
+                                border_color: BorderColor(reset_pal.idle_border),
+                                ..default()
+                            },
+                            ResetProgressButton,
+                            reset_pal,
+                        ))
+                        .with_children(|b| {
+                            b.spawn(TextBundle::from_section(
+                                "Reset all progress",
+                                TextStyle {
+                                    font_size: 15.0,
+                                    color: UiTheme::body(),
+                                    ..default()
+                                },
+                            ));
+                        });
+                    let close_pal = UiButtonPalette::panel_secondary();
+                    dialog
+                        .spawn((
+                            ButtonBundle {
+                                style: Style {
+                                    width: Val::Percent(100.0),
+                                    min_height: Val::Px(40.0),
+                                    justify_content: JustifyContent::Center,
+                                    align_items: AlignItems::Center,
+                                    border: UiRect::all(Val::Px(1.0)),
+                                    ..default()
+                                },
+                                background_color: close_pal.idle_bg.into(),
+                                border_color: BorderColor(close_pal.idle_border),
+                                ..default()
+                            },
+                            SettingsModalCloseButton,
+                            close_pal,
+                        ))
+                        .with_children(|b| {
+                            b.spawn(TextBundle::from_section(
+                                "Close",
+                                TextStyle {
+                                    font_size: 15.0,
+                                    color: UiTheme::muted_cream(),
+                                    ..default()
+                                },
+                            ));
+                        });
+                });
+        });
+}
+
 pub fn spawn_mockup_header(
     parent: &mut ChildBuilder,
     gold: u32,
@@ -200,40 +414,50 @@ pub fn spawn_mockup_header(
                     fmt_speed_label(speed_mult),
                 );
             });
-            {
+            row.spawn(NodeBundle {
+                style: Style {
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    column_gap: Val::Px(8.0),
+                    ..default()
+                },
+                ..default()
+            })
+            .with_children(|btn_row| {
                 let p = UiButtonPalette::panel_outlined();
-                row.spawn((
-                    ButtonBundle {
-                        style: Style {
-                            min_width: Val::Px(100.0),
-                            height: Val::Px(38.0),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            border: UiRect::all(Val::Px(1.0)),
+                btn_row
+                    .spawn((
+                        ButtonBundle {
+                            style: Style {
+                                min_width: Val::Px(100.0),
+                                height: Val::Px(38.0),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                border: UiRect::all(Val::Px(1.0)),
+                                ..default()
+                            },
+                            background_color: p.idle_bg.into(),
+                            border_color: BorderColor(p.idle_border),
                             ..default()
                         },
-                        background_color: p.idle_bg.into(),
-                        border_color: BorderColor(p.idle_border),
-                        ..default()
-                    },
-                    SettingsButton,
-                    p,
-                ))
-                .with_children(|btn| {
-                    btn.spawn(TextBundle::from_section(
-                        "\u{2699} Settings",
-                        TextStyle {
-                            font_size: 14.0,
-                            color: UiTheme::muted_cream(),
-                            ..default()
-                        },
-                    ));
-                });
-            }
+                        SettingsButton,
+                        p,
+                    ))
+                    .with_children(|btn| {
+                        btn.spawn(TextBundle::from_section(
+                            "\u{2699} Settings",
+                            TextStyle {
+                                font_size: 14.0,
+                                color: UiTheme::muted_cream(),
+                                ..default()
+                            },
+                        ));
+                    });
+            });
         });
 }
 
-fn fmt_speed_label(mult: f32) -> String {
+pub(crate) fn fmt_speed_label(mult: f32) -> String {
     if (mult - 1.0).abs() < f32::EPSILON {
         "1x".to_string()
     } else if (mult - 2.0).abs() < f32::EPSILON {
@@ -544,6 +768,168 @@ pub fn mockup_gear_cards(parent: &mut ChildBuilder, profile: &crate::app::Profil
     }
 }
 
+pub fn room_kind_label(kind: RoomKind) -> &'static str {
+    match kind {
+        RoomKind::Monster => "Monster",
+        RoomKind::Elite => "Elite",
+        RoomKind::Boss => "Boss",
+        RoomKind::Treasure => "Treasure",
+        RoomKind::Shrine => "Shrine",
+    }
+}
+
+fn playback_hero_bar(parent: &mut ChildBuilder, fill_pct: f32) {
+    parent
+        .spawn(NodeBundle {
+            style: Style {
+                width: Val::Percent(100.0),
+                height: Val::Px(14.0),
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            background_color: UiTheme::void_black().into(),
+            border_color: BorderColor(UiTheme::panel_border()),
+            ..default()
+        })
+        .with_children(|bar| {
+            bar.spawn((
+                NodeBundle {
+                    style: Style {
+                        width: Val::Percent((fill_pct * 100.0).clamp(0.0, 100.0)),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    background_color: UiTheme::healing().into(),
+                    ..default()
+                },
+                PlaybackHeroBarFill,
+            ));
+        });
+}
+
+fn playback_enemy_bar(parent: &mut ChildBuilder, fill_pct: f32) {
+    parent
+        .spawn(NodeBundle {
+            style: Style {
+                width: Val::Percent(100.0),
+                height: Val::Px(14.0),
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            background_color: UiTheme::void_black().into(),
+            border_color: BorderColor(UiTheme::panel_border()),
+            ..default()
+        })
+        .with_children(|bar| {
+            bar.spawn((
+                NodeBundle {
+                    style: Style {
+                        width: Val::Percent((fill_pct * 100.0).clamp(0.0, 100.0)),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    background_color: UiTheme::danger().into(),
+                    ..default()
+                },
+                PlaybackEnemyBarFill,
+            ));
+        });
+}
+
+/// Middle column during [`crate::app::GameState::Running`] — synced from [`crate::app::ActiveRunPlayback`].
+pub fn spawn_run_playback_middle_column(parent: &mut ChildBuilder) {
+    let inner = move |p: &mut ChildBuilder| {
+        p.spawn(panel_title_centered("LIVE DELVE"));
+        p.spawn(NodeBundle {
+            style: Style {
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::SpaceBetween,
+                width: Val::Percent(100.0),
+                ..default()
+            },
+            ..default()
+        })
+        .with_children(|r| {
+            r.spawn((
+                caption_text("Depth: —"),
+                PlaybackDepthText,
+            ));
+            r.spawn((
+                caption_text("Type: —"),
+                PlaybackRoomKindText,
+            ));
+        });
+        p.spawn(NodeBundle {
+            style: Style {
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(12.0),
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            ..default()
+        })
+        .with_children(|row| {
+            row.spawn(NodeBundle {
+                style: Style {
+                    width: Val::Px(96.0),
+                    height: Val::Px(96.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    border: UiRect::all(Val::Px(2.0)),
+                    ..default()
+                },
+                background_color: UiTheme::panel_bg_deep().into(),
+                border_color: BorderColor(UiTheme::ornate_gold()),
+                ..default()
+            })
+            .with_children(|port| {
+                port.spawn(TextBundle::from_section(
+                    "\u{2694}",
+                    TextStyle {
+                        font_size: 38.0,
+                        color: UiTheme::elite(),
+                        ..default()
+                    },
+                ));
+            });
+            row.spawn(NodeBundle {
+                style: Style {
+                    flex_direction: FlexDirection::Column,
+                    flex_grow: 1.0,
+                    row_gap: Val::Px(6.0),
+                    ..default()
+                },
+                ..default()
+            })
+            .with_children(|col| {
+                col.spawn((
+                    headline_text("—"),
+                    PlaybackEnemyNameText,
+                ));
+                col.spawn(caption_text("Your health"));
+                playback_hero_bar(col, 1.0);
+                col.spawn(caption_text("Foe"));
+                playback_enemy_bar(col, 1.0);
+            });
+        });
+        p.spawn(section_title("NOW"));
+        p.spawn((
+            body_text("…"),
+            PlaybackCaptionText,
+        ));
+        p.spawn(section_title("COMBAT LOG"));
+        spawn_playback_combat_log_scroll(p, |scroll| {
+            scroll.spawn((
+                body_text(""),
+                PlaybackLogText,
+            ));
+        });
+        p.spawn(section_title("PROGRESS"));
+        spawn_playback_delve_progress_section(p);
+    };
+    inner(parent);
+}
+
 pub fn spawn_dungeon_briefing_column(parent: &mut ChildBuilder, stash_count: usize) {
     let inner = move |p: &mut ChildBuilder| {
         p.spawn(panel_title_centered("DUNGEON RUN"));
@@ -614,7 +1000,7 @@ pub fn spawn_dungeon_briefing_column(parent: &mut ChildBuilder, stash_count: usi
         ));
         p.spawn(caption_text("Mouse wheel scrolls any framed panel."));
         p.spawn(section_title("PROGRESS"));
-        progress_row(p, None);
+        spawn_static_delve_progress_section(p, 0, DEFAULT_RUN_MAX_DEPTH);
     };
     inner(parent);
 }
@@ -640,7 +1026,7 @@ pub fn spawn_dungeon_camp_column(parent: &mut ChildBuilder) {
             "Stash, forging contracts, and meta upgrades live in the panel to the right. Head back to briefing when you are ready to delve.",
         ));
         p.spawn(section_title("PROGRESS"));
-        progress_row(p, None);
+        spawn_static_delve_progress_section(p, 0, DEFAULT_RUN_MAX_DEPTH);
     };
     inner(parent);
 }
@@ -754,9 +1140,77 @@ pub fn spawn_dungeon_summary_column(parent: &mut ChildBuilder, summary: &RunSumm
             .collect();
         spawn_scrollable_log(p, 200.0, log_lines);
         p.spawn(section_title("PROGRESS"));
-        progress_row(p, Some(summary.deepest_depth));
+        let cap = summary.dungeon_depth_cap.max(1);
+        spawn_static_delve_progress_section(p, summary.floors_cleared, cap);
     };
     inner(parent);
+}
+
+fn spawn_playback_delve_progress_section(parent: &mut ChildBuilder) {
+    parent.spawn((
+        caption_text(format!(
+            "Floors cleared: 0 / {}",
+            DEFAULT_RUN_MAX_DEPTH
+        )),
+        PlaybackProgressLabel,
+    ));
+    parent
+        .spawn(NodeBundle {
+            style: Style {
+                width: Val::Percent(100.0),
+                height: Val::Px(16.0),
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            background_color: UiTheme::void_black().into(),
+            border_color: BorderColor(UiTheme::panel_border()),
+            ..default()
+        })
+        .with_children(|bar| {
+            bar.spawn((
+                NodeBundle {
+                    style: Style {
+                        width: Val::Percent(0.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    background_color: UiTheme::muted_gold().into(),
+                    ..default()
+                },
+                PlaybackProgressBarFill,
+            ));
+        });
+}
+
+fn spawn_static_delve_progress_section(parent: &mut ChildBuilder, cleared: u32, cap: u32) {
+    let cap_n = cap.max(1);
+    let frac = cleared as f32 / cap_n as f32;
+    parent.spawn(caption_text(format!(
+        "Floors cleared: {cleared} / {cap_n}"
+    )));
+    parent
+        .spawn(NodeBundle {
+            style: Style {
+                width: Val::Percent(100.0),
+                height: Val::Px(16.0),
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            background_color: UiTheme::void_black().into(),
+            border_color: BorderColor(UiTheme::panel_border()),
+            ..default()
+        })
+        .with_children(|bar| {
+            bar.spawn(NodeBundle {
+                style: Style {
+                    width: Val::Percent((frac * 100.0).clamp(0.0, 100.0)),
+                    height: Val::Percent(100.0),
+                    ..default()
+                },
+                background_color: UiTheme::muted_gold().into(),
+                ..default()
+            });
+        });
 }
 
 fn health_bar(parent: &mut ChildBuilder, frac: f32, fill: Color) {
@@ -782,38 +1236,6 @@ fn health_bar(parent: &mut ChildBuilder, frac: f32, fill: Color) {
                 background_color: fill.into(),
                 ..default()
             });
-        });
-}
-
-fn progress_row(parent: &mut ChildBuilder, deepest: Option<u32>) {
-    parent
-        .spawn(NodeBundle {
-            style: Style {
-                flex_direction: FlexDirection::Row,
-                justify_content: JustifyContent::SpaceBetween,
-                width: Val::Percent(100.0),
-                padding: UiRect::vertical(Val::Px(6.0)),
-                ..default()
-            },
-            ..default()
-        })
-        .with_children(|row| {
-            for d in [5u32, 10, 15, 20, 25] {
-                let done = deepest.map(|dep| dep >= d).unwrap_or(false);
-                let sym = if done { "\u{2713}" } else { "\u{25CB}" };
-                row.spawn(TextBundle::from_section(
-                    format!("{sym} {d}"),
-                    TextStyle {
-                        font_size: 13.0,
-                        color: if done {
-                            UiTheme::healing()
-                        } else {
-                            UiTheme::body_dim()
-                        },
-                        ..default()
-                    },
-                ));
-            }
         });
 }
 
@@ -1030,6 +1452,7 @@ pub enum FooterMode {
     Briefing,
     Camp,
     Summary,
+    DelvePlayback,
 }
 
 pub fn spawn_mockup_footer(parent: &mut ChildBuilder, mode: FooterMode) {
@@ -1065,7 +1488,14 @@ pub fn spawn_mockup_footer(parent: &mut ChildBuilder, mode: FooterMode) {
             })
             .with_children(|nav| {
                 footer_pill(nav, "CAMP", matches!(mode, FooterMode::Camp));
-                footer_pill(nav, "RUN", matches!(mode, FooterMode::Briefing));
+                footer_pill(
+                    nav,
+                    "RUN",
+                    matches!(
+                        mode,
+                        FooterMode::Briefing | FooterMode::DelvePlayback
+                    ),
+                );
                 footer_pill(nav, "HERO", false);
                 footer_pill(nav, "UPGRADES", false);
                 footer_pill(nav, "CODEX", false);
@@ -1126,6 +1556,37 @@ pub fn spawn_mockup_footer(parent: &mut ChildBuilder, mode: FooterMode) {
                             TextStyle {
                                 font_size: 20.0,
                                 color: Color::WHITE,
+                                ..default()
+                            },
+                        ));
+                    });
+                }
+                FooterMode::DelvePlayback => {
+                    let p = UiButtonPalette::panel_secondary();
+                    row.spawn((
+                        ButtonBundle {
+                            style: Style {
+                                min_width: Val::Px(220.0),
+                                height: Val::Px(44.0),
+                                padding: UiRect::axes(Val::Px(14.0), Val::Px(8.0)),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                border: UiRect::all(Val::Px(1.0)),
+                                ..default()
+                            },
+                            background_color: p.idle_bg.into(),
+                            border_color: BorderColor(p.idle_border),
+                            ..default()
+                        },
+                        SkipPlaybackButton,
+                        p,
+                    ))
+                    .with_children(|b| {
+                        b.spawn(TextBundle::from_section(
+                            "Skip to results",
+                            TextStyle {
+                                font_size: 16.0,
+                                color: UiTheme::muted_cream(),
                                 ..default()
                             },
                         ));

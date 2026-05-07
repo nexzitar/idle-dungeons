@@ -22,6 +22,39 @@ pub struct SummaryScreen;
 pub struct UpgradeScreen;
 
 #[derive(Component)]
+pub struct RunPlaybackScreen;
+
+#[derive(Component)]
+pub struct SkipPlaybackButton;
+
+#[derive(Component)]
+pub struct PlaybackDepthText;
+
+#[derive(Component)]
+pub struct PlaybackRoomKindText;
+
+#[derive(Component)]
+pub struct PlaybackEnemyNameText;
+
+#[derive(Component)]
+pub struct PlaybackHeroBarFill;
+
+#[derive(Component)]
+pub struct PlaybackEnemyBarFill;
+
+#[derive(Component)]
+pub struct PlaybackCaptionText;
+
+#[derive(Component)]
+pub struct PlaybackLogText;
+
+#[derive(Component)]
+pub struct PlaybackProgressBarFill;
+
+#[derive(Component)]
+pub struct PlaybackProgressLabel;
+
+#[derive(Component)]
 pub struct AcceptRewardsButton;
 
 #[derive(Component)]
@@ -44,6 +77,30 @@ pub struct ReturnToBuildButton;
 
 #[derive(Component)]
 pub struct SettingsButton;
+
+#[derive(Component)]
+pub struct ResetProgressButton;
+
+/// Root of the settings overlay (spawned under [`UiRoot`]).
+#[derive(Component)]
+pub struct SettingsModalRoot;
+
+/// Full-screen dim layer; click closes the modal.
+#[derive(Component)]
+pub struct SettingsModalBackdrop;
+
+#[derive(Component)]
+pub struct SettingsModalCloseButton;
+
+#[derive(Component)]
+pub struct SettingsModalSpeedButton;
+
+#[derive(Component)]
+pub struct SettingsModalSpeedLabel;
+
+/// Scroll region for the live delve combat log (auto-scroll to latest).
+#[derive(Component)]
+pub struct PlaybackLogScrollRegion;
 
 /// Driving colors for [`crate::ui::apply_ui_button_palettes`]. Attach next to [`Button`].
 #[derive(Component, Clone, Copy)]

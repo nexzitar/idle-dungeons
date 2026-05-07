@@ -10,13 +10,23 @@ pub mod upgrade_panel;
 pub mod widgets;
 
 use crate::app::{
-    AcceptRunRewards, BuyUpgrade, EquipInventoryItem, GameState, LatestRunSummary, ProfileState,
-    ReturnToBuild, RunSpeedSetting, SalvageInventoryItem, StartRun,
+    AcceptRunRewards, ActiveRunPlayback, BuyUpgrade, EquipInventoryItem, GameState, LatestRunSummary,
+    ProfileState, ProfileSavePath, ResetProgress, ReturnToBuild, RunSpeedSetting, SalvageInventoryItem,
+    SkipRunPlayback, StartRun,
 };
 use crate::domain::items::ItemInstance;
-use crate::domain::run::RunSummary;
+use crate::domain::run::{RunPlaybackFrameKind, RunSummary};
 use crate::ui::build_panel::build_panel_text;
-use crate::ui::components::*;
+use crate::ui::components::{
+    AcceptRewardsButton, BuildScreen, BuyUpgradeButton, EquipItemButton, MainCamera,
+    PlaybackCaptionText, PlaybackDepthText, PlaybackEnemyBarFill, PlaybackEnemyNameText,
+    PlaybackHeroBarFill, PlaybackLogScrollRegion, PlaybackLogText, PlaybackProgressBarFill,
+    PlaybackProgressLabel, PlaybackRoomKindText,
+    ResetProgressButton, ReturnToBuildButton, RunPlaybackScreen, SalvageItemButton, SettingsButton,
+    SettingsModalBackdrop, SettingsModalCloseButton, SettingsModalRoot, SettingsModalSpeedButton,
+    SettingsModalSpeedLabel, SkipPlaybackButton, StartRunButton, SummaryScreen, TopBarField,
+    UiButtonPalette, UiRoot, UiScrollContent, UiScrollRegion, UiScrollState, UpgradeScreen,
+};
 use crate::ui::mockup_layout::RightPanelTab;
 use crate::ui::theme::{body_text, caption_text, format_item_stat_summary, rarity_color, UiTheme};
 use crate::ui::widgets::spawn_atmosphere;
@@ -37,13 +47,21 @@ impl Plugin for UiPlugin {
                 (reset_right_tab_inventory, spawn_build_screen).chain(),
             )
             .add_systems(OnExit(GameState::Build), cleanup_ui)
+            .add_systems(OnEnter(GameState::Running), spawn_running_screen)
+            .add_systems(OnExit(GameState::Running), cleanup_running_exit)
             .add_systems(
                 Update,
                 (
                     apply_ui_button_palettes,
                     handle_start_button.run_if(in_state(GameState::Build)),
+                    handle_skip_playback_button.run_if(in_state(GameState::Running)),
+                    (send_reset_progress_requests, fulfill_reset_progress).chain(),
                     sync_top_bar,
-                    handle_settings_button,
+                    sync_run_playback_ui.run_if(in_state(GameState::Running)),
+                    sync_playback_delve_progress_bar.run_if(in_state(GameState::Running)),
+                    open_settings_modal,
+                    close_settings_modal,
+                    handle_settings_modal_speed,
                     handle_right_panel_tab_buttons,
                 ),
             )
@@ -75,6 +93,9 @@ impl Plugin for UiPlugin {
                 PostUpdate,
                 (
                     apply_ui_scroll.after(TransformSystem::TransformPropagate),
+                    pin_playback_combat_log_scroll
+                        .run_if(in_state(GameState::Running))
+                        .after(apply_ui_scroll),
                     refresh_upgrade_screen_on_profile_change.run_if(in_state(GameState::Upgrades)),
                 ),
             );
@@ -126,6 +147,80 @@ fn reset_right_tab_loot(mut tab: ResMut<RightPanelTab>) {
 
 fn reset_right_tab_camp(mut tab: ResMut<RightPanelTab>) {
     *tab = RightPanelTab::Inventory;
+}
+
+fn cleanup_running_exit(mut commands: Commands, roots: Query<Entity, With<UiRoot>>) {
+    for root in &roots {
+        commands.entity(root).despawn_recursive();
+    }
+    commands.remove_resource::<ActiveRunPlayback>();
+}
+
+fn spawn_running_screen(
+    mut commands: Commands,
+    profile: Res<ProfileState>,
+    speed: Res<RunSpeedSetting>,
+    tab: Res<RightPanelTab>,
+) {
+    spawn_running_screen_root(&mut commands, &profile, speed.0, *tab);
+}
+
+fn spawn_running_screen_root(
+    commands: &mut Commands,
+    profile: &ProfileState,
+    speed_mult: f32,
+    tab: RightPanelTab,
+) {
+    let hero = profile.effective_hero();
+    let meta = &profile.profile.meta;
+    let loadout_lines: Vec<String> = build_panel_text(&hero)
+        .lines()
+        .map(|s| s.to_string())
+        .collect();
+
+    commands
+        .spawn((root_shell(), UiRoot, RunPlaybackScreen))
+        .with_children(|root| {
+            spawn_atmosphere(root);
+            root.spawn(content_column_bundle()).with_children(|col| {
+                crate::ui::mockup_layout::spawn_mockup_header(
+                    col,
+                    meta.gold,
+                    meta.salvage,
+                    meta.unlocked_skill_slots,
+                    hero.equipped_skills.len(),
+                    "—",
+                    speed_mult,
+                );
+                crate::ui::mockup_layout::spawn_three_column_row(col, |row| {
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 0.95, |panel| {
+                        crate::ui::mockup_layout::spawn_hero_column_mockup(
+                            panel,
+                            &hero,
+                            profile,
+                            &loadout_lines,
+                        );
+                    });
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.05, |panel| {
+                        crate::ui::mockup_layout::spawn_run_playback_middle_column(panel);
+                    });
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
+                        crate::ui::mockup_layout::spawn_right_management_column(
+                            panel,
+                            tab,
+                            meta,
+                            &profile.profile.inventory,
+                            None,
+                            false,
+                        );
+                    });
+                });
+                crate::ui::mockup_layout::spawn_mockup_footer(
+                    col,
+                    crate::ui::mockup_layout::FooterMode::DelvePlayback,
+                );
+            });
+        });
 }
 
 fn spawn_build_screen(
@@ -346,6 +441,7 @@ fn handle_right_panel_tab_buttons(
     build_roots: Query<Entity, With<BuildScreen>>,
     upgrade_roots: Query<Entity, With<UpgradeScreen>>,
     summary_roots: Query<Entity, With<SummaryScreen>>,
+    running_roots: Query<Entity, With<RunPlaybackScreen>>,
 ) {
     for (interaction, btn) in &mut interactions {
         if *interaction != Interaction::Pressed {
@@ -379,7 +475,12 @@ fn handle_right_panel_tab_buttons(
                 }
                 spawn_summary_screen_root(&mut commands, &profile, &summary, speed.0, *tab);
             }
-            GameState::Running => {}
+            GameState::Running => {
+                for e in &running_roots {
+                    commands.entity(e).despawn_recursive();
+                }
+                spawn_running_screen_root(&mut commands, &profile, speed.0, *tab);
+            }
         }
     }
 }
@@ -502,6 +603,7 @@ fn sync_top_bar(
     state: Res<State<GameState>>,
     profile: Res<ProfileState>,
     latest_summary: Option<Res<LatestRunSummary>>,
+    playback: Option<Res<ActiveRunPlayback>>,
     speed: Res<RunSpeedSetting>,
     mut q: Query<(&TopBarField, &mut Text)>,
 ) {
@@ -511,6 +613,16 @@ fn sync_top_bar(
         GameState::Summary => latest_summary
             .as_deref()
             .map(|s| s.summary.deepest_depth.to_string())
+            .unwrap_or_else(|| "—".to_string()),
+        GameState::Running => playback
+            .as_ref()
+            .and_then(|p| {
+                if p.frames.is_empty() {
+                    return None;
+                }
+                let idx = p.display_index.min(p.frames.len() - 1);
+                Some(p.frames[idx].depth.to_string())
+            })
             .unwrap_or_else(|| "—".to_string()),
         _ => "—".to_string(),
     };
@@ -561,18 +673,124 @@ fn apply_ui_button_palettes(
     }
 }
 
-fn handle_settings_button(
-    mut interactions: Query<&Interaction, (Changed<Interaction>, With<SettingsButton>)>,
-    mut speed: ResMut<RunSpeedSetting>,
+fn send_reset_progress_requests(
+    mut interactions: Query<&Interaction, (Changed<Interaction>, With<ResetProgressButton>)>,
+    mut events: EventWriter<ResetProgress>,
 ) {
-    let next = if (speed.0 - 1.0).abs() < f32::EPSILON {
-        2.0
-    } else {
-        1.0
-    };
     for interaction in &mut interactions {
         if *interaction == Interaction::Pressed {
-            speed.0 = next;
+            events.send(ResetProgress);
+        }
+    }
+}
+
+fn fulfill_reset_progress(
+    mut events: EventReader<ResetProgress>,
+    mut profile: ResMut<ProfileState>,
+    save_path: Res<ProfileSavePath>,
+    mut commands: Commands,
+    mut next_state: ResMut<NextState<GameState>>,
+    mut tab: ResMut<RightPanelTab>,
+    state: Res<State<GameState>>,
+    speed: Res<RunSpeedSetting>,
+    build_roots: Query<Entity, With<BuildScreen>>,
+) {
+    for _ in events.read() {
+        profile.profile = crate::save::SaveProfile::default();
+        if let Err(e) = crate::save::save_profile(&save_path.0, &profile.profile) {
+            warn!("failed to save profile after reset: {e}");
+        }
+        commands.remove_resource::<LatestRunSummary>();
+        commands.remove_resource::<ActiveRunPlayback>();
+
+        if *state.get() == GameState::Build {
+            *tab = RightPanelTab::Inventory;
+            for e in &build_roots {
+                commands.entity(e).despawn_recursive();
+            }
+            spawn_build_screen_root(&mut commands, &profile, speed.0, *tab);
+        } else {
+            next_state.set(GameState::Build);
+        }
+    }
+}
+
+fn open_settings_modal(
+    mut interactions: Query<&Interaction, (Changed<Interaction>, With<SettingsButton>)>,
+    roots: Query<Entity, With<UiRoot>>,
+    existing: Query<(), With<SettingsModalRoot>>,
+    speed: Res<RunSpeedSetting>,
+    mut commands: Commands,
+) {
+    for interaction in &mut interactions {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        if !existing.is_empty() {
+            continue;
+        }
+        let Ok(root) = roots.get_single() else {
+            continue;
+        };
+        commands
+            .entity(root)
+            .with_children(|parent| {
+                crate::ui::mockup_layout::spawn_settings_modal(parent, speed.0);
+            });
+    }
+}
+
+fn close_settings_modal(
+    mut backdrop: Query<&Interaction, (Changed<Interaction>, With<SettingsModalBackdrop>)>,
+    mut close_btn: Query<&Interaction, (Changed<Interaction>, With<SettingsModalCloseButton>)>,
+    modal: Query<Entity, With<SettingsModalRoot>>,
+    mut commands: Commands,
+) {
+    let mut should_close = false;
+    for interaction in &mut backdrop {
+        if *interaction == Interaction::Pressed {
+            should_close = true;
+            break;
+        }
+    }
+    if !should_close {
+        for interaction in &mut close_btn {
+            if *interaction == Interaction::Pressed {
+                should_close = true;
+                break;
+            }
+        }
+    }
+    if should_close {
+        for entity in &modal {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
+}
+
+fn handle_settings_modal_speed(
+    mut interactions: Query<&Interaction, (Changed<Interaction>, With<SettingsModalSpeedButton>)>,
+    mut speed: ResMut<RunSpeedSetting>,
+    mut labels: Query<&mut Text, With<SettingsModalSpeedLabel>>,
+) {
+    for interaction in &mut interactions {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        speed.0 = if (speed.0 - 1.0).abs() < f32::EPSILON {
+            2.0
+        } else {
+            1.0
+        };
+        let speed_label = if (speed.0 - 1.0).abs() < f32::EPSILON {
+            "1x".to_string()
+        } else if (speed.0 - 2.0).abs() < f32::EPSILON {
+            "2x".to_string()
+        } else {
+            format!("{:.1}x", speed.0)
+        };
+        for mut text in &mut labels {
+            text.sections[0].value = format!("Speed: {speed_label} (click to toggle)");
         }
     }
 }
@@ -584,6 +802,114 @@ fn handle_start_button(
     for interaction in &mut interactions {
         if *interaction == Interaction::Pressed {
             start_run_events.send(StartRun { seed: 1 });
+        }
+    }
+}
+
+fn handle_skip_playback_button(
+    mut interactions: Query<&Interaction, (Changed<Interaction>, With<SkipPlaybackButton>)>,
+    mut events: EventWriter<SkipRunPlayback>,
+) {
+    for interaction in &mut interactions {
+        if *interaction == Interaction::Pressed {
+            events.send(SkipRunPlayback);
+        }
+    }
+}
+
+fn sync_run_playback_ui(
+    playback: Res<ActiveRunPlayback>,
+    mut params: ParamSet<(
+        Query<&mut Text, With<PlaybackDepthText>>,
+        Query<&mut Text, With<PlaybackRoomKindText>>,
+        Query<&mut Text, With<PlaybackEnemyNameText>>,
+        Query<&mut Text, With<PlaybackCaptionText>>,
+        Query<&mut Text, With<PlaybackLogText>>,
+        Query<&mut Style, With<PlaybackHeroBarFill>>,
+        Query<&mut Style, With<PlaybackEnemyBarFill>>,
+    )>,
+) {
+    if playback.frames.is_empty() {
+        return;
+    }
+    let idx = playback.display_index.min(playback.frames.len() - 1);
+    let frame = &playback.frames[idx];
+
+    let depth_s = format!("Depth: {}", frame.depth);
+    let kind_s = format!(
+        "Type: {}",
+        crate::ui::mockup_layout::room_kind_label(frame.room_kind)
+    );
+
+    let hero_max_snap = frame.hero_snapshot_max_hp.max(1) as f32;
+    let hero_f = (frame.hero_snapshot_hp as f32 / hero_max_snap).clamp(0.0, 1.0);
+    let (enemy_f, enemy_name, caption) = match &frame.kind {
+        RunPlaybackFrameKind::Narration { text } => (0.0, "—".to_string(), text.clone()),
+        RunPlaybackFrameKind::Combat(c) => (
+            c.enemy_hp as f32 / c.enemy_max_hp.max(1) as f32,
+            c.enemy_name.clone(),
+            c.caption.clone(),
+        ),
+    };
+
+    let log_body = playback.log_lines.join("\n");
+
+    for mut text in params.p0().iter_mut() {
+        if text.sections[0].value != depth_s {
+            text.sections[0].value = depth_s.clone();
+        }
+    }
+    for mut text in params.p1().iter_mut() {
+        if text.sections[0].value != kind_s {
+            text.sections[0].value = kind_s.clone();
+        }
+    }
+    for mut text in params.p2().iter_mut() {
+        if text.sections[0].value != enemy_name {
+            text.sections[0].value = enemy_name.clone();
+        }
+    }
+    for mut text in params.p3().iter_mut() {
+        if text.sections[0].value != caption {
+            text.sections[0].value = caption.clone();
+        }
+    }
+    for mut text in params.p4().iter_mut() {
+        if text.sections[0].value != log_body {
+            text.sections[0].value = log_body.clone();
+        }
+    }
+
+    let hero_w = Val::Percent((hero_f * 100.0).clamp(0.0, 100.0));
+    let enemy_w = Val::Percent((enemy_f * 100.0).clamp(0.0, 100.0));
+    for mut style in params.p5().iter_mut() {
+        style.width = hero_w;
+    }
+    for mut style in params.p6().iter_mut() {
+        style.width = enemy_w;
+    }
+}
+
+fn sync_playback_delve_progress_bar(
+    playback: Res<ActiveRunPlayback>,
+    mut fill: Query<&mut Style, With<PlaybackProgressBarFill>>,
+    mut label: Query<&mut Text, With<PlaybackProgressLabel>>,
+) {
+    if playback.frames.is_empty() {
+        return;
+    }
+    let idx = playback.display_index.min(playback.frames.len() - 1);
+    let frame = &playback.frames[idx];
+    let cap = frame.delve_floors_cap.max(1);
+    let cleared = frame.delve_floors_cleared;
+    let frac = (cleared as f32 / cap as f32).clamp(0.0, 1.0);
+    for mut style in &mut fill {
+        style.width = Val::Percent(frac * 100.0);
+    }
+    let line = format!("Floors cleared: {cleared} / {cap}");
+    for mut text in &mut label {
+        if text.sections[0].value != line {
+            text.sections[0].value = line.clone();
         }
     }
 }
@@ -649,6 +975,53 @@ fn handle_return_to_build_button(
     }
 }
 
+fn pin_playback_combat_log_scroll(
+    playback: Res<ActiveRunPlayback>,
+    mut prev_log: Local<String>,
+    mut regions: Query<
+        (Entity, &mut UiScrollState, &Node),
+        With<PlaybackLogScrollRegion>,
+    >,
+    children: Query<&Children>,
+    mut content_set: ParamSet<(
+        Query<&Node, With<UiScrollContent>>,
+        Query<&mut Style, With<UiScrollContent>>,
+    )>,
+) {
+    let body = playback.log_lines.join("\n");
+    if body == *prev_log {
+        return;
+    }
+    *prev_log = body.clone();
+
+    for (entity, mut state, viewport_node) in &mut regions {
+        let view_h = viewport_node.size().y;
+        if view_h <= 0.0 {
+            continue;
+        }
+        let Ok(ch) = children.get(entity) else {
+            continue;
+        };
+        let Some(child) = ch
+            .iter()
+            .copied()
+            .find(|&e| content_set.p0().get(e).is_ok())
+        else {
+            continue;
+        };
+        let content_h = content_set
+            .p0()
+            .get(child)
+            .map(|n| n.size().y)
+            .unwrap_or(0.0);
+        let max_scroll = (content_h - view_h).max(0.0);
+        state.offset = max_scroll;
+        if let Ok(mut style) = content_set.p1().get_mut(child) {
+            style.top = Val::Px(-state.offset);
+        }
+    }
+}
+
 fn apply_ui_scroll(
     mut wheel_events: EventReader<MouseWheel>,
     mut regions: Query<
@@ -702,7 +1075,7 @@ mod tests {
     use super::*;
     use crate::app::{
         AcceptRunRewards, GameState, IdleDungeonsPlugin, LatestRunSummary, ProfileSavePath,
-        ProfileState, StartRun,
+        ProfileState, SkipRunPlayback, StartRun,
     };
     use crate::domain::items::{GearSlot, ItemInstance};
     use crate::domain::progression::UpgradeId;
@@ -754,6 +1127,8 @@ mod tests {
         app.world_mut().send_event(StartRun { seed: 1 });
 
         app.update();
+        app.world_mut().send_event(SkipRunPlayback);
+        app.update();
         app.update();
 
         assert_eq!(
@@ -774,6 +1149,8 @@ mod tests {
         app.world_mut().send_event(StartRun { seed: 1 });
 
         app.update();
+        app.world_mut().send_event(SkipRunPlayback);
+        app.update();
         app.update();
 
         assert_eq!(entity_count::<AcceptRewardsButton>(app.world_mut()), 1);
@@ -787,6 +1164,8 @@ mod tests {
         app.add_plugins(IdleDungeonsPlugin);
         app.add_plugins(UiPlugin);
         app.world_mut().send_event(StartRun { seed: 1 });
+        app.update();
+        app.world_mut().send_event(SkipRunPlayback);
         app.update();
         app.update();
 

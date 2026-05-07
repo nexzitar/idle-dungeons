@@ -1,9 +1,11 @@
-use crate::domain::run::RunSummary;
+use crate::domain::run::{RunSummary, DEFAULT_RUN_MAX_DEPTH};
 
 pub fn empty_run_summary() -> RunSummary {
     RunSummary {
         outcome: crate::domain::run::RunOutcome::HeroDied,
         deepest_depth: 0,
+        floors_cleared: 0,
+        dungeon_depth_cap: DEFAULT_RUN_MAX_DEPTH,
         gold_earned: 0,
         salvage_earned: 0,
         loot: Vec::new(),
@@ -82,13 +84,15 @@ pub fn narrative_highlights(summary: &RunSummary) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::run::{RunOutcome, RunSummary};
+    use crate::domain::run::{RunOutcome, RunSummary, DEFAULT_RUN_MAX_DEPTH};
 
     #[test]
     fn summary_text_reports_depth_gold_and_outcome() {
         let summary = RunSummary {
             outcome: RunOutcome::HeroDied,
             deepest_depth: 8,
+            floors_cleared: 7,
+            dungeon_depth_cap: DEFAULT_RUN_MAX_DEPTH,
             gold_earned: 30,
             salvage_earned: 5,
             loot: Vec::new(),

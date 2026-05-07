@@ -1,9 +1,14 @@
-use crate::domain::combat::{simulate_combat, CombatOutcome};
+use crate::domain::combat::{
+    combat_playback_frames_from_result, simulate_combat, CombatOutcome, CombatPlaybackFrame,
+};
 use crate::domain::dungeon::{generate_dungeon, RoomKind};
 use crate::domain::hero::HeroProfile;
 use crate::domain::items::ItemInstance;
 use crate::domain::loot::{roll_loot, salvage_value};
 use serde::{Deserialize, Serialize};
+
+/// Default floor cap for a full delve (matches typical [`RunConfig::max_depth`]).
+pub const DEFAULT_RUN_MAX_DEPTH: u32 = 25;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RunConfig {
@@ -21,6 +26,10 @@ pub enum RunOutcome {
 pub struct RunSummary {
     pub outcome: RunOutcome,
     pub deepest_depth: u32,
+    #[serde(default)]
+    pub floors_cleared: u32,
+    #[serde(default = "default_summary_dungeon_cap")]
+    pub dungeon_depth_cap: u32,
     pub gold_earned: u32,
     pub salvage_earned: u32,
     pub loot: Vec<ItemInstance>,
@@ -28,13 +37,53 @@ pub struct RunSummary {
     pub log: Vec<String>,
 }
 
-pub fn simulate_run(hero: &HeroProfile, config: RunConfig) -> RunSummary {
+fn default_summary_dungeon_cap() -> u32 {
+    DEFAULT_RUN_MAX_DEPTH
+}
+
+#[derive(Debug, Clone)]
+pub enum RunPlaybackFrameKind {
+    Narration { text: String },
+    Combat(CombatPlaybackFrame),
+}
+
+#[derive(Debug, Clone)]
+pub struct RunPlaybackFrame {
+    pub depth: u32,
+    pub room_kind: RoomKind,
+    /// Hero HP for the status bar (carries across rooms).
+    pub hero_snapshot_hp: i32,
+    pub hero_snapshot_max_hp: i32,
+    /// Floors fully cleared before this frame (`0` until the first room is done).
+    pub delve_floors_cleared: u32,
+    /// Same as run max depth (`RunConfig.max_depth`).
+    pub delve_floors_cap: u32,
+    pub kind: RunPlaybackFrameKind,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RunPlayback {
+    pub frames: Vec<RunPlaybackFrame>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RunSimulation {
+    pub summary: RunSummary,
+    pub playback: RunPlayback,
+}
+
+pub fn simulate_run_with_playback(hero: &HeroProfile, config: RunConfig) -> RunSimulation {
     let rooms = generate_dungeon(config.max_depth, config.seed);
+    let cap = config.max_depth.max(1);
     let mut deepest_depth = 0;
     let mut gold_earned = 0;
     let mut salvage_earned = 0;
     let mut loot = Vec::new();
     let mut log = Vec::new();
+    let mut playback = RunPlayback::default();
+    let hero_max_hp = hero.derived_stats().max_health;
+    let mut hero_current_hp = hero_max_hp;
+    let mut floors_cleared = 0u32;
 
     for room in rooms {
         deepest_depth = room.depth;
@@ -42,34 +91,75 @@ pub fn simulate_run(hero: &HeroProfile, config: RunConfig) -> RunSummary {
         match room.kind {
             RoomKind::Monster | RoomKind::Elite | RoomKind::Boss => {
                 let enemy = room.encounter.as_ref().unwrap().enemy.clone();
-                let combat = simulate_combat(hero, &enemy, 100);
+                let at_start = hero_current_hp;
+                let combat = simulate_combat(hero, &enemy, 100, at_start);
+                for frame in combat_playback_frames_from_result(
+                    &combat,
+                    &enemy.name,
+                    hero_max_hp,
+                    enemy.max_health,
+                    at_start,
+                ) {
+                    playback.frames.push(RunPlaybackFrame {
+                        depth: room.depth,
+                        room_kind: room.kind,
+                        hero_snapshot_hp: frame.hero_hp,
+                        hero_snapshot_max_hp: frame.hero_max_hp,
+                        delve_floors_cleared: floors_cleared,
+                        delve_floors_cap: cap,
+                        kind: RunPlaybackFrameKind::Combat(frame),
+                    });
+                }
                 match combat.outcome {
                     CombatOutcome::HeroWon => {
+                        hero_current_hp = combat.hero_health;
                         log.push(format!("Depth {}: defeated {}", room.depth, enemy.name));
                         gold_earned += room.depth * 3;
+                        floors_cleared += 1;
                         if is_boss {
                             log.push("The Gate Warden falls. The delve is victorious.".to_string());
-                            return RunSummary {
-                                outcome: RunOutcome::BossDefeated,
-                                deepest_depth,
-                                gold_earned,
-                                salvage_earned,
-                                loot,
-                                death_reason: None,
-                                log,
+                            playback.frames.push(RunPlaybackFrame {
+                                depth: room.depth,
+                                room_kind: room.kind,
+                                hero_snapshot_hp: hero_current_hp,
+                                hero_snapshot_max_hp: hero_max_hp,
+                                delve_floors_cleared: floors_cleared,
+                                delve_floors_cap: cap,
+                                kind: RunPlaybackFrameKind::Narration {
+                                    text: "The Gate Warden falls. The delve is victorious.".into(),
+                                },
+                            });
+                            return RunSimulation {
+                                summary: RunSummary {
+                                    outcome: RunOutcome::BossDefeated,
+                                    deepest_depth,
+                                    floors_cleared,
+                                    dungeon_depth_cap: cap,
+                                    gold_earned,
+                                    salvage_earned,
+                                    loot,
+                                    death_reason: None,
+                                    log,
+                                },
+                                playback,
                             };
                         }
                     }
                     CombatOutcome::EnemyWon | CombatOutcome::TimedOut => {
                         log.push(format!("Depth {}: defeated by {}", room.depth, enemy.name));
-                        return RunSummary {
-                            outcome: RunOutcome::HeroDied,
-                            deepest_depth,
-                            gold_earned,
-                            salvage_earned,
-                            loot,
-                            death_reason: Some(format!("Defeated by {}", enemy.name)),
-                            log,
+                        return RunSimulation {
+                            summary: RunSummary {
+                                outcome: RunOutcome::HeroDied,
+                                deepest_depth,
+                                floors_cleared,
+                                dungeon_depth_cap: cap,
+                                gold_earned,
+                                salvage_earned,
+                                loot,
+                                death_reason: Some(format!("Defeated by {}", enemy.name)),
+                                log,
+                            },
+                            playback,
                         };
                     }
                 }
@@ -77,27 +167,58 @@ pub fn simulate_run(hero: &HeroProfile, config: RunConfig) -> RunSummary {
             RoomKind::Treasure => {
                 let item = roll_loot(room.depth, config.seed);
                 salvage_earned += salvage_value(&item);
-                log.push(format!("Depth {}: found {}", room.depth, item.name));
+                let line = format!("Depth {}: found {}", room.depth, item.name);
+                log.push(line.clone());
                 loot.push(item);
                 gold_earned += room.depth * 2;
+                floors_cleared += 1;
+                playback.frames.push(RunPlaybackFrame {
+                    depth: room.depth,
+                    room_kind: room.kind,
+                    hero_snapshot_hp: hero_current_hp,
+                    hero_snapshot_max_hp: hero_max_hp,
+                    delve_floors_cleared: floors_cleared,
+                    delve_floors_cap: cap,
+                    kind: RunPlaybackFrameKind::Narration { text: line },
+                });
             }
             RoomKind::Shrine => {
-                log.push(format!(
+                let line = format!(
                     "Depth {}: shrine grants {} gold",
                     room.depth, room.depth
-                ));
+                );
+                log.push(line.clone());
                 gold_earned += room.depth;
+                floors_cleared += 1;
+                playback.frames.push(RunPlaybackFrame {
+                    depth: room.depth,
+                    room_kind: room.kind,
+                    hero_snapshot_hp: hero_current_hp,
+                    hero_snapshot_max_hp: hero_max_hp,
+                    delve_floors_cleared: floors_cleared,
+                    delve_floors_cap: cap,
+                    kind: RunPlaybackFrameKind::Narration { text: line },
+                });
             }
         }
     }
 
-    RunSummary {
-        outcome: RunOutcome::BossDefeated,
-        deepest_depth,
-        gold_earned,
-        salvage_earned,
-        loot,
-        death_reason: None,
-        log,
+    RunSimulation {
+        summary: RunSummary {
+            outcome: RunOutcome::BossDefeated,
+            deepest_depth,
+            floors_cleared,
+            dungeon_depth_cap: cap,
+            gold_earned,
+            salvage_earned,
+            loot,
+            death_reason: None,
+            log,
+        },
+        playback,
     }
+}
+
+pub fn simulate_run(hero: &HeroProfile, config: RunConfig) -> RunSummary {
+    simulate_run_with_playback(hero, config).summary
 }

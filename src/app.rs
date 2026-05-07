@@ -2,7 +2,9 @@ use crate::domain::hero::HeroProfile;
 use crate::domain::items::ItemInstance;
 use crate::domain::loot::salvage_value;
 use crate::domain::progression::UpgradeId;
-use crate::domain::run::{simulate_run, RunConfig, RunSummary};
+use crate::domain::run::{
+    simulate_run_with_playback, RunConfig, RunSimulation, RunSummary, DEFAULT_RUN_MAX_DEPTH,
+};
 use crate::save::{load_profile, save_profile, SaveProfile};
 use crate::ui::UiPlugin;
 use bevy::prelude::*;
@@ -50,7 +52,23 @@ pub struct BuyUpgrade {
 #[derive(Debug, Clone, Copy, Event)]
 pub struct ReturnToBuild;
 
-/// Display-only run speed multiplier (combat simulation uses fixed ticks for now).
+#[derive(Debug, Clone, Event)]
+pub struct SkipRunPlayback;
+
+/// Wipe save to [`SaveProfile::default`] and return to briefing (handled in UI).
+#[derive(Debug, Clone, Copy, Event)]
+pub struct ResetProgress;
+
+/// Playback timeline for [`GameState::Running`]; advances into [`LatestRunSummary`] unchanged.
+#[derive(Debug, Resource)]
+pub struct ActiveRunPlayback {
+    pub frames: Vec<crate::domain::run::RunPlaybackFrame>,
+    pub display_index: usize,
+    pub elapsed: f32,
+    pub log_lines: Vec<String>,
+}
+
+/// Display-only run speed multiplier (delve playback and future live combat).
 #[derive(Debug, Resource, Clone, Copy)]
 pub struct RunSpeedSetting(pub f32);
 
@@ -112,11 +130,15 @@ impl Plugin for IdleDungeonsPlugin {
             .add_event::<SalvageInventoryItem>()
             .add_event::<BuyUpgrade>()
             .add_event::<ReturnToBuild>()
+            .add_event::<SkipRunPlayback>()
+            .add_event::<ResetProgress>()
             .add_systems(
                 Update,
                 (
                     start_run,
                     accept_run_rewards,
+                    skip_run_playback,
+                    tick_run_playback.run_if(in_state(GameState::Running)),
                     equip_inventory_item,
                     salvage_inventory_item,
                     buy_upgrade,
@@ -134,19 +156,78 @@ fn start_run(
 ) {
     for event in events.read() {
         let hero = profile.effective_hero();
-        let summary = simulate_run(
+        let RunSimulation { summary, playback } = simulate_run_with_playback(
             &hero,
             RunConfig {
                 seed: event.seed,
-                max_depth: 25,
+                max_depth: DEFAULT_RUN_MAX_DEPTH,
             },
         );
         commands.insert_resource(LatestRunSummary {
             summary,
             rewards_accepted: false,
         });
+        let mut seed_lines = Vec::new();
+        if let Some(first) = playback.frames.first() {
+            if let Some(line) = playback_log_line(first) {
+                seed_lines.push(line);
+            }
+        }
+        commands.insert_resource(ActiveRunPlayback {
+            frames: playback.frames,
+            display_index: 0,
+            elapsed: 0.0,
+            log_lines: seed_lines,
+        });
+        next_state.set(GameState::Running);
+    }
+}
+
+fn skip_run_playback(
+    mut events: EventReader<SkipRunPlayback>,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
+    for _ in events.read() {
         next_state.set(GameState::Summary);
     }
+}
+
+/// Seconds per playback step at 1x speed; scaled by [`RunSpeedSetting`].
+const PLAYBACK_STEP_SECS: f32 = 0.52;
+
+fn tick_run_playback(
+    time: Res<Time>,
+    speed: Res<RunSpeedSetting>,
+    mut playback: ResMut<ActiveRunPlayback>,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
+    if playback.frames.is_empty() {
+        next_state.set(GameState::Summary);
+        return;
+    }
+
+    playback.elapsed += time.delta_seconds() * speed.0;
+    while playback.elapsed >= PLAYBACK_STEP_SECS {
+        playback.elapsed -= PLAYBACK_STEP_SECS;
+        if playback.display_index + 1 < playback.frames.len() {
+            playback.display_index += 1;
+            if let Some(line) = playback_log_line(&playback.frames[playback.display_index]) {
+                playback.log_lines.push(line);
+            }
+        } else {
+            next_state.set(GameState::Summary);
+            return;
+        }
+    }
+}
+
+fn playback_log_line(frame: &crate::domain::run::RunPlaybackFrame) -> Option<String> {
+    Some(match &frame.kind {
+        crate::domain::run::RunPlaybackFrameKind::Narration { text } => text.clone(),
+        crate::domain::run::RunPlaybackFrameKind::Combat(c) => {
+            format!("[Depth {}] {}", frame.depth, c.caption)
+        }
+    })
 }
 
 fn accept_run_rewards(
@@ -307,6 +388,8 @@ mod tests {
         app.insert_resource(ProfileSavePath(save_path.clone()));
         app.add_plugins(IdleDungeonsPlugin);
         app.world_mut().send_event(StartRun { seed: 1 });
+        app.update();
+        app.world_mut().send_event(SkipRunPlayback);
         app.update();
 
         let summary = app.world().resource::<LatestRunSummary>().summary.clone();
