@@ -1053,6 +1053,7 @@ fn sync_run_playback_ui(
     };
 
     let log_body = playback.log_lines.join("\n");
+    let log_rich = crate::ui::theme::playback_log_rich_text(&playback.log_lines);
 
     for mut text in params.p0().iter_mut() {
         if text.sections[0].value != depth_s {
@@ -1075,8 +1076,8 @@ fn sync_run_playback_ui(
         }
     }
     for mut text in params.p4().iter_mut() {
-        if text.sections[0].value != log_body {
-            text.sections[0].value = log_body.clone();
+        if crate::ui::theme::text_flatten(&text) != log_body {
+            text.sections = log_rich.sections.clone();
         }
     }
 
@@ -1122,14 +1123,16 @@ fn sync_run_playback_debuff_slots(
             c.enemy_debuff_slots.join("  ·  "),
         ),
     };
+    let hero_text = crate::ui::theme::playback_debuff_status_text(&hero_line);
+    let foe_text = crate::ui::theme::playback_debuff_status_text(&foe_line);
     for mut text in &mut hero {
-        if text.sections[0].value != hero_line {
-            text.sections[0].value = hero_line.clone();
+        if crate::ui::theme::text_flatten(&text) != hero_line {
+            text.sections = hero_text.sections.clone();
         }
     }
     for mut text in &mut foe {
-        if text.sections[0].value != foe_line {
-            text.sections[0].value = foe_line.clone();
+        if crate::ui::theme::text_flatten(&text) != foe_line {
+            text.sections = foe_text.sections.clone();
         }
     }
 }

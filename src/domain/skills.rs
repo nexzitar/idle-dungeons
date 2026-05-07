@@ -76,7 +76,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             name: "Poison Edge",
             trigger: SkillTrigger::OnAttack,
             tags: &[SkillTag::Attack, SkillTag::Poison],
-            description: "Attacks apply poison.",
+            description: "Attacks stack poison; it ticks each moment for more damage at higher stacks (capped).",
         },
         SkillId::ThornSkin => SkillDefinition {
             id,

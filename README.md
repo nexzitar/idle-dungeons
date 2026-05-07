@@ -46,10 +46,10 @@ Prefer small, tested changes in `src/domain/` first, then wire through Bevy even
 
 Near-term goals to deepen the MVP:
 
-- **Combat vs skill catalog** — Most skills have definitions and UI copy; extend `simulate_combat` so Guard, Heavy Strike, Poison, Thorns, Barrier, etc. change outcomes in tested ways (not only Lifesteal).
-- **Stash honesty** — Either implement minimal filter/sort for inventory/loot or replace placeholder “Filters | Sort” copy with neutral text.
-- **Run / world variety** — More room types, affix interplay, and clarity of risk/reward on the briefing screen.
-- **Presentation** — Art pass, clearer typography, animation on playback; keep simulation-driven architecture.
+- **Combat vs skill catalog** — Core skills are wired in `simulate_combat` (Guard, Heavy Strike, Poison DoT with stacking ticks, Thorns, Barrier, Lifesteal) with tests; remaining work is mostly tuning, new skills, and keeping `skill_definition` copy aligned with behavior.
+- **Stash** — Sort by recent vs rarity/name is implemented and persisted; filters / richer inventory UX are still future scope.
+- **Run / world variety** — More room types and affix interplay; playback/summary already surface per-room risk hints and peak risk from the simulation.
+- **Presentation** — Art pass, animation on playback (bars/text), optional easing; keep simulation-driven architecture.
 
 Longer-term (post-MVP direction):
 

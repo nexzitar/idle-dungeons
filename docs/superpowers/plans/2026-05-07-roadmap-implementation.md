@@ -211,16 +211,5 @@ Defer until Phases A–D feel good in playtests:
 ## Self-review (plan author)
 
 1. **Spec coverage:** README bullets mapped — A=combat depth, B=stash, C=variety+briefing, D=presentation, E=deferred.
-2. **Placeholders:** No `TBD`; poison test uses `todo!` only as intentional failing scaffold in Step 1 — remove before merge.
+2. **Placeholders:** No `TBD`; poison DoT work landed with real tests (no `todo!` scaffolds).
 3. **Consistency:** Task A.2 state variables must match `CombatPlaybackFrame` / `combat_playback_frames_from_result` (update if new event ordering changes HP snapshots).
-
----
-
-## Execution handoff
-
-**Plan complete and saved to `docs/superpowers/plans/2026-05-07-roadmap-implementation.md`. Two execution options:**
-
-1. **Subagent-Driven (recommended)** — Fresh subagent per task, review between tasks, fast iteration (**superpowers:subagent-driven-development**).
-2. **Inline Execution** — Batch tasks in this session with checkpoints (**superpowers:executing-plans**).
-
-**Which approach do you want?**

@@ -20,7 +20,7 @@ use crate::ui::components::{
 };
 use crate::ui::theme::{
     body_text, caption_text, format_item_stat_summary, headline_text, log_line_present,
-    rarity_color, section_title, UiTheme,
+    playback_debuff_text_bundle, rarity_color, section_title, UiTheme,
 };
 use crate::ui::widgets::spawn_scrollable_log;
 
@@ -1022,11 +1022,17 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildBuilder) {
                 col.spawn(caption_text("Your health"));
                 playback_hero_bar(col, 1.0);
                 col.spawn(caption_text("Hero statuses"));
-                col.spawn((caption_text("—  ·  —  ·  —  ·  —"), PlaybackHeroDebuffLine));
+                col.spawn((
+                    playback_debuff_text_bundle("—  ·  —  ·  —  ·  —"),
+                    PlaybackHeroDebuffLine,
+                ));
                 col.spawn(caption_text("Foe"));
                 playback_enemy_bar(col, 1.0);
                 col.spawn(caption_text("Enemy statuses"));
-                col.spawn((caption_text("—  ·  —  ·  —  ·  —"), PlaybackEnemyDebuffLine));
+                col.spawn((
+                    playback_debuff_text_bundle("—  ·  —  ·  —  ·  —"),
+                    PlaybackEnemyDebuffLine,
+                ));
             });
         });
         p.spawn(section_title("NOW"));

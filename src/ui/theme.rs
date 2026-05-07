@@ -133,6 +133,11 @@ impl UiTheme {
         Color::srgb(0.45, 0.62, 0.48)
     }
 
+    /// Toxic / debuff accent (poison chips, poison lines in the log). Distinct from [`Self::healing`].
+    pub fn status_poison() -> Color {
+        Color::srgb(0.52, 0.64, 0.38)
+    }
+
     pub fn treasure() -> Color {
         Color::srgb(0.85, 0.7, 0.42)
     }
@@ -163,6 +168,9 @@ pub fn log_line_present(line: &str) -> (Color, f32) {
     if lower.contains("elite") {
         return (UiTheme::elite(), UiTheme::FONT_SECTION);
     }
+    if lower.contains("poison") {
+        return (UiTheme::status_poison(), UiTheme::FONT_SUBLINE);
+    }
     if lower.contains("shrine") {
         return (UiTheme::healing(), UiTheme::FONT_SUBLINE);
     }
@@ -173,6 +181,82 @@ pub fn log_line_present(line: &str) -> (Color, f32) {
         return (UiTheme::body(), UiTheme::FONT_BODY);
     }
     (UiTheme::body_dim(), UiTheme::FONT_COMPACT)
+}
+
+/// Separator between status chips on playback hero/enemy debuff lines (must match domain/UI join).
+pub const PLAYBACK_DEBUFF_SLOT_SEP: &str = "  ·  ";
+
+/// Rich caption for a single debuff line: poison chips use [`UiTheme::status_poison`], empty `—` slots stay dim.
+pub fn playback_debuff_status_text(line: &str) -> Text {
+    let style_dim = TextStyle {
+        font_size: UiTheme::FONT_CAPTION,
+        color: UiTheme::body_dim(),
+        ..default()
+    };
+    let style_poison = TextStyle {
+        font_size: UiTheme::FONT_CAPTION,
+        color: UiTheme::status_poison(),
+        ..default()
+    };
+    let parts: Vec<&str> = line.split(PLAYBACK_DEBUFF_SLOT_SEP).collect();
+    let mut sections = Vec::with_capacity(parts.len().max(1));
+    for (i, part) in parts.iter().enumerate() {
+        let prefix: &str = if i == 0 { "" } else { PLAYBACK_DEBUFF_SLOT_SEP };
+        let style = if part.trim_start().starts_with("Poison") {
+            style_poison.clone()
+        } else {
+            style_dim.clone()
+        };
+        sections.push(TextSection::new(format!("{prefix}{part}"), style));
+    }
+    if sections.is_empty() {
+        Text::from_section("", style_dim)
+    } else {
+        Text::from_sections(sections)
+    }
+}
+
+pub fn playback_debuff_text_bundle(line: &str) -> TextBundle {
+    TextBundle {
+        text: playback_debuff_status_text(line),
+        ..default()
+    }
+}
+
+/// Combat log body for playback: one styled section per line (newlines between), using [`log_line_present`].
+pub fn playback_log_rich_text(lines: &[String]) -> Text {
+    if lines.is_empty() {
+        return Text::from_section(
+            "",
+            TextStyle {
+                font_size: UiTheme::FONT_COMPACT,
+                color: UiTheme::body_dim(),
+                ..default()
+            },
+        );
+    }
+    let mut sections = Vec::with_capacity(lines.len());
+    for (i, line) in lines.iter().enumerate() {
+        let (color, size) = log_line_present(line);
+        let mut value = line.clone();
+        if i + 1 < lines.len() {
+            value.push('\n');
+        }
+        sections.push(TextSection::new(
+            value,
+            TextStyle {
+                font_size: size,
+                color,
+                ..default()
+            },
+        ));
+    }
+    Text::from_sections(sections)
+}
+
+/// Flatten multi-section [`Text`] for comparing against a joined log string.
+pub fn text_flatten(text: &Text) -> String {
+    text.sections.iter().map(|s| s.value.as_str()).collect()
 }
 
 pub fn headline_text(text: impl Into<String>) -> TextBundle {
