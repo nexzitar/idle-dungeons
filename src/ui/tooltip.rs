@@ -1,5 +1,6 @@
 //! Cursor-following hover tooltips with a short delay.
 
+use bevy::input::touch::Touches;
 use bevy::prelude::*;
 use bevy::ui::{FocusPolicy, ZIndex};
 use bevy::window::PrimaryWindow;
@@ -19,6 +20,8 @@ pub struct TooltipText;
 pub struct TooltipState {
     delay: Timer,
     tracked: Option<Entity>,
+    /// While true, the tooltip stays hidden so it cannot sit above buttons between press and release.
+    suppress_until_pointer_release: bool,
 }
 
 impl Default for TooltipState {
@@ -26,6 +29,7 @@ impl Default for TooltipState {
         Self {
             delay: Timer::from_seconds(0.38, TimerMode::Once),
             tracked: None,
+            suppress_until_pointer_release: false,
         }
     }
 }
@@ -55,18 +59,37 @@ pub fn spawn_tooltip_layer(parent: &mut ChildBuilder) {
             TooltipLayer,
         ))
         .with_children(|layer| {
-            layer.spawn((
-                TextBundle::from_section(
-                    "",
-                    TextStyle {
-                        font_size: 13.0,
-                        color: UiTheme::body(),
-                        ..default()
-                    },
-                ),
-                TooltipText,
-            ));
+            let mut text_bundle = TextBundle::from_section(
+                "",
+                TextStyle {
+                    font_size: 13.0,
+                    color: UiTheme::body(),
+                    ..default()
+                },
+            );
+            text_bundle.focus_policy = FocusPolicy::Pass;
+            layer.spawn((text_bundle, TooltipText));
         });
+}
+
+/// Hide the tooltip **before** [`UiSystem::Focus`] runs so the panel does not consume the current
+/// pointer press (see `FocusPolicy::Pass` quirks with deep UI trees / global z-index).
+pub fn hide_tooltip_layer_before_pointer_focus(
+    mouse: Res<ButtonInput<MouseButton>>,
+    touches: Res<Touches>,
+    mut state: ResMut<TooltipState>,
+    mut layer_q: Query<&mut Visibility, With<TooltipLayer>>,
+) {
+    let press = mouse.just_pressed(MouseButton::Left) || touches.any_just_pressed();
+    if !press {
+        return;
+    }
+    state.suppress_until_pointer_release = true;
+    state.tracked = None;
+    state.delay.reset();
+    for mut vis in &mut layer_q {
+        *vis = Visibility::Hidden;
+    }
 }
 
 pub fn upgrade_tooltip(id: crate::domain::progression::UpgradeId) -> &'static str {
@@ -94,6 +117,8 @@ fn tooltip_interaction_ok(i: Interaction) -> bool {
 
 pub fn update_tooltip(
     time: Res<Time>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    touches: Res<Touches>,
     mut state: ResMut<TooltipState>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut layer_q: Query<(&mut Style, &mut Visibility, &Node), With<TooltipLayer>>,
@@ -122,6 +147,18 @@ pub fn update_tooltip(
     let mut hide = || {
         *vis = Visibility::Hidden;
     };
+
+    let released = mouse.just_released(MouseButton::Left) || touches.any_just_released();
+    if state.suppress_until_pointer_release {
+        if released {
+            state.suppress_until_pointer_release = false;
+        } else {
+            state.tracked = None;
+            state.delay.reset();
+            hide();
+            return;
+        }
+    }
 
     match hovered {
         None => {

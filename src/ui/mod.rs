@@ -53,6 +53,10 @@ impl Plugin for UiPlugin {
         app.init_resource::<RightPanelTab>();
         app.init_resource::<UiClickPress>();
         app.init_resource::<crate::ui::tooltip::TooltipState>();
+        app.add_systems(
+            Update,
+            crate::ui::tooltip::hide_tooltip_layer_before_pointer_focus.before(UiSystem::Focus),
+        );
         app.add_systems(Startup, spawn_camera)
             .add_systems(
                 OnEnter(GameState::Build),
