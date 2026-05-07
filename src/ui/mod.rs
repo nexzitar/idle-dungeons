@@ -197,7 +197,6 @@ fn spawn_running_screen_root(
                         crate::ui::mockup_layout::spawn_hero_column_mockup(
                             panel,
                             &hero,
-                            profile,
                             &loadout_lines,
                         );
                     });
@@ -209,6 +208,7 @@ fn spawn_running_screen_root(
                             panel,
                             tab,
                             meta,
+                            profile,
                             &profile.profile.inventory,
                             None,
                             false,
@@ -265,7 +265,6 @@ fn spawn_build_screen_root(
                         crate::ui::mockup_layout::spawn_hero_column_mockup(
                             panel,
                             &hero,
-                            profile,
                             &loadout_lines,
                         );
                     });
@@ -277,6 +276,7 @@ fn spawn_build_screen_root(
                             panel,
                             tab,
                             meta,
+                            profile,
                             &profile.profile.inventory,
                             None,
                             false,
@@ -338,7 +338,6 @@ fn spawn_summary_screen_root(
                         crate::ui::mockup_layout::spawn_hero_column_mockup(
                             panel,
                             &hero,
-                            profile,
                             &loadout_lines,
                         );
                     });
@@ -350,6 +349,7 @@ fn spawn_summary_screen_root(
                             panel,
                             tab,
                             meta,
+                            profile,
                             &profile.profile.inventory,
                             Some(summary.loot.as_slice()),
                             false,
@@ -406,7 +406,6 @@ fn spawn_upgrade_screen_root(
                         crate::ui::mockup_layout::spawn_hero_column_mockup(
                             panel,
                             &hero,
-                            profile,
                             &loadout_lines,
                         );
                     });
@@ -415,7 +414,7 @@ fn spawn_upgrade_screen_root(
                     });
                     crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
                         crate::ui::mockup_layout::spawn_right_management_column(
-                            panel, tab, meta, inventory, None, true,
+                            panel, tab, meta, profile, inventory, None, true,
                         );
                     });
                 });

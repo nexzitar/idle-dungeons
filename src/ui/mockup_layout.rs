@@ -561,7 +561,6 @@ fn panel_title_centered(text: impl Into<String>) -> TextBundle {
 pub fn spawn_hero_column_mockup(
     parent: &mut ChildBuilder,
     hero: &crate::domain::hero::HeroProfile,
-    profile: &crate::app::ProfileState,
     loadout_lines: &[String],
 ) {
     let inner = move |p: &mut ChildBuilder| {
@@ -579,8 +578,6 @@ pub fn spawn_hero_column_mockup(
                     body.spawn(caption_text(line.clone()));
                 }
             }
-            body.spawn(section_title("Equipment"));
-            mockup_gear_cards(body, profile);
             body.spawn(section_title("Skills"));
             skill_slot_row(body, hero);
         });
@@ -1243,6 +1240,7 @@ pub fn spawn_right_management_column(
     parent: &mut ChildBuilder,
     tab: RightPanelTab,
     meta: &MetaProgression,
+    profile: &crate::app::ProfileState,
     inventory: &[crate::domain::items::ItemInstance],
     summary_loot: Option<&[crate::domain::items::ItemInstance]>,
     interactive_inventory: bool,
@@ -1277,6 +1275,13 @@ pub fn spawn_right_management_column(
                 tab_btn(tabs, "LOOT", RightPanelTab::Loot, tab);
             });
             col.spawn(caption_text("Filters: all rarities   |   Sort: newest"));
+            if matches!(
+                tab,
+                RightPanelTab::Inventory | RightPanelTab::Loot
+            ) {
+                col.spawn(section_title("EQUIPMENT"));
+                mockup_gear_cards(col, profile);
+            }
             spawn_right_scroll_body(
                 col,
                 tab,
