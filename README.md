@@ -27,6 +27,7 @@ The **run simulation** (domain + `simulate_run_with_playback`) is the source of 
 ## Design documentation
 
 - Full design: `docs/superpowers/specs/2026-05-06-roguelike-incremental-bevy-design.md`
+- **Post-MVP direction (buildcraft, party, itemization):** `docs/superpowers/specs/2026-05-06-buildcraft-party-systems-roadmap.md`
 - MVP checklist: `docs/mvp-acceptance.md`
 - Skill catalog ↔ combat mapping: `docs/superpowers/plans/2026-05-07-skill-combat-catalog-mapping.md`
 - Gap / increment plan: `docs/superpowers/plans/2026-05-06-mvp-remaining-work.md`
