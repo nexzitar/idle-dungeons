@@ -2,7 +2,7 @@ use crate::domain::combat::{
     combat_playback_frames_from_result, simulate_combat, CombatOutcome, CombatPlaybackFrame,
 };
 use crate::domain::dungeon::{
-    generate_dungeon, peak_risk_note, room_risk_hint, room_risk_rank, RoomKind,
+    generate_dungeon, peak_risk_note, room_risk_hint, room_risk_rank, DungeonRoom, RoomKind,
 };
 use crate::domain::hero::HeroProfile;
 use crate::domain::items::ItemInstance;
@@ -125,6 +125,14 @@ pub fn simulate_run_with_playback(hero: &HeroProfile, config: RunConfig) -> RunS
 
 fn simulate_run_with_playback_inner(hero: &HeroProfile, config: RunConfig) -> RunSimulation {
     let rooms = generate_dungeon(config.max_depth, config.seed);
+    simulate_run_with_playback_for_rooms(hero, config, rooms)
+}
+
+fn simulate_run_with_playback_for_rooms(
+    hero: &HeroProfile,
+    config: RunConfig,
+    rooms: Vec<DungeonRoom>,
+) -> RunSimulation {
     let cap = config.max_depth.max(1);
     let mut deepest_depth = 0;
     let mut gold_earned = 0;
@@ -143,7 +151,30 @@ fn simulate_run_with_playback_inner(hero: &HeroProfile, config: RunConfig) -> Ru
         let is_boss = room.kind == RoomKind::Boss;
         match room.kind {
             RoomKind::Monster | RoomKind::Elite | RoomKind::Boss => {
-                let enemy = room.encounter.as_ref().unwrap().enemy.clone();
+                let Some(encounter) = room.encounter.as_ref() else {
+                    log.push(format!(
+                        "Depth {}: delve aborted — {:?} room has no encounter.",
+                        room.depth, room.kind
+                    ));
+                    return RunSimulation {
+                        summary: RunSummary {
+                            outcome: RunOutcome::HeroDied,
+                            deepest_depth,
+                            floors_cleared,
+                            dungeon_depth_cap: cap,
+                            gold_earned,
+                            salvage_earned,
+                            loot,
+                            death_reason: Some(
+                                "Delve aborted: invalid dungeon data (missing encounter).".into(),
+                            ),
+                            log,
+                            peak_risk_note: peak_risk_note(peak_risk_rank),
+                        },
+                        playback,
+                    };
+                };
+                let enemy = encounter.enemy.clone();
                 let at_start = hero_current_hp;
                 let combat = simulate_combat(hero, &enemy, 240, at_start);
                 for frame in combat_playback_frames_from_result(
@@ -275,4 +306,36 @@ fn simulate_run_with_playback_inner(hero: &HeroProfile, config: RunConfig) -> Ru
 
 pub fn simulate_run(hero: &HeroProfile, config: RunConfig) -> RunSummary {
     simulate_run_with_playback(hero, config).summary
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::hero::HeroProfile;
+
+    #[test]
+    fn missing_encounter_aborts_run_without_panic() {
+        let hero = HeroProfile::default();
+        let config = RunConfig::new(1, 5);
+        let rooms = vec![DungeonRoom {
+            depth: 1,
+            kind: RoomKind::Monster,
+            encounter: None,
+        }];
+        let sim = simulate_run_with_playback_for_rooms(&hero, config, rooms);
+        assert_eq!(sim.summary.outcome, RunOutcome::HeroDied);
+        assert!(
+            sim.summary
+                .death_reason
+                .as_ref()
+                .is_some_and(|s| s.contains("invalid dungeon")),
+            "{:?}",
+            sim.summary.death_reason
+        );
+        assert!(sim
+            .summary
+            .log
+            .iter()
+            .any(|line| line.contains("aborted") && line.contains("encounter")));
+    }
 }

@@ -175,6 +175,31 @@ mod tests {
     }
 
     #[test]
+    fn combat_rooms_always_have_encounters_non_combat_never() {
+        for seed in [0_u64, 1, 7, 42, 108, 999] {
+            let rooms = generate_dungeon(25, seed);
+            for room in &rooms {
+                match room.kind {
+                    RoomKind::Monster | RoomKind::Elite | RoomKind::Boss => assert!(
+                        room.encounter.is_some(),
+                        "seed {seed} depth {} {:?} must include encounter",
+                        room.depth,
+                        room.kind
+                    ),
+                    RoomKind::Treasure | RoomKind::Shrine => {
+                        assert!(
+                            room.encounter.is_none(),
+                            "seed {seed} depth {} {:?} must omit encounter",
+                            room.depth,
+                            room.kind
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn depth_scaling_increases_enemy_strength() {
         let shallow = Encounter::monster_for_depth(1, false);
         let deep = Encounter::monster_for_depth(20, false);
