@@ -2,6 +2,7 @@ pub mod build_panel;
 pub mod components;
 pub mod inventory_panel;
 pub mod log_panel;
+pub mod mockup_layout;
 pub mod run_panel;
 pub mod summary_panel;
 pub mod theme;
@@ -9,43 +10,70 @@ pub mod upgrade_panel;
 pub mod widgets;
 
 use crate::app::{
-    AcceptRunRewards, BuyUpgrade, EquipInventoryItem, GameState, LatestRunSummary, ProfileState,
-    ReturnToBuild, RunSpeedSetting, SalvageInventoryItem, StartRun,
+    AcceptRunRewards, ActiveRunPlayback, BuyUpgrade, EquipInventoryItem, GameState, LatestRunSummary,
+    ProfileState, ProfileSavePath, ResetProgress, ReturnToBuild, RunSpeedSetting, SalvageInventoryItem,
+    SkipRunPlayback, StartRun,
 };
-use crate::domain::items::GearSlot;
 use crate::domain::items::ItemInstance;
-use crate::domain::progression::UpgradeId;
-use crate::domain::skills::skill_definition;
+use crate::domain::run::{RunPlaybackFrameKind, RunSummary};
 use crate::ui::build_panel::build_panel_text;
-use crate::ui::components::*;
-use crate::ui::summary_panel::{outcome_headline, reward_digest};
-use crate::ui::theme::{
-    body_text, caption_text, format_item_stat_summary, headline_text, log_line_present,
-    rarity_color, section_title, UiTheme,
+use crate::ui::components::{
+    AcceptRewardsButton, BuildScreen, BuyUpgradeButton, EquipItemButton, MainCamera,
+    PlaybackCaptionText, PlaybackDepthText, PlaybackEnemyBarFill, PlaybackEnemyNameText,
+    PlaybackHeroBarFill, PlaybackLogScrollRegion, PlaybackLogText, PlaybackProgressBarFill,
+    PlaybackProgressLabel, PlaybackRoomKindText,
+    ResetProgressButton, ReturnToBuildButton, RunPlaybackScreen, SalvageItemButton, SettingsButton,
+    SettingsModalBackdrop, SettingsModalCloseButton, SettingsModalRoot, SettingsModalSpeedButton,
+    SettingsModalSpeedLabel, SkipPlaybackButton, StartRunButton, SummaryScreen, TopBarField,
+    UiButtonPalette, UiRoot, UiScrollContent, UiScrollRegion, UiScrollState, UpgradeScreen,
 };
-use crate::ui::widgets::{
-    spawn_atmosphere, spawn_bottom_strip, spawn_framed_panel, spawn_top_resource_bar,
-};
+use crate::ui::mockup_layout::RightPanelTab;
+use crate::ui::theme::{body_text, caption_text, format_item_stat_summary, rarity_color, UiTheme};
+use crate::ui::widgets::spawn_atmosphere;
+use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
+use bevy::transform::TransformSystem;
+use bevy::ui::RelativeCursorPosition;
 
 pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
+        app.init_resource::<RightPanelTab>();
+        app.add_event::<MouseWheel>();
         app.add_systems(Startup, spawn_camera)
-            .add_systems(OnEnter(GameState::Build), spawn_build_screen)
+            .add_systems(
+                OnEnter(GameState::Build),
+                (reset_right_tab_inventory, spawn_build_screen).chain(),
+            )
             .add_systems(OnExit(GameState::Build), cleanup_ui)
+            .add_systems(OnEnter(GameState::Running), spawn_running_screen)
+            .add_systems(OnExit(GameState::Running), cleanup_running_exit)
             .add_systems(
                 Update,
                 (
+                    apply_ui_button_palettes,
                     handle_start_button.run_if(in_state(GameState::Build)),
+                    handle_skip_playback_button.run_if(in_state(GameState::Running)),
+                    (send_reset_progress_requests, fulfill_reset_progress).chain(),
                     sync_top_bar,
-                    handle_settings_button,
+                    sync_run_playback_ui.run_if(in_state(GameState::Running)),
+                    sync_playback_delve_progress_bar.run_if(in_state(GameState::Running)),
+                    open_settings_modal,
+                    close_settings_modal,
+                    handle_settings_modal_speed,
+                    handle_right_panel_tab_buttons,
                 ),
             )
-            .add_systems(OnEnter(GameState::Summary), spawn_summary_screen)
+            .add_systems(
+                OnEnter(GameState::Summary),
+                (reset_right_tab_loot, spawn_summary_screen).chain(),
+            )
             .add_systems(OnExit(GameState::Summary), cleanup_ui)
-            .add_systems(OnEnter(GameState::Upgrades), spawn_upgrade_screen)
+            .add_systems(
+                OnEnter(GameState::Upgrades),
+                (reset_right_tab_camp, spawn_upgrade_screen).chain(),
+            )
             .add_systems(OnExit(GameState::Upgrades), cleanup_ui)
             .add_systems(
                 Update,
@@ -63,7 +91,13 @@ impl Plugin for UiPlugin {
             )
             .add_systems(
                 PostUpdate,
-                refresh_upgrade_screen_on_profile_change.run_if(in_state(GameState::Upgrades)),
+                (
+                    apply_ui_scroll.after(TransformSystem::TransformPropagate),
+                    pin_playback_combat_log_scroll
+                        .run_if(in_state(GameState::Running))
+                        .after(apply_ui_scroll),
+                    refresh_upgrade_screen_on_profile_change.run_if(in_state(GameState::Upgrades)),
+                ),
             );
     }
 }
@@ -103,112 +137,156 @@ fn content_column_bundle() -> NodeBundle {
     }
 }
 
-fn main_split_row_bundle() -> NodeBundle {
-    NodeBundle {
-        style: Style {
-            width: Val::Percent(100.0),
-            flex_grow: 1.0,
-            flex_basis: Val::Px(0.0),
-            min_height: Val::Px(0.0),
-            flex_direction: FlexDirection::Row,
-            column_gap: Val::Px(14.0),
-            align_items: AlignItems::Stretch,
-            ..default()
-        },
-        ..default()
+fn reset_right_tab_inventory(mut tab: ResMut<RightPanelTab>) {
+    *tab = RightPanelTab::Inventory;
+}
+
+fn reset_right_tab_loot(mut tab: ResMut<RightPanelTab>) {
+    *tab = RightPanelTab::Loot;
+}
+
+fn reset_right_tab_camp(mut tab: ResMut<RightPanelTab>) {
+    *tab = RightPanelTab::Inventory;
+}
+
+fn cleanup_running_exit(mut commands: Commands, roots: Query<Entity, With<UiRoot>>) {
+    for root in &roots {
+        commands.entity(root).despawn_recursive();
     }
+    commands.remove_resource::<ActiveRunPlayback>();
+}
+
+fn spawn_running_screen(
+    mut commands: Commands,
+    profile: Res<ProfileState>,
+    speed: Res<RunSpeedSetting>,
+    tab: Res<RightPanelTab>,
+) {
+    spawn_running_screen_root(&mut commands, &profile, speed.0, *tab);
+}
+
+fn spawn_running_screen_root(
+    commands: &mut Commands,
+    profile: &ProfileState,
+    speed_mult: f32,
+    tab: RightPanelTab,
+) {
+    let hero = profile.effective_hero();
+    let meta = &profile.profile.meta;
+    let loadout_lines: Vec<String> = build_panel_text(&hero)
+        .lines()
+        .map(|s| s.to_string())
+        .collect();
+
+    commands
+        .spawn((root_shell(), UiRoot, RunPlaybackScreen))
+        .with_children(|root| {
+            spawn_atmosphere(root);
+            root.spawn(content_column_bundle()).with_children(|col| {
+                crate::ui::mockup_layout::spawn_mockup_header(
+                    col,
+                    meta.gold,
+                    meta.salvage,
+                    meta.unlocked_skill_slots,
+                    hero.equipped_skills.len(),
+                    "—",
+                    speed_mult,
+                );
+                crate::ui::mockup_layout::spawn_three_column_row(col, |row| {
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 0.95, |panel| {
+                        crate::ui::mockup_layout::spawn_hero_column_mockup(
+                            panel,
+                            &hero,
+                            profile,
+                            &loadout_lines,
+                        );
+                    });
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.05, |panel| {
+                        crate::ui::mockup_layout::spawn_run_playback_middle_column(panel);
+                    });
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
+                        crate::ui::mockup_layout::spawn_right_management_column(
+                            panel,
+                            tab,
+                            meta,
+                            &profile.profile.inventory,
+                            None,
+                            false,
+                        );
+                    });
+                });
+                crate::ui::mockup_layout::spawn_mockup_footer(
+                    col,
+                    crate::ui::mockup_layout::FooterMode::DelvePlayback,
+                );
+            });
+        });
 }
 
 fn spawn_build_screen(
     mut commands: Commands,
     profile: Res<ProfileState>,
     speed: Res<RunSpeedSetting>,
+    tab: Res<RightPanelTab>,
+) {
+    spawn_build_screen_root(&mut commands, &profile, speed.0, *tab);
+}
+
+fn spawn_build_screen_root(
+    commands: &mut Commands,
+    profile: &ProfileState,
+    speed_mult: f32,
+    tab: RightPanelTab,
 ) {
     let hero = profile.effective_hero();
     let meta = &profile.profile.meta;
-    let build_compact = build_panel_text(&hero);
+    let loadout_lines: Vec<String> = build_panel_text(&hero)
+        .lines()
+        .map(|s| s.to_string())
+        .collect();
+    let stash = profile.profile.inventory.len();
 
     commands
-        .spawn((root_shell(), UiRoot))
+        .spawn((root_shell(), UiRoot, BuildScreen))
         .with_children(|root| {
             spawn_atmosphere(root);
             root.spawn(content_column_bundle()).with_children(|col| {
-                spawn_top_resource_bar(
+                crate::ui::mockup_layout::spawn_mockup_header(
                     col,
                     meta.gold,
                     meta.salvage,
                     meta.unlocked_skill_slots,
+                    hero.equipped_skills.len(),
                     "—",
-                    speed.0,
+                    speed_mult,
                 );
-                col.spawn(main_split_row_bundle()).with_children(|row| {
-                    spawn_framed_panel(row, 1.0, |panel| {
-                        panel.spawn(headline_text("Delver"));
-                        panel.spawn(section_title("Party status"));
-                        for line in build_compact.lines() {
-                            panel.spawn(body_text(line.to_string()));
-                        }
-                        spawn_skills_section(panel, &hero);
-                        spawn_gear_slots(panel, &profile);
+                crate::ui::mockup_layout::spawn_three_column_row(col, |row| {
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 0.95, |panel| {
+                        crate::ui::mockup_layout::spawn_hero_column_mockup(
+                            panel,
+                            &hero,
+                            profile,
+                            &loadout_lines,
+                        );
                     });
-                    spawn_framed_panel(row, 1.05, |panel| {
-                        panel.spawn(headline_text("Expedition"));
-                        panel.spawn(body_text(
-                            "Rostrum briefing — your delver will fight, loot, and retreat on their own.",
-                        ));
-                        panel.spawn(caption_text(
-                            "No live combat feed yet: resolution is instant, then you review chronicles.",
-                        ));
-                        panel.spawn(caption_text(format!(
-                            "Stash waiting: {} items",
-                            profile.profile.inventory.len()
-                        )));
-                        panel.spawn(NodeBundle {
-                            style: Style {
-                                width: Val::Percent(100.0),
-                                height: Val::Px(1.0),
-                                margin: UiRect::vertical(Val::Px(8.0)),
-                                ..default()
-                            },
-                            background_color: UiTheme::panel_border_inner().into(),
-                            ..default()
-                        });
-                        panel
-                            .spawn((
-                                ButtonBundle {
-                                    style: Style {
-                                        width: Val::Percent(100.0),
-                                        max_width: Val::Px(320.0),
-                                        height: Val::Px(52.0),
-                                        justify_content: JustifyContent::Center,
-                                        align_items: AlignItems::Center,
-                                        align_self: AlignSelf::FlexStart,
-                                        margin: UiRect::top(Val::Px(6.0)),
-                                        ..default()
-                                    },
-                                    background_color: UiTheme::muted_red().into(),
-                                    ..default()
-                                },
-                                StartRunButton,
-                            ))
-                            .with_children(|button| {
-                                button.spawn(TextBundle::from_section(
-                                    "Begin Delve",
-                                    TextStyle {
-                                        font_size: 20.0,
-                                        color: Color::WHITE,
-                                        ..default()
-                                    },
-                                ));
-                            });
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.05, |panel| {
+                        crate::ui::mockup_layout::spawn_dungeon_briefing_column(panel, stash);
+                    });
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
+                        crate::ui::mockup_layout::spawn_right_management_column(
+                            panel,
+                            tab,
+                            meta,
+                            &profile.profile.inventory,
+                            None,
+                            false,
+                        );
                     });
                 });
-                spawn_bottom_strip(col, |strip| {
-                    strip.spawn(section_title("Bandcamp notes"));
-                    strip.spawn(body_text(
-                        "After each run you will manage stash, gear, and permanent upgrades before delving again.",
-                    ));
-                });
+                crate::ui::mockup_layout::spawn_mockup_footer(
+                    col,
+                    crate::ui::mockup_layout::FooterMode::Briefing,
+                );
             });
         });
 }
@@ -218,117 +296,70 @@ fn spawn_summary_screen(
     profile: Res<ProfileState>,
     latest_summary: Option<Res<LatestRunSummary>>,
     speed: Res<RunSpeedSetting>,
+    tab: Res<RightPanelTab>,
 ) {
     let summary = latest_summary
         .as_deref()
         .map(|s| s.summary.clone())
-        .unwrap_or_else(|| crate::ui::summary_panel::empty_run_summary());
+        .unwrap_or_else(crate::ui::summary_panel::empty_run_summary);
+    spawn_summary_screen_root(&mut commands, &profile, &summary, speed.0, *tab);
+}
+
+fn spawn_summary_screen_root(
+    commands: &mut Commands,
+    profile: &ProfileState,
+    summary: &RunSummary,
+    speed_mult: f32,
+    tab: RightPanelTab,
+) {
     let meta = &profile.profile.meta;
     let hero = profile.effective_hero();
+    let loadout_lines: Vec<String> = build_panel_text(&hero)
+        .lines()
+        .map(|s| s.to_string())
+        .collect();
 
     commands
         .spawn((root_shell(), UiRoot, SummaryScreen))
         .with_children(|root| {
             spawn_atmosphere(root);
             root.spawn(content_column_bundle()).with_children(|col| {
-                spawn_top_resource_bar(
+                crate::ui::mockup_layout::spawn_mockup_header(
                     col,
                     meta.gold,
                     meta.salvage,
                     meta.unlocked_skill_slots,
+                    hero.equipped_skills.len(),
                     &summary.deepest_depth.to_string(),
-                    speed.0,
+                    speed_mult,
                 );
-                col.spawn(main_split_row_bundle()).with_children(|row| {
-                    spawn_framed_panel(row, 0.95, |panel| {
-                        panel.spawn(headline_text("Delver (pre-reward)"));
-                        panel.spawn(section_title("Loadout"));
-                        for line in build_panel_text(&hero).lines() {
-                            panel.spawn(body_text(line.to_string()));
-                        }
-                        spawn_skills_section(panel, &hero);
-                        spawn_gear_slots(panel, &profile);
+                crate::ui::mockup_layout::spawn_three_column_row(col, |row| {
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 0.95, |panel| {
+                        crate::ui::mockup_layout::spawn_hero_column_mockup(
+                            panel,
+                            &hero,
+                            profile,
+                            &loadout_lines,
+                        );
                     });
-                    spawn_framed_panel(row, 1.1, |panel| {
-                        panel.spawn(headline_text("Run chronicle"));
-                        panel.spawn(TextBundle::from_section(
-                            outcome_headline(&summary),
-                            TextStyle {
-                                font_size: 18.0,
-                                color: UiTheme::muted_cream(),
-                                ..default()
-                            },
-                        ));
-                        panel.spawn(caption_text(reward_digest(&summary)));
-                        panel.spawn(section_title("Signal events"));
-                        panel
-                            .spawn(NodeBundle {
-                                style: Style {
-                                    width: Val::Percent(100.0),
-                                    max_height: Val::Px(220.0),
-                                    padding: UiRect::all(Val::Px(10.0)),
-                                    flex_direction: FlexDirection::Column,
-                                    align_items: AlignItems::FlexStart,
-                                    row_gap: Val::Px(4.0),
-                                    overflow: Overflow::clip_y(),
-                                    border: UiRect::all(Val::Px(1.0)),
-                                    ..default()
-                                },
-                                background_color: UiTheme::panel_bg_deep().into(),
-                                border_color: BorderColor(UiTheme::panel_border_inner()),
-                                ..default()
-                            })
-                            .with_children(|log| {
-                                for line in summary.log.iter() {
-                                    let (color, size) = log_line_present(line);
-                                    log.spawn(TextBundle::from_section(
-                                        line.clone(),
-                                        TextStyle {
-                                            font_size: size,
-                                            color,
-                                            ..default()
-                                        },
-                                    ));
-                                }
-                            });
-                        panel
-                            .spawn((
-                                ButtonBundle {
-                                    style: Style {
-                                        width: Val::Percent(100.0),
-                                        max_width: Val::Px(360.0),
-                                        height: Val::Px(52.0),
-                                        justify_content: JustifyContent::Center,
-                                        align_items: AlignItems::Center,
-                                        align_self: AlignSelf::FlexStart,
-                                        margin: UiRect::top(Val::Px(10.0)),
-                                        ..default()
-                                    },
-                                    background_color: UiTheme::muted_red().into(),
-                                    ..default()
-                                },
-                                AcceptRewardsButton,
-                            ))
-                            .with_children(|button| {
-                                button.spawn(TextBundle::from_section(
-                                    "Accept rewards & continue",
-                                    TextStyle {
-                                        font_size: 18.0,
-                                        color: Color::WHITE,
-                                        ..default()
-                                    },
-                                ));
-                            });
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.05, |panel| {
+                        crate::ui::mockup_layout::spawn_dungeon_summary_column(panel, summary);
+                    });
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
+                        crate::ui::mockup_layout::spawn_right_management_column(
+                            panel,
+                            tab,
+                            meta,
+                            &profile.profile.inventory,
+                            Some(summary.loot.as_slice()),
+                            false,
+                        );
                     });
                 });
-                spawn_bottom_strip(col, |strip| {
-                    strip.spawn(section_title("Loot arriving"));
-                    strip.spawn(caption_text(format!(
-                        "{} pieces earmarked for stash · Salvage +{}",
-                        summary.loot.len(),
-                        summary.salvage_earned
-                    )));
-                });
+                crate::ui::mockup_layout::spawn_mockup_footer(
+                    col,
+                    crate::ui::mockup_layout::FooterMode::Summary,
+                );
             });
         });
 }
@@ -337,14 +368,23 @@ fn spawn_upgrade_screen(
     mut commands: Commands,
     profile: Res<ProfileState>,
     speed: Res<RunSpeedSetting>,
+    tab: Res<RightPanelTab>,
 ) {
-    spawn_upgrade_screen_root(&mut commands, &profile, speed.0);
+    spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab);
 }
 
-fn spawn_upgrade_screen_root(commands: &mut Commands, profile: &ProfileState, speed_mult: f32) {
+fn spawn_upgrade_screen_root(
+    commands: &mut Commands,
+    profile: &ProfileState,
+    speed_mult: f32,
+    tab: RightPanelTab,
+) {
     let hero = profile.effective_hero();
-    let stats = hero.derived_stats();
     let meta = &profile.profile.meta;
+    let loadout_lines: Vec<String> = build_panel_text(&hero)
+        .lines()
+        .map(|s| s.to_string())
+        .collect();
     let inventory = &profile.profile.inventory;
 
     commands
@@ -352,149 +392,104 @@ fn spawn_upgrade_screen_root(commands: &mut Commands, profile: &ProfileState, sp
         .with_children(|root| {
             spawn_atmosphere(root);
             root.spawn(content_column_bundle()).with_children(|col| {
-                spawn_top_resource_bar(
+                crate::ui::mockup_layout::spawn_mockup_header(
                     col,
                     meta.gold,
                     meta.salvage,
                     meta.unlocked_skill_slots,
+                    hero.equipped_skills.len(),
                     "—",
                     speed_mult,
                 );
-                col.spawn(main_split_row_bundle()).with_children(|row| {
-                    spawn_framed_panel(row, 1.0, |panel| {
-                        panel.spawn(headline_text("Delver"));
-                        panel.spawn(body_text(format!(
-                            "HP {} · DMG {} · ARM {} · HEAL {}",
-                            stats.max_health, stats.damage, stats.armor, stats.healing_power
-                        )));
-                        spawn_skills_section(panel, &hero);
-                        spawn_gear_slots(panel, profile);
-                        panel
-                            .spawn((
-                                ButtonBundle {
-                                    style: Style {
-                                        width: Val::Percent(100.0),
-                                        max_width: Val::Px(300.0),
-                                        height: Val::Px(50.0),
-                                        justify_content: JustifyContent::Center,
-                                        align_items: AlignItems::Center,
-                                        align_self: AlignSelf::FlexStart,
-                                        margin: UiRect::top(Val::Px(12.0)),
-                                        ..default()
-                                    },
-                                    background_color: UiTheme::muted_red().into(),
-                                    ..default()
-                                },
-                                ReturnToBuildButton,
-                            ))
-                            .with_children(|button| {
-                                button.spawn(TextBundle::from_section(
-                                    "Return to bastion briefing",
-                                    TextStyle {
-                                        font_size: 17.0,
-                                        color: Color::WHITE,
-                                        ..default()
-                                    },
-                                ));
-                            });
+                crate::ui::mockup_layout::spawn_three_column_row(col, |row| {
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 0.95, |panel| {
+                        crate::ui::mockup_layout::spawn_hero_column_mockup(
+                            panel,
+                            &hero,
+                            profile,
+                            &loadout_lines,
+                        );
                     });
-                    spawn_framed_panel(row, 1.05, |panel| {
-                        panel.spawn(headline_text("Expedition theater"));
-                        panel.spawn(body_text(
-                            "Live encounter feed arrives in a later milestone — review chronicles after each delve for now.",
-                        ));
-                        panel.spawn(caption_text(
-                            "Tip: keep the log concise by running shorter seeds while iterating loadouts.",
-                        ));
-                        panel.spawn(section_title("Camp actions"));
-                        panel.spawn(body_text(
-                            "Stash, forging contracts, and meta upgrades live in the band below.",
-                        ));
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.05, |panel| {
+                        crate::ui::mockup_layout::spawn_dungeon_camp_column(panel);
+                    });
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
+                        crate::ui::mockup_layout::spawn_right_management_column(
+                            panel, tab, meta, inventory, None, true,
+                        );
                     });
                 });
-                spawn_bottom_strip(col, |strip| {
-                    strip.spawn(section_title("Stash & caravan contracts"));
-                    if inventory.is_empty() {
-                        strip.spawn(caption_text("Stash is empty — the dungeon owes you loot."));
-                    } else {
-                        strip.spawn(NodeBundle {
-                            style: Style {
-                                width: Val::Percent(100.0),
-                                flex_direction: FlexDirection::Column,
-                                row_gap: Val::Px(10.0),
-                                align_items: AlignItems::Stretch,
-                                ..default()
-                            },
-                            ..default()
-                        })
-                        .with_children(|list| {
-                            for item in inventory.iter().take(8) {
-                                spawn_item_card(list, item);
-                            }
-                        });
-                    }
-                    strip.spawn(section_title("Permanent upgrades"));
-                    strip.spawn(NodeBundle {
-                        style: Style {
-                            width: Val::Percent(100.0),
-                            flex_direction: FlexDirection::Row,
-                            flex_wrap: FlexWrap::Wrap,
-                            align_items: AlignItems::Center,
-                            column_gap: Val::Px(8.0),
-                            row_gap: Val::Px(8.0),
-                            ..default()
-                        },
-                        ..default()
-                    })
-                    .with_children(|grid| {
-                        for upgrade in [
-                            UpgradeId::MaxHealth,
-                            UpgradeId::BaseDamage,
-                            UpgradeId::Armor,
-                            UpgradeId::HealingPower,
-                            UpgradeId::GoldGain,
-                        ] {
-                            grid.spawn((
-                                ButtonBundle {
-                                    style: Style {
-                                        min_width: Val::Px(200.0),
-                                        height: Val::Px(40.0),
-                                        justify_content: JustifyContent::Center,
-                                        align_items: AlignItems::Center,
-                                        padding: UiRect::axes(Val::Px(12.0), Val::Px(6.0)),
-                                        ..default()
-                                    },
-                                    background_color: UiTheme::panel_bg_deep().into(),
-                                    border_color: BorderColor(UiTheme::panel_border()),
-                                    ..default()
-                                },
-                                BuyUpgradeButton { upgrade },
-                            ))
-                            .with_children(|button| {
-                                button.spawn(TextBundle::from_section(
-                                    format!(
-                                        "{upgrade:?} L{} — {}g",
-                                        meta.upgrade_level(upgrade),
-                                        meta.upgrade_cost(upgrade)
-                                    ),
-                                    TextStyle {
-                                        font_size: 14.0,
-                                        color: UiTheme::body(),
-                                        ..default()
-                                    },
-                                ));
-                            });
-                        }
-                    });
-                });
+                crate::ui::mockup_layout::spawn_mockup_footer(
+                    col,
+                    crate::ui::mockup_layout::FooterMode::Camp,
+                );
             });
         });
+}
+
+fn handle_right_panel_tab_buttons(
+    mut interactions: Query<
+        (&Interaction, &crate::ui::mockup_layout::RightTabButton),
+        Changed<Interaction>,
+    >,
+    mut tab: ResMut<RightPanelTab>,
+    mut commands: Commands,
+    profile: Res<ProfileState>,
+    speed: Res<RunSpeedSetting>,
+    latest_summary: Option<Res<LatestRunSummary>>,
+    state: Res<State<GameState>>,
+    build_roots: Query<Entity, With<BuildScreen>>,
+    upgrade_roots: Query<Entity, With<UpgradeScreen>>,
+    summary_roots: Query<Entity, With<SummaryScreen>>,
+    running_roots: Query<Entity, With<RunPlaybackScreen>>,
+) {
+    for (interaction, btn) in &mut interactions {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        if *tab == btn.0 {
+            continue;
+        }
+        *tab = btn.0;
+
+        match state.get() {
+            GameState::Build => {
+                for e in &build_roots {
+                    commands.entity(e).despawn_recursive();
+                }
+                spawn_build_screen_root(&mut commands, &profile, speed.0, *tab);
+            }
+            GameState::Upgrades => {
+                for e in &upgrade_roots {
+                    commands.entity(e).despawn_recursive();
+                }
+                spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab);
+            }
+            GameState::Summary => {
+                let summary = latest_summary
+                    .as_deref()
+                    .map(|s| s.summary.clone())
+                    .unwrap_or_else(crate::ui::summary_panel::empty_run_summary);
+                for e in &summary_roots {
+                    commands.entity(e).despawn_recursive();
+                }
+                spawn_summary_screen_root(&mut commands, &profile, &summary, speed.0, *tab);
+            }
+            GameState::Running => {
+                for e in &running_roots {
+                    commands.entity(e).despawn_recursive();
+                }
+                spawn_running_screen_root(&mut commands, &profile, speed.0, *tab);
+            }
+        }
+    }
 }
 
 fn refresh_upgrade_screen_on_profile_change(
     mut commands: Commands,
     profile: Res<ProfileState>,
     speed: Res<RunSpeedSetting>,
+    tab: Res<RightPanelTab>,
     upgrade_roots: Query<Entity, With<UpgradeScreen>>,
 ) {
     if !profile.is_changed() || upgrade_roots.is_empty() {
@@ -504,88 +499,10 @@ fn refresh_upgrade_screen_on_profile_change(
     for root in &upgrade_roots {
         commands.entity(root).despawn_recursive();
     }
-    spawn_upgrade_screen_root(&mut commands, &profile, speed.0);
+    spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab);
 }
 
-fn spawn_skills_section(parent: &mut ChildBuilder, hero: &crate::domain::hero::HeroProfile) {
-    parent.spawn(section_title("Skills"));
-    let mut any = false;
-    for slot in 0..hero.unlocked_skill_slots.min(hero.equipped_skills.len()) {
-        if let Some(skill) = hero.equipped_skills[slot] {
-            any = true;
-            let def = skill_definition(skill);
-            parent.spawn(body_text(format!("· {} — {}", def.name, def.description)));
-        }
-    }
-    if !any {
-        parent.spawn(caption_text("No skills equipped in unlocked slots."));
-    }
-}
-
-fn spawn_gear_slots(parent: &mut ChildBuilder, profile: &ProfileState) {
-    parent.spawn(section_title("Equipment"));
-    spawn_gear_slot(
-        parent,
-        "Weapon",
-        GearSlot::Weapon,
-        profile.profile.hero.equipped_item(GearSlot::Weapon),
-    );
-    spawn_gear_slot(
-        parent,
-        "Armor",
-        GearSlot::Armor,
-        profile.profile.hero.equipped_item(GearSlot::Armor),
-    );
-    spawn_gear_slot(
-        parent,
-        "Trinket",
-        GearSlot::Trinket,
-        profile.profile.hero.equipped_item(GearSlot::Trinket),
-    );
-}
-
-fn spawn_gear_slot(
-    parent: &mut ChildBuilder,
-    label: &str,
-    _slot: GearSlot,
-    item: Option<&ItemInstance>,
-) {
-    parent
-        .spawn(NodeBundle {
-            style: Style {
-                width: Val::Percent(100.0),
-                padding: UiRect::all(Val::Px(10.0)),
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::FlexStart,
-                row_gap: Val::Px(4.0),
-                border: UiRect::all(Val::Px(1.0)),
-                margin: UiRect::bottom(Val::Px(8.0)),
-                ..default()
-            },
-            background_color: UiTheme::panel_bg_deep().into(),
-            border_color: BorderColor(UiTheme::panel_border_inner()),
-            ..default()
-        })
-        .with_children(|slot| {
-            slot.spawn(caption_text(format!("[{label} slot]")));
-            if let Some(item) = item {
-                slot.spawn(TextBundle::from_section(
-                    &item.name,
-                    TextStyle {
-                        font_size: 16.0,
-                        color: rarity_color(item.rarity),
-                        ..default()
-                    },
-                ));
-                slot.spawn(caption_text(format!("{:?} · {:?}", item.rarity, item.slot)));
-                slot.spawn(caption_text(format_item_stat_summary(item)));
-            } else {
-                slot.spawn(body_text("Empty — assign from stash below."));
-            }
-        });
-}
-
-fn spawn_item_card(parent: &mut ChildBuilder, item: &ItemInstance) {
+pub(crate) fn spawn_item_card(parent: &mut ChildBuilder, item: &ItemInstance) {
     parent
         .spawn(NodeBundle {
             style: Style {
@@ -622,6 +539,7 @@ fn spawn_item_card(parent: &mut ChildBuilder, item: &ItemInstance) {
                 ..default()
             })
             .with_children(|row| {
+                let equip_pal = UiButtonPalette::equip();
                 row.spawn((
                     ButtonBundle {
                         style: Style {
@@ -629,12 +547,15 @@ fn spawn_item_card(parent: &mut ChildBuilder, item: &ItemInstance) {
                             height: Val::Px(36.0),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
+                            border: UiRect::all(Val::Px(1.0)),
                             ..default()
                         },
-                        background_color: UiTheme::muted_red().into(),
+                        background_color: equip_pal.idle_bg.into(),
+                        border_color: BorderColor(equip_pal.idle_border),
                         ..default()
                     },
                     EquipItemButton { item_id: item.id },
+                    equip_pal,
                 ))
                 .with_children(|b| {
                     b.spawn(TextBundle::from_section(
@@ -646,6 +567,7 @@ fn spawn_item_card(parent: &mut ChildBuilder, item: &ItemInstance) {
                         },
                     ));
                 });
+                let salvage_pal = UiButtonPalette::salvage();
                 row.spawn((
                     ButtonBundle {
                         style: Style {
@@ -653,13 +575,15 @@ fn spawn_item_card(parent: &mut ChildBuilder, item: &ItemInstance) {
                             height: Val::Px(36.0),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
+                            border: UiRect::all(Val::Px(1.0)),
                             ..default()
                         },
-                        background_color: UiTheme::panel_bg().into(),
-                        border_color: BorderColor(UiTheme::panel_border()),
+                        background_color: salvage_pal.idle_bg.into(),
+                        border_color: BorderColor(salvage_pal.idle_border),
                         ..default()
                     },
                     SalvageItemButton { item_id: item.id },
+                    salvage_pal,
                 ))
                 .with_children(|b| {
                     b.spawn(TextBundle::from_section(
@@ -679,33 +603,47 @@ fn sync_top_bar(
     state: Res<State<GameState>>,
     profile: Res<ProfileState>,
     latest_summary: Option<Res<LatestRunSummary>>,
+    playback: Option<Res<ActiveRunPlayback>>,
     speed: Res<RunSpeedSetting>,
     mut q: Query<(&TopBarField, &mut Text)>,
 ) {
     let meta = &profile.profile.meta;
+    let hero = profile.effective_hero();
     let depth = match state.get() {
         GameState::Summary => latest_summary
             .as_deref()
             .map(|s| s.summary.deepest_depth.to_string())
             .unwrap_or_else(|| "—".to_string()),
+        GameState::Running => playback
+            .as_ref()
+            .and_then(|p| {
+                if p.frames.is_empty() {
+                    return None;
+                }
+                let idx = p.display_index.min(p.frames.len() - 1);
+                Some(p.frames[idx].depth.to_string())
+            })
+            .unwrap_or_else(|| "—".to_string()),
         _ => "—".to_string(),
     };
+    let skill_cap = hero.equipped_skills.len().max(1);
     for (field, mut text) in &mut q {
         let value = match field {
-            TopBarField::Gold => format!("Gold: {}", meta.gold),
-            TopBarField::Salvage => format!("Salvage: {}", meta.salvage),
-            TopBarField::SkillSlots => format!("Skills: {}", meta.unlocked_skill_slots),
-            TopBarField::Depth => format!("Depth: {depth}"),
-            TopBarField::Speed => format!(
-                "Speed: {}x",
+            TopBarField::Gold => format!("{}", meta.gold),
+            TopBarField::Salvage => format!("{}", meta.salvage),
+            TopBarField::SkillSlots => {
+                format!("{}/{}", meta.unlocked_skill_slots, skill_cap)
+            }
+            TopBarField::Depth => depth.clone(),
+            TopBarField::Speed => {
                 if (speed.0 - 1.0).abs() < f32::EPSILON {
-                    "1".to_string()
+                    "1x".to_string()
                 } else if (speed.0 - 2.0).abs() < f32::EPSILON {
-                    "2".to_string()
+                    "2x".to_string()
                 } else {
-                    format!("{:.1}", speed.0)
+                    format!("{:.1}x", speed.0)
                 }
-            ),
+            }
         };
         if text.sections[0].value != value {
             text.sections[0].value = value;
@@ -713,79 +651,276 @@ fn sync_top_bar(
     }
 }
 
-fn handle_settings_button(
-    mut interactions: Query<
-        (&Interaction, &mut BorderColor),
-        (Changed<Interaction>, With<SettingsButton>),
+fn apply_ui_button_palettes(
+    mut q: Query<
+        (
+            &Interaction,
+            &UiButtonPalette,
+            &mut BackgroundColor,
+            &mut BorderColor,
+        ),
+        With<Button>,
     >,
-    mut speed: ResMut<RunSpeedSetting>,
 ) {
-    let next = if (speed.0 - 1.0).abs() < f32::EPSILON {
-        2.0
-    } else {
-        1.0
-    };
-    for (interaction, mut border) in &mut interactions {
-        match *interaction {
-            Interaction::Pressed => {
-                speed.0 = next;
-                *border = BorderColor(UiTheme::accent_red());
+    for (interaction, pal, mut bg, mut border) in &mut q {
+        let (cb, bo) = match *interaction {
+            Interaction::None => (pal.idle_bg, pal.idle_border),
+            Interaction::Hovered => (pal.hover_bg, pal.hover_border),
+            Interaction::Pressed => (pal.pressed_bg, pal.pressed_border),
+        };
+        *bg = cb.into();
+        *border = BorderColor(bo);
+    }
+}
+
+fn send_reset_progress_requests(
+    mut interactions: Query<&Interaction, (Changed<Interaction>, With<ResetProgressButton>)>,
+    mut events: EventWriter<ResetProgress>,
+) {
+    for interaction in &mut interactions {
+        if *interaction == Interaction::Pressed {
+            events.send(ResetProgress);
+        }
+    }
+}
+
+fn fulfill_reset_progress(
+    mut events: EventReader<ResetProgress>,
+    mut profile: ResMut<ProfileState>,
+    save_path: Res<ProfileSavePath>,
+    mut commands: Commands,
+    mut next_state: ResMut<NextState<GameState>>,
+    mut tab: ResMut<RightPanelTab>,
+    state: Res<State<GameState>>,
+    speed: Res<RunSpeedSetting>,
+    build_roots: Query<Entity, With<BuildScreen>>,
+) {
+    for _ in events.read() {
+        profile.profile = crate::save::SaveProfile::default();
+        if let Err(e) = crate::save::save_profile(&save_path.0, &profile.profile) {
+            warn!("failed to save profile after reset: {e}");
+        }
+        commands.remove_resource::<LatestRunSummary>();
+        commands.remove_resource::<ActiveRunPlayback>();
+
+        if *state.get() == GameState::Build {
+            *tab = RightPanelTab::Inventory;
+            for e in &build_roots {
+                commands.entity(e).despawn_recursive();
             }
-            Interaction::Hovered => {
-                *border = BorderColor(UiTheme::muted_gold());
+            spawn_build_screen_root(&mut commands, &profile, speed.0, *tab);
+        } else {
+            next_state.set(GameState::Build);
+        }
+    }
+}
+
+fn open_settings_modal(
+    mut interactions: Query<&Interaction, (Changed<Interaction>, With<SettingsButton>)>,
+    roots: Query<Entity, With<UiRoot>>,
+    existing: Query<(), With<SettingsModalRoot>>,
+    speed: Res<RunSpeedSetting>,
+    mut commands: Commands,
+) {
+    for interaction in &mut interactions {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        if !existing.is_empty() {
+            continue;
+        }
+        let Ok(root) = roots.get_single() else {
+            continue;
+        };
+        commands
+            .entity(root)
+            .with_children(|parent| {
+                crate::ui::mockup_layout::spawn_settings_modal(parent, speed.0);
+            });
+    }
+}
+
+fn close_settings_modal(
+    mut backdrop: Query<&Interaction, (Changed<Interaction>, With<SettingsModalBackdrop>)>,
+    mut close_btn: Query<&Interaction, (Changed<Interaction>, With<SettingsModalCloseButton>)>,
+    modal: Query<Entity, With<SettingsModalRoot>>,
+    mut commands: Commands,
+) {
+    let mut should_close = false;
+    for interaction in &mut backdrop {
+        if *interaction == Interaction::Pressed {
+            should_close = true;
+            break;
+        }
+    }
+    if !should_close {
+        for interaction in &mut close_btn {
+            if *interaction == Interaction::Pressed {
+                should_close = true;
+                break;
             }
-            Interaction::None => {
-                *border = BorderColor::DEFAULT;
-            }
+        }
+    }
+    if should_close {
+        for entity in &modal {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
+}
+
+fn handle_settings_modal_speed(
+    mut interactions: Query<&Interaction, (Changed<Interaction>, With<SettingsModalSpeedButton>)>,
+    mut speed: ResMut<RunSpeedSetting>,
+    mut labels: Query<&mut Text, With<SettingsModalSpeedLabel>>,
+) {
+    for interaction in &mut interactions {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        speed.0 = if (speed.0 - 1.0).abs() < f32::EPSILON {
+            2.0
+        } else {
+            1.0
+        };
+        let speed_label = if (speed.0 - 1.0).abs() < f32::EPSILON {
+            "1x".to_string()
+        } else if (speed.0 - 2.0).abs() < f32::EPSILON {
+            "2x".to_string()
+        } else {
+            format!("{:.1}x", speed.0)
+        };
+        for mut text in &mut labels {
+            text.sections[0].value = format!("Speed: {speed_label} (click to toggle)");
         }
     }
 }
 
 fn handle_start_button(
-    mut interactions: Query<
-        (&Interaction, &mut BackgroundColor, &mut BorderColor),
-        (Changed<Interaction>, With<StartRunButton>),
-    >,
+    mut interactions: Query<&Interaction, (Changed<Interaction>, With<StartRunButton>)>,
     mut start_run_events: EventWriter<StartRun>,
 ) {
-    for (interaction, mut color, mut border) in &mut interactions {
-        match *interaction {
-            Interaction::Pressed => {
-                *color = UiTheme::accent_red().into();
-                *border = BorderColor(UiTheme::accent_red());
-                start_run_events.send(StartRun { seed: 1 });
-            }
-            Interaction::Hovered => {
-                *color = UiTheme::muted_red().into();
-                *border = BorderColor(UiTheme::muted_gold());
-            }
-            Interaction::None => {
-                *color = UiTheme::muted_red().into();
-                *border = BorderColor::DEFAULT;
-            }
+    for interaction in &mut interactions {
+        if *interaction == Interaction::Pressed {
+            start_run_events.send(StartRun { seed: 1 });
+        }
+    }
+}
+
+fn handle_skip_playback_button(
+    mut interactions: Query<&Interaction, (Changed<Interaction>, With<SkipPlaybackButton>)>,
+    mut events: EventWriter<SkipRunPlayback>,
+) {
+    for interaction in &mut interactions {
+        if *interaction == Interaction::Pressed {
+            events.send(SkipRunPlayback);
+        }
+    }
+}
+
+fn sync_run_playback_ui(
+    playback: Res<ActiveRunPlayback>,
+    mut params: ParamSet<(
+        Query<&mut Text, With<PlaybackDepthText>>,
+        Query<&mut Text, With<PlaybackRoomKindText>>,
+        Query<&mut Text, With<PlaybackEnemyNameText>>,
+        Query<&mut Text, With<PlaybackCaptionText>>,
+        Query<&mut Text, With<PlaybackLogText>>,
+        Query<&mut Style, With<PlaybackHeroBarFill>>,
+        Query<&mut Style, With<PlaybackEnemyBarFill>>,
+    )>,
+) {
+    if playback.frames.is_empty() {
+        return;
+    }
+    let idx = playback.display_index.min(playback.frames.len() - 1);
+    let frame = &playback.frames[idx];
+
+    let depth_s = format!("Depth: {}", frame.depth);
+    let kind_s = format!(
+        "Type: {}",
+        crate::ui::mockup_layout::room_kind_label(frame.room_kind)
+    );
+
+    let hero_max_snap = frame.hero_snapshot_max_hp.max(1) as f32;
+    let hero_f = (frame.hero_snapshot_hp as f32 / hero_max_snap).clamp(0.0, 1.0);
+    let (enemy_f, enemy_name, caption) = match &frame.kind {
+        RunPlaybackFrameKind::Narration { text } => (0.0, "—".to_string(), text.clone()),
+        RunPlaybackFrameKind::Combat(c) => (
+            c.enemy_hp as f32 / c.enemy_max_hp.max(1) as f32,
+            c.enemy_name.clone(),
+            c.caption.clone(),
+        ),
+    };
+
+    let log_body = playback.log_lines.join("\n");
+
+    for mut text in params.p0().iter_mut() {
+        if text.sections[0].value != depth_s {
+            text.sections[0].value = depth_s.clone();
+        }
+    }
+    for mut text in params.p1().iter_mut() {
+        if text.sections[0].value != kind_s {
+            text.sections[0].value = kind_s.clone();
+        }
+    }
+    for mut text in params.p2().iter_mut() {
+        if text.sections[0].value != enemy_name {
+            text.sections[0].value = enemy_name.clone();
+        }
+    }
+    for mut text in params.p3().iter_mut() {
+        if text.sections[0].value != caption {
+            text.sections[0].value = caption.clone();
+        }
+    }
+    for mut text in params.p4().iter_mut() {
+        if text.sections[0].value != log_body {
+            text.sections[0].value = log_body.clone();
+        }
+    }
+
+    let hero_w = Val::Percent((hero_f * 100.0).clamp(0.0, 100.0));
+    let enemy_w = Val::Percent((enemy_f * 100.0).clamp(0.0, 100.0));
+    for mut style in params.p5().iter_mut() {
+        style.width = hero_w;
+    }
+    for mut style in params.p6().iter_mut() {
+        style.width = enemy_w;
+    }
+}
+
+fn sync_playback_delve_progress_bar(
+    playback: Res<ActiveRunPlayback>,
+    mut fill: Query<&mut Style, With<PlaybackProgressBarFill>>,
+    mut label: Query<&mut Text, With<PlaybackProgressLabel>>,
+) {
+    if playback.frames.is_empty() {
+        return;
+    }
+    let idx = playback.display_index.min(playback.frames.len() - 1);
+    let frame = &playback.frames[idx];
+    let cap = frame.delve_floors_cap.max(1);
+    let cleared = frame.delve_floors_cleared;
+    let frac = (cleared as f32 / cap as f32).clamp(0.0, 1.0);
+    for mut style in &mut fill {
+        style.width = Val::Percent(frac * 100.0);
+    }
+    let line = format!("Floors cleared: {cleared} / {cap}");
+    for mut text in &mut label {
+        if text.sections[0].value != line {
+            text.sections[0].value = line.clone();
         }
     }
 }
 
 fn handle_accept_button(
-    mut interactions: Query<
-        (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<AcceptRewardsButton>),
-    >,
+    mut interactions: Query<&Interaction, (Changed<Interaction>, With<AcceptRewardsButton>)>,
     mut events: EventWriter<AcceptRunRewards>,
 ) {
-    for (interaction, mut color) in &mut interactions {
-        match *interaction {
-            Interaction::Pressed => {
-                *color = UiTheme::accent_red().into();
-                events.send(AcceptRunRewards);
-            }
-            Interaction::Hovered => {
-                *color = UiTheme::muted_red().into();
-            }
-            Interaction::None => {
-                *color = UiTheme::muted_red().into();
-            }
+    for interaction in &mut interactions {
+        if *interaction == Interaction::Pressed {
+            events.send(AcceptRunRewards);
         }
     }
 }
@@ -830,25 +965,102 @@ fn handle_buy_upgrade_buttons(
 }
 
 fn handle_return_to_build_button(
-    mut interactions: Query<
-        (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<ReturnToBuildButton>),
-    >,
+    mut interactions: Query<&Interaction, (Changed<Interaction>, With<ReturnToBuildButton>)>,
     mut events: EventWriter<ReturnToBuild>,
 ) {
-    for (interaction, mut color) in &mut interactions {
-        match *interaction {
-            Interaction::Pressed => {
-                *color = UiTheme::accent_red().into();
-                events.send(ReturnToBuild);
-            }
-            Interaction::Hovered => {
-                *color = UiTheme::muted_red().into();
-            }
-            Interaction::None => {
-                *color = UiTheme::muted_red().into();
-            }
+    for interaction in &mut interactions {
+        if *interaction == Interaction::Pressed {
+            events.send(ReturnToBuild);
         }
+    }
+}
+
+fn pin_playback_combat_log_scroll(
+    playback: Res<ActiveRunPlayback>,
+    mut prev_log: Local<String>,
+    mut regions: Query<
+        (Entity, &mut UiScrollState, &Node),
+        With<PlaybackLogScrollRegion>,
+    >,
+    children: Query<&Children>,
+    mut content_set: ParamSet<(
+        Query<&Node, With<UiScrollContent>>,
+        Query<&mut Style, With<UiScrollContent>>,
+    )>,
+) {
+    let body = playback.log_lines.join("\n");
+    if body == *prev_log {
+        return;
+    }
+    *prev_log = body.clone();
+
+    for (entity, mut state, viewport_node) in &mut regions {
+        let view_h = viewport_node.size().y;
+        if view_h <= 0.0 {
+            continue;
+        }
+        let Ok(ch) = children.get(entity) else {
+            continue;
+        };
+        let Some(child) = ch
+            .iter()
+            .copied()
+            .find(|&e| content_set.p0().get(e).is_ok())
+        else {
+            continue;
+        };
+        let content_h = content_set
+            .p0()
+            .get(child)
+            .map(|n| n.size().y)
+            .unwrap_or(0.0);
+        let max_scroll = (content_h - view_h).max(0.0);
+        state.offset = max_scroll;
+        if let Ok(mut style) = content_set.p1().get_mut(child) {
+            style.top = Val::Px(-state.offset);
+        }
+    }
+}
+
+fn apply_ui_scroll(
+    mut wheel_events: EventReader<MouseWheel>,
+    mut regions: Query<
+        (Entity, &RelativeCursorPosition, &mut UiScrollState, &Node),
+        With<UiScrollRegion>,
+    >,
+    children: Query<&Children>,
+    mut content_style: Query<&mut Style, With<UiScrollContent>>,
+    content_node: Query<&Node, With<UiScrollContent>>,
+) {
+    let delta: f32 = wheel_events.read().map(|e| e.y * 28.0).sum();
+    if delta.abs() < f32::EPSILON {
+        return;
+    }
+
+    for (entity, rel_pos, mut state, viewport_node) in &mut regions {
+        if !rel_pos.mouse_over() {
+            continue;
+        }
+        let view_h = viewport_node.size().y;
+        if view_h <= 0.0 {
+            continue;
+        }
+        let Ok(ch) = children.get(entity) else {
+            continue;
+        };
+        let Some(child) = ch.iter().copied().find(|&e| content_node.get(e).is_ok()) else {
+            continue;
+        };
+        let Ok(inner_node) = content_node.get(child) else {
+            continue;
+        };
+        let content_h = inner_node.size().y;
+        let max_scroll = (content_h - view_h).max(0.0);
+        state.offset = (state.offset + delta).clamp(0.0, max_scroll);
+        if let Ok(mut style) = content_style.get_mut(child) {
+            style.top = Val::Px(-state.offset);
+        }
+        break;
     }
 }
 
@@ -863,10 +1075,11 @@ mod tests {
     use super::*;
     use crate::app::{
         AcceptRunRewards, GameState, IdleDungeonsPlugin, LatestRunSummary, ProfileSavePath,
-        ProfileState, StartRun,
+        ProfileState, SkipRunPlayback, StartRun,
     };
     use crate::domain::items::{GearSlot, ItemInstance};
     use crate::domain::progression::UpgradeId;
+    use crate::ui::mockup_layout::{RightPanelTab, RightTabButton};
     use bevy::state::app::StatesPlugin;
     use tempfile::tempdir;
 
@@ -914,6 +1127,8 @@ mod tests {
         app.world_mut().send_event(StartRun { seed: 1 });
 
         app.update();
+        app.world_mut().send_event(SkipRunPlayback);
+        app.update();
         app.update();
 
         assert_eq!(
@@ -934,6 +1149,8 @@ mod tests {
         app.world_mut().send_event(StartRun { seed: 1 });
 
         app.update();
+        app.world_mut().send_event(SkipRunPlayback);
+        app.update();
         app.update();
 
         assert_eq!(entity_count::<AcceptRewardsButton>(app.world_mut()), 1);
@@ -947,6 +1164,8 @@ mod tests {
         app.add_plugins(IdleDungeonsPlugin);
         app.add_plugins(UiPlugin);
         app.world_mut().send_event(StartRun { seed: 1 });
+        app.update();
+        app.world_mut().send_event(SkipRunPlayback);
         app.update();
         app.update();
 
@@ -981,6 +1200,7 @@ mod tests {
         assert_eq!(entity_count::<UpgradeScreen>(app.world_mut()), 1);
         assert!(entity_count::<EquipItemButton>(app.world_mut()) >= 1);
         assert!(entity_count::<SalvageItemButton>(app.world_mut()) >= 1);
+        press_right_panel_tab(&mut app, RightPanelTab::Upgrades);
         assert!(entity_count::<BuyUpgradeButton>(app.world_mut()) >= 1);
         assert_eq!(entity_count::<ReturnToBuildButton>(app.world_mut()), 1);
     }
@@ -1007,6 +1227,8 @@ mod tests {
         app.update();
         app.update();
 
+        press_right_panel_tab(&mut app, RightPanelTab::Upgrades);
+
         let button = app
             .world_mut()
             .query_filtered::<(Entity, &BuyUpgradeButton), ()>()
@@ -1028,8 +1250,8 @@ mod tests {
 
         let dumped = all_ui_text(app.world_mut());
         assert!(
-            dumped.contains("Gold: 90"),
-            "expected refreshed gold line in UI, got: {dumped}"
+            dumped.contains("90"),
+            "expected refreshed gold value in UI, got: {dumped}"
         );
         assert!(
             dumped.contains("BaseDamage L1"),
@@ -1050,6 +1272,8 @@ mod tests {
         app.update();
         app.update();
 
+        press_right_panel_tab(&mut app, RightPanelTab::Upgrades);
+
         let button = app
             .world_mut()
             .query_filtered::<(Entity, &BuyUpgradeButton), ()>()
@@ -1069,6 +1293,19 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    fn press_right_panel_tab(app: &mut App, tab: RightPanelTab) {
+        let entity = app
+            .world_mut()
+            .query::<(Entity, &RightTabButton)>()
+            .iter(app.world())
+            .find_map(|(e, b)| (b.0 == tab).then_some(e))
+            .expect("tab header button");
+        app.world_mut()
+            .entity_mut(entity)
+            .insert(Interaction::Pressed);
+        app.update();
     }
 
     fn entity_count<T: Component>(world: &mut World) -> usize {
