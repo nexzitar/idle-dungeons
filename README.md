@@ -2,7 +2,7 @@
 
 Idle Dungeons is a Bevy-based roguelike incremental game about building an automated dungeon delver. The player configures a hero, starts a mostly idle run, watches the hero push through a dark fantasy dungeon, then spends the results on better gear, skills, and permanent upgrades.
 
-The project is currently in the design and early planning stage. The initial goal is a small vertical slice that proves the core loop before expanding into deeper content.
+The project ships a playable MVP loop: configure skills on the briefing and camp screens, run the delve, collect rewards, manage stash, and buy upgrades—with progress saved to `saves/profile.json`.
 
 ## Game Concept
 
@@ -63,4 +63,4 @@ The MVP should be built one testable slice at a time. Each behavior change shoul
 
 ## Current Playable Loop
 
-The MVP opens to a build screen. From there you can start an automated dungeon run, accept the run rewards, equip or salvage found loot, buy permanent upgrades, and run again. Progress is saved locally to `saves/profile.json`.
+The MVP opens to the briefing screen. Assign skills by clicking unlocked slots—they cycle through each skill and an empty slot—then start a run. Skip or watch playback, accept rewards on the summary, and at camp equip or salvage loot and buy upgrades. The **Gold Gain** permanent upgrade increases gold earned from delves. Use **Return to briefing** to change skills again. Progress is saved locally to `saves/profile.json`.

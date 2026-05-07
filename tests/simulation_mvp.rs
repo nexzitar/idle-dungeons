@@ -4,10 +4,7 @@ use idle_dungeons::domain::run::{simulate_run, RunConfig, RunOutcome};
 #[test]
 fn seeded_run_reaches_same_result_every_time() {
     let hero = HeroProfile::default();
-    let config = RunConfig {
-        seed: 7,
-        max_depth: 25,
-    };
+    let config = RunConfig::new(7, 25);
 
     let first = simulate_run(&hero, config);
     let second = simulate_run(&hero, config);
@@ -18,13 +15,7 @@ fn seeded_run_reaches_same_result_every_time() {
 #[test]
 fn run_summary_reports_depth_gold_and_outcome() {
     let hero = HeroProfile::default();
-    let result = simulate_run(
-        &hero,
-        RunConfig {
-            seed: 5,
-            max_depth: 25,
-        },
-    );
+    let result = simulate_run(&hero, RunConfig::new(5, 25));
 
     assert!(result.deepest_depth >= 1);
     assert!(result.gold_earned > 0);
@@ -37,14 +28,25 @@ fn run_summary_reports_depth_gold_and_outcome() {
 #[test]
 fn run_summary_reports_playback_log() {
     let hero = HeroProfile::default();
-    let result = simulate_run(
-        &hero,
-        RunConfig {
-            seed: 5,
-            max_depth: 25,
-        },
-    );
+    let result = simulate_run(&hero, RunConfig::new(5, 25));
 
     assert!(!result.log.is_empty());
     assert!(result.log.first().unwrap().contains("Depth"));
+}
+
+#[test]
+fn gold_gain_multiplier_scales_run_gold() {
+    let hero = HeroProfile::default();
+    let seed = 11u64;
+    let base = simulate_run(&hero, RunConfig::new(seed, 25));
+    let boosted = simulate_run(
+        &hero,
+        RunConfig {
+            seed,
+            max_depth: 25,
+            gold_gain_multiplier: 1.2,
+        },
+    );
+    let expected = (base.gold_earned as f32 * 1.2).round() as u32;
+    assert_eq!(boosted.gold_earned, expected);
 }

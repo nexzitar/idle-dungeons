@@ -10,9 +10,9 @@ pub mod upgrade_panel;
 pub mod widgets;
 
 use crate::app::{
-    AcceptRunRewards, ActiveRunPlayback, BuyUpgrade, EquipInventoryItem, GameState, LatestRunSummary,
-    ProfileState, ProfileSavePath, ResetProgress, ReturnToBuild, RunSpeedSetting, SalvageInventoryItem,
-    SkipRunPlayback, StartRun,
+    AcceptRunRewards, ActiveRunPlayback, BuyUpgrade, CycleHeroSkillSlot, EquipInventoryItem,
+    GameState, LatestRunSummary, ProfileSavePath, ProfileState, ResetProgress, ReturnToBuild,
+    RunSpeedSetting, SalvageInventoryItem, SkipRunPlayback, StartRun,
 };
 use crate::domain::items::ItemInstance;
 use crate::domain::run::{RunPlaybackFrameKind, RunSummary};
@@ -21,10 +21,10 @@ use crate::ui::components::{
     AcceptRewardsButton, BuildScreen, BuyUpgradeButton, EquipItemButton, MainCamera,
     PlaybackCaptionText, PlaybackDepthText, PlaybackEnemyBarFill, PlaybackEnemyNameText,
     PlaybackHeroBarFill, PlaybackLogScrollRegion, PlaybackLogText, PlaybackProgressBarFill,
-    PlaybackProgressLabel, PlaybackRoomKindText,
-    ResetProgressButton, ReturnToBuildButton, RunPlaybackScreen, SalvageItemButton, SettingsButton,
-    SettingsModalBackdrop, SettingsModalCloseButton, SettingsModalRoot, SettingsModalSpeedButton,
-    SettingsModalSpeedLabel, SkipPlaybackButton, StartRunButton, SummaryScreen, TopBarField,
+    PlaybackProgressLabel, PlaybackRoomKindText, ResetProgressButton, ReturnToBuildButton,
+    RunPlaybackScreen, SalvageItemButton, SettingsButton, SettingsModalBackdrop,
+    SettingsModalCloseButton, SettingsModalRoot, SettingsModalSpeedButton, SettingsModalSpeedLabel,
+    SkillSlotButton, SkipPlaybackButton, StartRunButton, SummaryScreen, TopBarField,
     UiButtonPalette, UiRoot, UiScrollContent, UiScrollRegion, UiScrollState, UpgradeScreen,
 };
 use crate::ui::mockup_layout::RightPanelTab;
@@ -63,6 +63,7 @@ impl Plugin for UiPlugin {
                     close_settings_modal,
                     handle_settings_modal_speed,
                     handle_right_panel_tab_buttons,
+                    handle_skill_slot_buttons,
                 ),
             )
             .add_systems(
@@ -96,6 +97,7 @@ impl Plugin for UiPlugin {
                     pin_playback_combat_log_scroll
                         .run_if(in_state(GameState::Running))
                         .after(apply_ui_scroll),
+                    refresh_build_screen_on_profile_change.run_if(in_state(GameState::Build)),
                     refresh_upgrade_screen_on_profile_change.run_if(in_state(GameState::Upgrades)),
                 ),
             );
@@ -198,6 +200,7 @@ fn spawn_running_screen_root(
                             panel,
                             &hero,
                             &loadout_lines,
+                            false,
                         );
                     });
                     crate::ui::mockup_layout::spawn_ornate_column(row, 1.05, |panel| {
@@ -266,6 +269,7 @@ fn spawn_build_screen_root(
                             panel,
                             &hero,
                             &loadout_lines,
+                            true,
                         );
                     });
                     crate::ui::mockup_layout::spawn_ornate_column(row, 1.05, |panel| {
@@ -339,6 +343,7 @@ fn spawn_summary_screen_root(
                             panel,
                             &hero,
                             &loadout_lines,
+                            false,
                         );
                     });
                     crate::ui::mockup_layout::spawn_ornate_column(row, 1.05, |panel| {
@@ -407,6 +412,7 @@ fn spawn_upgrade_screen_root(
                             panel,
                             &hero,
                             &loadout_lines,
+                            true,
                         );
                     });
                     crate::ui::mockup_layout::spawn_ornate_column(row, 1.05, |panel| {
@@ -499,6 +505,23 @@ fn refresh_upgrade_screen_on_profile_change(
         commands.entity(root).despawn_recursive();
     }
     spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab);
+}
+
+fn refresh_build_screen_on_profile_change(
+    mut commands: Commands,
+    profile: Res<ProfileState>,
+    speed: Res<RunSpeedSetting>,
+    tab: Res<RightPanelTab>,
+    build_roots: Query<Entity, With<BuildScreen>>,
+) {
+    if !profile.is_changed() || build_roots.is_empty() {
+        return;
+    }
+
+    for root in &build_roots {
+        commands.entity(root).despawn_recursive();
+    }
+    spawn_build_screen_root(&mut commands, &profile, speed.0, *tab);
 }
 
 pub(crate) fn spawn_item_card(parent: &mut ChildBuilder, item: &ItemInstance) {
@@ -731,11 +754,9 @@ fn open_settings_modal(
         let Ok(root) = roots.get_single() else {
             continue;
         };
-        commands
-            .entity(root)
-            .with_children(|parent| {
-                crate::ui::mockup_layout::spawn_settings_modal(parent, speed.0);
-            });
+        commands.entity(root).with_children(|parent| {
+            crate::ui::mockup_layout::spawn_settings_modal(parent, speed.0);
+        });
     }
 }
 
@@ -937,6 +958,23 @@ fn handle_equip_buttons(
     }
 }
 
+fn handle_skill_slot_buttons(
+    mut interactions: Query<(&Interaction, &SkillSlotButton), Changed<Interaction>>,
+    mut events: EventWriter<CycleHeroSkillSlot>,
+    state: Res<State<GameState>>,
+) {
+    match state.get() {
+        GameState::Build | GameState::Upgrades => {}
+        _ => return,
+    }
+    for (interaction, btn) in &mut interactions {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        events.send(CycleHeroSkillSlot { slot: btn.slot });
+    }
+}
+
 fn handle_salvage_buttons(
     mut interactions: Query<(&Interaction, &SalvageItemButton), Changed<Interaction>>,
     mut events: EventWriter<SalvageInventoryItem>,
@@ -977,10 +1015,7 @@ fn handle_return_to_build_button(
 fn pin_playback_combat_log_scroll(
     playback: Res<ActiveRunPlayback>,
     mut prev_log: Local<String>,
-    mut regions: Query<
-        (Entity, &mut UiScrollState, &Node),
-        With<PlaybackLogScrollRegion>,
-    >,
+    mut regions: Query<(Entity, &mut UiScrollState, &Node), With<PlaybackLogScrollRegion>>,
     children: Query<&Children>,
     mut content_set: ParamSet<(
         Query<&Node, With<UiScrollContent>>,
