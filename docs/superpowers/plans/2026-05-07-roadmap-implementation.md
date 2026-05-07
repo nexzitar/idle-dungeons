@@ -77,15 +77,15 @@ cargo test poison_deals_damage_across_clock_ticks -- --nocapture
 
 **Goal:** Tie flat Guard reduction to `healing_power` or armor stat (small, testable), and document Heavy tradeoff if design calls for **attack speed penalty** (add test that hero swing count drops when Heavy equipped).
 
-- [ ] **Step 1:** Add test `guard_reduction_scales_with_healing_power` (or reuses existing test name if present — extend it) asserting higher `healing_power` lowers damage taken from a fixed enemy hit when Guard equipped.
+- [x] **Step 1:** Add test `guard_reduction_scales_with_healing_power` (or reuses existing test name if present — extend it) asserting higher `healing_power` lowers damage taken from a fixed enemy hit when Guard equipped.
 
-- [ ] **Step 2:** Implement: replace hardcoded `3` in `enemy_damage = (enemy_damage - 3).max(1)` with formula using `stats.healing_power` (floor/clamp so minimum 1 damage still possible).
+- [x] **Step 2:** Implement: replace hardcoded `3` in `enemy_damage = (enemy_damage - 3).max(1)` with formula using `stats.healing_power` (floor/clamp so minimum 1 damage still possible).
 
-- [ ] **Step 3:** Optional: If Heavy gets ASPD tradeoff, adjust `hero_as` when `has_heavy` and add test on swing count or time-to-kill.
+- [x] **Step 3:** Optional: If Heavy gets ASPD tradeoff, adjust `hero_as` when `has_heavy` and add test on swing count or time-to-kill. (`hero_as *= 0.75` then `.max(0.12)`; test `heavy_strike_slows_attack_pacing`.)
 
-- [ ] **Step 4:** `cargo test && cargo fmt`
+- [x] **Step 4:** `cargo test && cargo fmt`
 
-- [ ] **Step 5: Commit** `feat(combat): tune guard scaling (+ optional heavy ASPD tradeoff)`
+- [x] **Step 5: Commit** `feat(combat): tune guard scaling (+ optional heavy ASPD tradeoff)`
 
 #### Task A.4: Barrier / Thorns — edge cases
 

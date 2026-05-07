@@ -104,7 +104,15 @@ pub fn simulate_combat(
 
     let poison_tick = (3 + stats.healing_power.max(0) / 2).clamp(1, 25);
 
-    let hero_as = stats.attack_speed.max(0.12);
+    // Guard: flat reduction on each foe hit; scales with healing_power (baseline 3 when HP stat is 0).
+    let guard_flat = (3 + stats.healing_power.max(0) / 2).clamp(3, 25);
+
+    let mut hero_as = stats.attack_speed.max(0.12);
+    // Heavy Strike: slower pacing (skill text); penalty after gear is summed into attack_speed.
+    if has_heavy {
+        hero_as *= 0.75;
+        hero_as = hero_as.max(0.12);
+    }
     let enemy_as = enemy.attack_speed.max(0.12);
     let mut hero_meter = 0.0_f32;
     let mut enemy_meter = 0.0_f32;
@@ -194,7 +202,7 @@ pub fn simulate_combat(
 
             let mut enemy_damage = (enemy.damage - stats.armor).max(1);
             if has_guard {
-                enemy_damage = (enemy_damage - 3).max(1);
+                enemy_damage = (enemy_damage - guard_flat).max(1);
             }
 
             let absorbed = enemy_damage.min(barrier);
@@ -459,6 +467,38 @@ mod tests {
     }
 
     #[test]
+    fn guard_reduction_scales_with_healing_power() {
+        let enemy = Enemy {
+            name: "Baseline hit".into(),
+            max_health: 999,
+            damage: 24,
+            armor: 0,
+            attack_speed: 1.0,
+        };
+
+        let mut low = HeroProfile::new(Stats {
+            healing_power: 0,
+            ..Stats::default()
+        });
+        low.unlock_skill_slots(1);
+        low.equip_skill(0, SkillId::Guard).unwrap();
+
+        let mut high = HeroProfile::new(Stats {
+            healing_power: 10,
+            ..Stats::default()
+        });
+        high.unlock_skill_slots(1);
+        high.equip_skill(0, SkillId::Guard).unwrap();
+
+        let r_low = simulate_combat(&low, &enemy, 1, 100);
+        let r_high = simulate_combat(&high, &enemy, 1, 100);
+        assert!(
+            r_high.hero_health > r_low.hero_health,
+            "more healing_power should strengthen Guard flat reduction"
+        );
+    }
+
+    #[test]
     fn heavy_strike_increases_weapon_damage() {
         let mut plain = HeroProfile::default();
         plain.unlock_skill_slots(1);
@@ -474,8 +514,8 @@ mod tests {
             attack_speed: 1.0,
         };
 
-        let a = simulate_combat(&plain, &enemy, 1, 100);
-        let b = simulate_combat(&heavy, &enemy, 1, 100);
+        let a = simulate_combat(&plain, &enemy, 2, 100);
+        let b = simulate_combat(&heavy, &enemy, 2, 100);
         let plain_fist = a.events.iter().find_map(|e| {
             if let CombatEvent::HeroAttacked { damage } = e {
                 Some(*damage)
@@ -492,6 +532,43 @@ mod tests {
         });
         assert_eq!(plain_fist, Some(10));
         assert_eq!(heavy_fist, Some(15));
+    }
+
+    #[test]
+    fn heavy_strike_slows_attack_pacing() {
+        let mut nimble = HeroProfile::default();
+        nimble.base_stats.attack_speed = 2.0;
+        nimble.unlock_skill_slots(1);
+
+        let mut heavy = HeroProfile::default();
+        heavy.base_stats.attack_speed = 2.0;
+        heavy.unlock_skill_slots(1);
+        heavy.equip_skill(0, SkillId::HeavyStrike).unwrap();
+
+        let enemy = Enemy {
+            name: "Dummy".into(),
+            max_health: 999,
+            damage: 0,
+            armor: 0,
+            attack_speed: 1.0,
+        };
+
+        let r_nimble = simulate_combat(&nimble, &enemy, 1, 100);
+        let r_heavy = simulate_combat(&heavy, &enemy, 1, 100);
+
+        let swings_nimble = r_nimble
+            .events
+            .iter()
+            .filter(|e| matches!(e, CombatEvent::HeroAttacked { .. }))
+            .count();
+        let swings_heavy = r_heavy
+            .events
+            .iter()
+            .filter(|e| matches!(e, CombatEvent::HeroAttacked { .. }))
+            .count();
+
+        assert_eq!(swings_nimble, 2);
+        assert_eq!(swings_heavy, 1);
     }
 
     #[test]
@@ -674,8 +751,8 @@ mod tests {
         with_affix.equip_item(maul).unwrap();
 
         let e = dummy_enemy();
-        let a = first_hero_damage(&simulate_combat(&skill_only, &e, 1, 100));
-        let b = first_hero_damage(&simulate_combat(&with_affix, &e, 1, 100));
+        let a = first_hero_damage(&simulate_combat(&skill_only, &e, 2, 100));
+        let b = first_hero_damage(&simulate_combat(&with_affix, &e, 2, 100));
         assert!(b > a);
         assert_eq!(a, 21);
         assert_eq!(b, 25);
