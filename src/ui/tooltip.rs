@@ -45,7 +45,7 @@ pub fn spawn_tooltip_layer(parent: &mut ChildBuilder) {
                     top: Val::Px(0.0),
                     width: Val::Auto,
                     max_width: Val::Px(280.0),
-                    padding: UiRect::all(Val::Px(10.0)),
+                    padding: UiRect::all(Val::Px(UiTheme::PAD_TOOLTIP)),
                     border: UiRect::all(Val::Px(1.0)),
                     ..default()
                 },
@@ -62,7 +62,7 @@ pub fn spawn_tooltip_layer(parent: &mut ChildBuilder) {
             let mut text_bundle = TextBundle::from_section(
                 "",
                 TextStyle {
-                    font_size: 13.0,
+                    font_size: UiTheme::FONT_CAPTION,
                     color: UiTheme::body(),
                     ..default()
                 },

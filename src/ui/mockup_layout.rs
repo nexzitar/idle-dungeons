@@ -64,7 +64,7 @@ fn ornate_shell(content: impl FnOnce(&mut ChildBuilder)) -> impl FnOnce(&mut Chi
                             min_height: Val::Px(0.0),
                             min_width: Val::Px(0.0),
                             flex_direction: FlexDirection::Column,
-                            padding: UiRect::all(Val::Px(12.0)),
+                            padding: UiRect::all(Val::Px(UiTheme::PANEL_INSET)),
                             row_gap: Val::Px(8.0),
                             align_items: AlignItems::Stretch,
                             overflow: Overflow::clip_y(),
@@ -226,10 +226,10 @@ pub fn spawn_settings_modal(parent: &mut ChildBuilder, speed_mult: f32) {
                             bottom: Val::Auto,
                         },
                         width: Val::Px(340.0),
-                        padding: UiRect::all(Val::Px(20.0)),
+                        padding: UiRect::all(Val::Px(UiTheme::PAD_ROOT)),
                         flex_direction: FlexDirection::Column,
                         align_items: AlignItems::Stretch,
-                        row_gap: Val::Px(12.0),
+                        row_gap: Val::Px(UiTheme::PANEL_INSET),
                         border: UiRect::all(Val::Px(2.0)),
                         ..default()
                     },
@@ -267,7 +267,7 @@ pub fn spawn_settings_modal(parent: &mut ChildBuilder, speed_mult: f32) {
                                 TextBundle::from_section(
                                     format!("Speed: {speed_label} (click to toggle)"),
                                     TextStyle {
-                                        font_size: 15.0,
+                                        font_size: UiTheme::FONT_BODY,
                                         color: UiTheme::muted_cream(),
                                         ..default()
                                     },
@@ -302,7 +302,7 @@ pub fn spawn_settings_modal(parent: &mut ChildBuilder, speed_mult: f32) {
                             b.spawn(TextBundle::from_section(
                                 "Reset all progress",
                                 TextStyle {
-                                    font_size: 15.0,
+                                    font_size: UiTheme::FONT_BODY,
                                     color: UiTheme::body(),
                                     ..default()
                                 },
@@ -332,7 +332,7 @@ pub fn spawn_settings_modal(parent: &mut ChildBuilder, speed_mult: f32) {
                             b.spawn(TextBundle::from_section(
                                 "Close",
                                 TextStyle {
-                                    font_size: 15.0,
+                                    font_size: UiTheme::FONT_BODY,
                                     color: UiTheme::muted_cream(),
                                     ..default()
                                 },
@@ -357,7 +357,7 @@ pub fn spawn_mockup_header(
                 width: Val::Percent(100.0),
                 min_height: Val::Px(68.0),
                 flex_shrink: 0.0,
-                padding: UiRect::axes(Val::Px(16.0), Val::Px(8.0)),
+                padding: UiRect::axes(Val::Px(UiTheme::PAD_ROOT), Val::Px(UiTheme::PAD_BAR_Y)),
                 flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::SpaceBetween,
@@ -372,7 +372,7 @@ pub fn spawn_mockup_header(
             row.spawn(TextBundle::from_section(
                 "Idle Dungeons",
                 TextStyle {
-                    font_size: 26.0,
+                    font_size: UiTheme::FONT_HEADLINE,
                     color: UiTheme::muted_gold(),
                     ..default()
                 },
@@ -468,7 +468,7 @@ pub fn spawn_mockup_header(
                         btn.spawn(TextBundle::from_section(
                             "\u{2699} Settings",
                             TextStyle {
-                                font_size: 14.0,
+                                font_size: UiTheme::FONT_COMPACT,
                                 color: UiTheme::muted_cream(),
                                 ..default()
                             },
@@ -514,7 +514,7 @@ fn resource_chip(
             col.spawn(TextBundle::from_section(
                 format!("{icon} {label}"),
                 TextStyle {
-                    font_size: 11.0,
+                    font_size: UiTheme::FONT_MICRO,
                     color: UiTheme::body_dim(),
                     ..default()
                 },
@@ -523,7 +523,7 @@ fn resource_chip(
                 TextBundle::from_section(
                     value,
                     TextStyle {
-                        font_size: 15.0,
+                        font_size: UiTheme::FONT_BODY,
                         color: UiTheme::body(),
                         ..default()
                     },
@@ -576,7 +576,7 @@ fn panel_title_centered(text: impl Into<String>) -> TextBundle {
     TextBundle::from_section(
         text,
         TextStyle {
-            font_size: 17.0,
+            font_size: UiTheme::FONT_SECTION,
             color: UiTheme::muted_cream(),
             ..default()
         },
@@ -632,7 +632,7 @@ fn stat_line_row(parent: &mut ChildBuilder, label: &str, value: impl std::fmt::D
             r.spawn(TextBundle::from_section(
                 format!("\u{25C8} {label}"),
                 TextStyle {
-                    font_size: 14.0,
+                    font_size: UiTheme::FONT_COMPACT,
                     color: UiTheme::body_dim(),
                     ..default()
                 },
@@ -640,7 +640,7 @@ fn stat_line_row(parent: &mut ChildBuilder, label: &str, value: impl std::fmt::D
             r.spawn(TextBundle::from_section(
                 format!("{value}"),
                 TextStyle {
-                    font_size: 15.0,
+                    font_size: UiTheme::FONT_BODY,
                     color: UiTheme::muted_cream(),
                     ..default()
                 },
@@ -711,7 +711,7 @@ fn skill_slot_row(
                         s.spawn(TextBundle::from_section(
                             label,
                             TextStyle {
-                                font_size: 12.0,
+                                font_size: UiTheme::FONT_LABEL,
                                 color: UiTheme::body(),
                                 ..default()
                             },
@@ -778,7 +778,11 @@ fn skill_slot_row(
                     s.spawn(TextBundle::from_section(
                         label,
                         TextStyle {
-                            font_size: if unlocked { 18.0 } else { 16.0 },
+                            font_size: if unlocked {
+                                UiTheme::FONT_SKILL_ACTIVE
+                            } else {
+                                UiTheme::FONT_SKILL_DIM
+                            },
                             color: if unlocked {
                                 UiTheme::body()
                             } else {
@@ -849,7 +853,7 @@ pub fn mockup_gear_cards(parent: &mut ChildBuilder, profile: &crate::app::Profil
                     ph.spawn(TextBundle::from_section(
                         "\u{2694}",
                         TextStyle {
-                            font_size: 22.0,
+                            font_size: UiTheme::FONT_TITLE,
                             color: UiTheme::body_dim(),
                             ..default()
                         },
@@ -871,7 +875,7 @@ pub fn mockup_gear_cards(parent: &mut ChildBuilder, profile: &crate::app::Profil
                         txt.spawn(TextBundle::from_section(
                             item.name.clone(),
                             TextStyle {
-                                font_size: 15.0,
+                                font_size: UiTheme::FONT_BODY,
                                 color: rarity_color(item.rarity),
                                 ..default()
                             },
@@ -997,7 +1001,7 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildBuilder) {
                 port.spawn(TextBundle::from_section(
                     "\u{2694}",
                     TextStyle {
-                        font_size: 38.0,
+                        font_size: UiTheme::FONT_DISPLAY_HERO,
                         color: UiTheme::elite(),
                         ..default()
                     },
@@ -1077,7 +1081,7 @@ pub fn spawn_dungeon_briefing_column(parent: &mut ChildBuilder, stash_count: usi
                 port.spawn(TextBundle::from_section(
                     "\u{1F480}",
                     TextStyle {
-                        font_size: 38.0,
+                        font_size: UiTheme::FONT_DISPLAY_HERO,
                         color: UiTheme::body_dim(),
                         ..default()
                     },
@@ -1163,7 +1167,7 @@ pub fn spawn_dungeon_summary_column(parent: &mut ChildBuilder, summary: &RunSumm
             r.spawn(TextBundle::from_section(
                 format!("Type: {type_label}"),
                 TextStyle {
-                    font_size: 14.0,
+                    font_size: UiTheme::FONT_COMPACT,
                     color: type_color,
                     ..default()
                 },
@@ -1200,7 +1204,7 @@ pub fn spawn_dungeon_summary_column(parent: &mut ChildBuilder, summary: &RunSumm
                 port.spawn(TextBundle::from_section(
                     if is_death { "\u{2620}" } else { "\u{1F3F9}" },
                     TextStyle {
-                        font_size: 34.0,
+                        font_size: UiTheme::FONT_DISPLAY_SUB,
                         color: type_color,
                         ..default()
                     },
@@ -1219,7 +1223,7 @@ pub fn spawn_dungeon_summary_column(parent: &mut ChildBuilder, summary: &RunSumm
                 col.spawn(TextBundle::from_section(
                     foe.clone(),
                     TextStyle {
-                        font_size: 17.0,
+                        font_size: UiTheme::FONT_SECTION,
                         color: type_color,
                         ..default()
                     },
@@ -1383,7 +1387,7 @@ fn spawn_stash_filters_and_sort_row(parent: &mut ChildBuilder, stash_sort: Stash
                 b.spawn(TextBundle::from_section(
                     stash_sort.button_label(),
                     TextStyle {
-                        font_size: 12.0,
+                        font_size: UiTheme::FONT_LABEL,
                         color: UiTheme::body_dim(),
                         ..default()
                     },
@@ -1499,7 +1503,7 @@ fn tab_btn(
             b.spawn(TextBundle::from_section(
                 label,
                 TextStyle {
-                    font_size: 13.0,
+                    font_size: UiTheme::FONT_CAPTION,
                     color: if is_on {
                         UiTheme::muted_gold()
                     } else {
@@ -1612,7 +1616,7 @@ fn spawn_right_scroll_body(
                                     meta.upgrade_cost(upgrade)
                                 ),
                                 TextStyle {
-                                    font_size: 14.0,
+                                    font_size: UiTheme::FONT_COMPACT,
                                     color: UiTheme::body(),
                                     ..default()
                                 },
@@ -1716,7 +1720,7 @@ pub fn spawn_mockup_footer(parent: &mut ChildBuilder, mode: FooterMode) {
                         b.spawn(TextBundle::from_section(
                             "\u{2190} Briefing",
                             TextStyle {
-                                font_size: 15.0,
+                                font_size: UiTheme::FONT_BODY,
                                 color: UiTheme::muted_cream(),
                                 ..default()
                             },
@@ -1749,7 +1753,7 @@ pub fn spawn_mockup_footer(parent: &mut ChildBuilder, mode: FooterMode) {
                         b.spawn(TextBundle::from_section(
                             "\u{2694} START RUN",
                             TextStyle {
-                                font_size: 20.0,
+                                font_size: UiTheme::FONT_STRONG,
                                 color: Color::WHITE,
                                 ..default()
                             },
@@ -1783,7 +1787,7 @@ pub fn spawn_mockup_footer(parent: &mut ChildBuilder, mode: FooterMode) {
                         b.spawn(TextBundle::from_section(
                             "Skip to results",
                             TextStyle {
-                                font_size: 16.0,
+                                font_size: UiTheme::FONT_SKILL_DIM,
                                 color: UiTheme::muted_cream(),
                                 ..default()
                             },
@@ -1816,7 +1820,7 @@ pub fn spawn_mockup_footer(parent: &mut ChildBuilder, mode: FooterMode) {
                         b.spawn(TextBundle::from_section(
                             "\u{2713} Accept rewards",
                             TextStyle {
-                                font_size: 18.0,
+                                font_size: UiTheme::FONT_SKILL_ACTIVE,
                                 color: Color::WHITE,
                                 ..default()
                             },
@@ -1859,7 +1863,7 @@ fn footer_pill(parent: &mut ChildBuilder, label: &str, active: bool) {
             n.spawn(TextBundle::from_section(
                 label,
                 TextStyle {
-                    font_size: 13.0,
+                    font_size: UiTheme::FONT_CAPTION,
                     color: text,
                     ..default()
                 },

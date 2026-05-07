@@ -181,9 +181,9 @@ Briefing column captions updated; seed labeled as MVP fixed value until picker e
 **Files:**
 - `src/ui/theme.rs`, `src/ui/mockup_layout.rs`
 
-- [ ] **Step 1:** Normalize font sizes / panel padding against a short style table in `theme.rs` comments.
+- [x] **Step 1:** Normalize font sizes / panel padding against a short style table in `theme.rs` comments.
 
-- [ ] **Step 2:** Subtle color contrast fixes for `body_dim` vs backgrounds (manual playtest).
+- [x] **Step 2:** Subtle color contrast fixes for `body_dim` vs backgrounds (manual playtest).
 
 - [ ] **Step 3:** Commit `style(ui): theme consistency pass`
 

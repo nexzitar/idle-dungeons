@@ -102,7 +102,7 @@ pub fn spawn_top_resource_bar(
                 width: Val::Percent(100.0),
                 min_height: Val::Px(52.0),
                 flex_shrink: 0.0,
-                padding: UiRect::axes(Val::Px(20.0), Val::Px(10.0)),
+                padding: UiRect::axes(Val::Px(UiTheme::PAD_ROOT), Val::Px(UiTheme::PAD_BAR_Y)),
                 flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::SpaceBetween,
@@ -118,7 +118,7 @@ pub fn spawn_top_resource_bar(
             row.spawn(TextBundle::from_section(
                 "Idle Dungeons",
                 TextStyle {
-                    font_size: 22.0,
+                    font_size: UiTheme::FONT_TITLE,
                     color: UiTheme::muted_gold(),
                     ..default()
                 },
@@ -176,7 +176,7 @@ pub fn spawn_top_resource_bar(
                     btn.spawn(TextBundle::from_section(
                         "Settings",
                         TextStyle {
-                            font_size: 14.0,
+                            font_size: UiTheme::FONT_COMPACT,
                             color: Color::WHITE,
                             ..default()
                         },
@@ -191,7 +191,7 @@ fn metric_chip(parent: &mut ChildBuilder, field: TopBarField, label: String) {
         TextBundle::from_section(
             label,
             TextStyle {
-                font_size: 14.0,
+                font_size: UiTheme::FONT_COMPACT,
                 color: UiTheme::body(),
                 ..default()
             },
@@ -267,7 +267,7 @@ pub fn spawn_framed_panel(
                 flex_shrink: 1.0,
                 min_width: Val::Px(220.0),
                 min_height: Val::Px(0.0),
-                padding: UiRect::all(Val::Px(14.0)),
+                padding: UiRect::all(Val::Px(UiTheme::PANEL_INSET_LG)),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Stretch,
                 row_gap: Val::Px(10.0),
@@ -294,7 +294,7 @@ pub fn spawn_bottom_strip(parent: &mut ChildBuilder, content: impl FnOnce(&mut C
                 flex_shrink: 0.0,
                 min_height: Val::Px(120.0),
                 max_height: Val::Percent(38.0),
-                padding: UiRect::all(Val::Px(14.0)),
+                padding: UiRect::all(Val::Px(UiTheme::PANEL_INSET_LG)),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Stretch,
                 row_gap: Val::Px(12.0),
@@ -324,7 +324,7 @@ pub fn spawn_scrollable_log(
                     width: Val::Percent(100.0),
                     height: Val::Px(max_height_px),
                     flex_shrink: 0.0,
-                    padding: UiRect::all(Val::Px(10.0)),
+                    padding: UiRect::all(Val::Px(UiTheme::PAD_TOOLTIP)),
                     position_type: PositionType::Relative,
                     flex_direction: FlexDirection::Column,
                     overflow: Overflow::clip_y(),

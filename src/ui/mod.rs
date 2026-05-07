@@ -653,7 +653,7 @@ pub(crate) fn spawn_item_card(parent: &mut ChildBuilder, item: &ItemInstance) {
         .spawn(NodeBundle {
             style: Style {
                 width: Val::Percent(100.0),
-                padding: UiRect::all(Val::Px(12.0)),
+                padding: UiRect::all(Val::Px(UiTheme::PANEL_INSET)),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::FlexStart,
                 row_gap: Val::Px(8.0),
@@ -668,7 +668,7 @@ pub(crate) fn spawn_item_card(parent: &mut ChildBuilder, item: &ItemInstance) {
             card.spawn(TextBundle::from_section(
                 &item.name,
                 TextStyle {
-                    font_size: 17.0,
+                    font_size: UiTheme::FONT_SECTION,
                     color: rarity_color(item.rarity),
                     ..default()
                 },
@@ -710,7 +710,7 @@ pub(crate) fn spawn_item_card(parent: &mut ChildBuilder, item: &ItemInstance) {
                     b.spawn(TextBundle::from_section(
                         "Equip",
                         TextStyle {
-                            font_size: 15.0,
+                            font_size: UiTheme::FONT_BODY,
                             color: Color::WHITE,
                             ..default()
                         },
@@ -741,7 +741,7 @@ pub(crate) fn spawn_item_card(parent: &mut ChildBuilder, item: &ItemInstance) {
                     b.spawn(TextBundle::from_section(
                         "Salvage",
                         TextStyle {
-                            font_size: 15.0,
+                            font_size: UiTheme::FONT_BODY,
                             color: UiTheme::body(),
                             ..default()
                         },
