@@ -1033,8 +1033,9 @@ fn sync_run_playback_ui(
 
     let depth_s = format!("Depth: {}", frame.depth);
     let kind_s = format!(
-        "Type: {}",
-        crate::ui::mockup_layout::room_kind_label(frame.room_kind)
+        "Type: {} · Risk: {}",
+        crate::ui::mockup_layout::room_kind_label(frame.room_kind),
+        frame.risk_hint
     );
 
     let hero_max_snap = frame.hero_snapshot_max_hp.max(1) as f32;

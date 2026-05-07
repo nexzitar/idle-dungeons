@@ -11,6 +11,7 @@ pub fn empty_run_summary() -> RunSummary {
         loot: Vec::new(),
         death_reason: Some("No chronicle available.".to_string()),
         log: Vec::new(),
+        peak_risk_note: String::new(),
     }
 }
 
@@ -18,6 +19,10 @@ pub fn summary_panel_text(summary: &RunSummary) -> String {
     let mut out = String::new();
     out.push_str(&outcome_headline(summary));
     out.push('\n');
+    if !summary.peak_risk_note.is_empty() {
+        out.push_str(&summary.peak_risk_note);
+        out.push('\n');
+    }
     out.push_str(&reward_digest(summary));
     out.push_str("\n\n- Chronicle -\n");
     for line in narrative_highlights(summary) {
@@ -98,6 +103,7 @@ mod tests {
             loot: Vec::new(),
             death_reason: Some("Defeated by Hollow".into()),
             log: vec!["Depth 8: defeated by Hollow".into()],
+            peak_risk_note: "Peak room risk: moderate (standard combat).".into(),
         };
 
         let text = summary_panel_text(&summary);
@@ -105,6 +111,6 @@ mod tests {
         assert!(text.contains("depth 8"));
         assert!(text.contains("Gold +30"));
         assert!(text.contains("Defeated by Hollow"));
-        assert!(text.contains("Chronicle"));
+        assert!(text.contains("Peak room risk"));
     }
 }

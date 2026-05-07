@@ -1173,6 +1173,9 @@ pub fn spawn_dungeon_summary_column(parent: &mut ChildBuilder, summary: &RunSumm
                 },
             ));
         });
+        if !summary.peak_risk_note.is_empty() {
+            p.spawn(caption_text(summary.peak_risk_note.clone()));
+        }
         let foe = summary
             .death_reason
             .clone()
