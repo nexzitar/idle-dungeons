@@ -1,6 +1,7 @@
 use crate::domain::combat::{
-    combat_playback_frames_from_result, simulate_combat, CombatOutcome, CombatPlaybackFrame,
+    combat_playback_frames_from_result, simulate_combat_party, CombatOutcome, CombatPlaybackFrame,
 };
+use crate::domain::party::tank_ally_starting_stats;
 use crate::domain::dungeon::{
     generate_dungeon, peak_risk_note, room_risk_hint, room_risk_rank, DungeonRoom, RoomKind,
 };
@@ -73,6 +74,9 @@ pub struct RunPlaybackFrame {
     /// Hero HP for the status bar (carries across rooms).
     pub hero_snapshot_hp: i32,
     pub hero_snapshot_max_hp: i32,
+    /// Tank ally HP when the delve includes the fixed tank NPC (`None` reserved for solo playback).
+    pub ally_snapshot_hp: Option<i32>,
+    pub ally_snapshot_max_hp: Option<i32>,
     /// Floors fully cleared before this frame (`0` until the first room is done).
     pub delve_floors_cleared: u32,
     /// Same as run max depth (`RunConfig.max_depth`).
@@ -98,6 +102,8 @@ fn playback_frame(
     room_kind: RoomKind,
     hero_hp: i32,
     hero_max: i32,
+    ally_hp: Option<i32>,
+    ally_max: Option<i32>,
     floors_cleared: u32,
     cap: u32,
     kind: RunPlaybackFrameKind,
@@ -107,6 +113,8 @@ fn playback_frame(
         room_kind,
         hero_snapshot_hp: hero_hp,
         hero_snapshot_max_hp: hero_max,
+        ally_snapshot_hp: ally_hp,
+        ally_snapshot_max_hp: ally_max,
         delve_floors_cleared: floors_cleared,
         delve_floors_cap: cap,
         risk_hint: room_risk_hint(room_kind).to_string(),
@@ -142,6 +150,9 @@ fn simulate_run_with_playback_for_rooms(
     let mut playback = RunPlayback::default();
     let hero_max_hp = hero.derived_stats().max_health;
     let mut hero_current_hp = hero_max_hp;
+    let tank_stats = tank_ally_starting_stats();
+    let ally_max_hp = tank_stats.max_health;
+    let mut ally_current_hp = ally_max_hp;
     let mut floors_cleared = 0u32;
     let mut peak_risk_rank = 0u8;
 
@@ -176,7 +187,13 @@ fn simulate_run_with_playback_for_rooms(
                 };
                 let enemy = encounter.enemy.clone();
                 let at_start = hero_current_hp;
-                let combat = simulate_combat(hero, &enemy, 240, at_start);
+                let combat = simulate_combat_party(
+                    hero,
+                    &enemy,
+                    240,
+                    at_start,
+                    Some((tank_stats, ally_current_hp)),
+                );
                 for frame in combat_playback_frames_from_result(
                     hero,
                     &combat,
@@ -184,12 +201,16 @@ fn simulate_run_with_playback_for_rooms(
                     hero_max_hp,
                     enemy.max_health,
                     at_start,
+                    Some(ally_current_hp),
+                    Some(ally_max_hp),
                 ) {
                     playback.frames.push(playback_frame(
                         room.depth,
                         room.kind,
                         frame.hero_hp,
                         frame.hero_max_hp,
+                        frame.ally_hp,
+                        frame.ally_max_hp,
                         floors_cleared,
                         cap,
                         RunPlaybackFrameKind::Combat(frame),
@@ -198,6 +219,9 @@ fn simulate_run_with_playback_for_rooms(
                 match combat.outcome {
                     CombatOutcome::HeroWon => {
                         hero_current_hp = combat.hero_health;
+                        if let Some(h) = combat.ally_health {
+                            ally_current_hp = h;
+                        }
                         log.push(format!("Depth {}: defeated {}", room.depth, enemy.name));
                         gold_earned += room.depth * 3;
                         floors_cleared += 1;
@@ -208,6 +232,8 @@ fn simulate_run_with_playback_for_rooms(
                                 room.kind,
                                 hero_current_hp,
                                 hero_max_hp,
+                                Some(ally_current_hp),
+                                Some(ally_max_hp),
                                 floors_cleared,
                                 cap,
                                 RunPlaybackFrameKind::Narration {
@@ -264,6 +290,8 @@ fn simulate_run_with_playback_for_rooms(
                     room.kind,
                     hero_current_hp,
                     hero_max_hp,
+                    Some(ally_current_hp),
+                    Some(ally_max_hp),
                     floors_cleared,
                     cap,
                     RunPlaybackFrameKind::Narration { text: line },
@@ -279,6 +307,8 @@ fn simulate_run_with_playback_for_rooms(
                     room.kind,
                     hero_current_hp,
                     hero_max_hp,
+                    Some(ally_current_hp),
+                    Some(ally_max_hp),
                     floors_cleared,
                     cap,
                     RunPlaybackFrameKind::Narration { text: line },
