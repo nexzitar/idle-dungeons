@@ -2,7 +2,7 @@
 
 use bevy::input::touch::Touches;
 use bevy::prelude::*;
-use bevy::ui::{FocusPolicy, ZIndex};
+use bevy::ui::FocusPolicy;
 use bevy::text::{TextColor, TextFont};
 use bevy::ui::ComputedNode;
 use bevy::window::PrimaryWindow;

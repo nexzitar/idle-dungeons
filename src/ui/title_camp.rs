@@ -42,8 +42,7 @@ pub fn spawn_title_screen(
                 speed_mult,
             );
 
-            col.spawn((
-            Node {
+            col.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                     flex_grow: 1.0,
@@ -53,22 +52,19 @@ pub fn spawn_title_screen(
                     align_items: AlignItems::Stretch,
                     padding: UiRect::vertical(Val::Px(8.0)),
                     ..default()
-            }
-        ))
+            })
             .with_children(|row| {
                 spawn_title_nav_column(row);
                 spawn_camp_scene(row, meta, ph);
             });
 
-            col.spawn((
-            Node {
+            col.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                     justify_content: JustifyContent::SpaceBetween,
                     width: Val::Percent(100.0),
                     ..default()
-            }
-        ))
+            })
             .with_children(|foot| {
                 foot.spawn(caption_text(format!(
                     "Next unlock · party slot 2 at depth {}",
@@ -269,8 +265,7 @@ fn spawn_camp_scene(parent: &mut ChildSpawnerCommands<'_>, meta: &MetaProgressio
             ));
 
             scene
-                .spawn((
-            Node {
+                .spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 position_type: PositionType::Absolute,
                         left: Val::Percent(8.0),
@@ -279,8 +274,7 @@ fn spawn_camp_scene(parent: &mut ChildSpawnerCommands<'_>, meta: &MetaProgressio
                         row_gap: Val::Px(6.0),
                         max_width: Val::Percent(55.0),
                         ..default()
-            }
-        ))
+            })
                 .with_children(|titles| {
                     titles.spawn((
                 Text::new("DELVERS"),
@@ -293,8 +287,7 @@ fn spawn_camp_scene(parent: &mut ChildSpawnerCommands<'_>, meta: &MetaProgressio
                 });
 
             scene
-                .spawn((
-            Node {
+                .spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                         flex_direction: FlexDirection::Column,
@@ -302,8 +295,7 @@ fn spawn_camp_scene(parent: &mut ChildSpawnerCommands<'_>, meta: &MetaProgressio
                         row_gap: Val::Px(14.0),
                         padding: UiRect::bottom(Val::Px(18.0)),
                         ..default()
-            }
-        ))
+            })
                 .with_children(|camp| {
                     let tent_vis = if meta.deepest_floor_reached >= 15 {
                         Visibility::Visible
@@ -328,16 +320,14 @@ fn spawn_camp_scene(parent: &mut ChildSpawnerCommands<'_>, meta: &MetaProgressio
                         t.spawn(caption_text("Camp · supply tent"));
                     });
 
-                    camp.spawn((
-            Node {
+                    camp.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                             align_items: AlignItems::FlexEnd,
                             justify_content: JustifyContent::Center,
                             column_gap: Val::Px(28.0),
                             ..default()
-            }
-        ))
+            })
                     .with_children(|figures| {
                         for i in 0..CAMP_FIGURE_SLOTS {
                             let vis = if i == 0 {
@@ -374,15 +364,13 @@ fn spawn_camp_scene(parent: &mut ChildSpawnerCommands<'_>, meta: &MetaProgressio
                         }
                     });
 
-                    camp.spawn((
-            Node {
+                    camp.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Column,
                             align_items: AlignItems::Center,
                             row_gap: Val::Px(4.0),
                             ..default()
-            }
-        ))
+            })
                     .with_children(|fire_zone| {
                         fire_zone.spawn((
                             Node {
