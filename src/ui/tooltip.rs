@@ -3,6 +3,8 @@
 use bevy::input::touch::Touches;
 use bevy::prelude::*;
 use bevy::ui::{FocusPolicy, ZIndex};
+use bevy::text::{TextColor, TextFont};
+use bevy::ui::ComputedNode;
 use bevy::window::PrimaryWindow;
 
 use crate::ui::components::UiTooltip;
@@ -35,12 +37,12 @@ impl Default for TooltipState {
 }
 
 /// Spawn last under [`crate::ui::components::UiRoot`] so it draws above gameplay UI.
-pub fn spawn_tooltip_layer(parent: &mut ChildBuilder) {
+pub fn spawn_tooltip_layer(parent: &mut ChildSpawnerCommands<'_>) {
     parent
         .spawn((
-            NodeBundle {
-                style: Style {
-                    position_type: PositionType::Absolute,
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                position_type: PositionType::Absolute,
                     left: Val::Px(0.0),
                     top: Val::Px(0.0),
                     width: Val::Auto,
@@ -48,31 +50,25 @@ pub fn spawn_tooltip_layer(parent: &mut ChildBuilder) {
                     padding: UiRect::all(Val::Px(UiTheme::PAD_TOOLTIP)),
                     border: UiRect::all(Val::Px(1.0)),
                     ..default()
-                },
-                visibility: Visibility::Hidden,
-                background_color: UiTheme::panel_bg_deep().into(),
-                border_color: BorderColor(UiTheme::ornate_gold()),
-                z_index: ZIndex::Global(4096),
-                focus_policy: FocusPolicy::Pass,
-                ..default()
             },
+            BackgroundColor(UiTheme::panel_bg_deep().into()),
+            BorderColor::from(UiTheme::ornate_gold()),
+            FocusPolicy::Pass,
+            Visibility::Hidden,
             TooltipLayer,
         ))
         .with_children(|layer| {
-            let mut text_bundle = TextBundle::from_section(
-                "",
-                TextStyle {
-                    font_size: UiTheme::FONT_CAPTION,
-                    color: UiTheme::body(),
-                    ..default()
-                },
-            );
-            text_bundle.focus_policy = FocusPolicy::Pass;
-            layer.spawn((text_bundle, TooltipText));
+            layer.spawn((
+                Text::new(""),
+                TextFont::from_font_size(UiTheme::FONT_CAPTION),
+                TextColor(UiTheme::body()),
+                FocusPolicy::Pass,
+                TooltipText,
+            ));
         });
 }
 
-/// Hide the tooltip **before** [`UiSystem::Focus`] runs so the panel does not consume the current
+/// Hide the tooltip **before** [`UiSystems::Focus`] runs so the panel does not consume the current
 /// pointer press (see `FocusPolicy::Pass` quirks with deep UI trees / global z-index).
 pub fn hide_tooltip_layer_before_pointer_focus(
     mouse: Res<ButtonInput<MouseButton>>,
@@ -102,11 +98,11 @@ pub fn update_tooltip(
     touches: Res<Touches>,
     mut state: ResMut<TooltipState>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut layer_q: Query<(&mut Style, &mut Visibility, &Node), With<TooltipLayer>>,
+    mut layer_q: Query<(&mut Node, &mut Visibility, &ComputedNode), With<TooltipLayer>>,
     mut text_q: Query<&mut Text, With<TooltipText>>,
     tooltip_targets: Query<(Entity, &Interaction, &UiTooltip), With<UiTooltip>>,
 ) {
-    let Ok(window) = windows.get_single() else {
+    let Ok(window) = windows.single() else {
         return;
     };
     let cursor = window.cursor_position();
@@ -118,10 +114,10 @@ pub fn update_tooltip(
         }
     }
 
-    let Ok((mut style, mut vis, node)) = layer_q.get_single_mut() else {
+    let Ok((mut panel, mut vis, computed)) = layer_q.single_mut() else {
         return;
     };
-    let Ok(mut text) = text_q.get_single_mut() else {
+    let Ok(mut text) = text_q.single_mut() else {
         return;
     };
 
@@ -154,11 +150,12 @@ pub fn update_tooltip(
                 hide();
             }
             state.delay.tick(time.delta());
-            if !state.delay.finished() {
+            if !state.delay.is_finished() {
                 return;
             }
-            if text.sections[0].value != content {
-                text.sections[0].value = content.to_string();
+            let content_owned = content.to_string();
+            if text.0 != content_owned {
+                text.0.clone_from(&content_owned);
             }
             let Some(pos) = cursor else {
                 hide();
@@ -170,8 +167,8 @@ pub fn update_tooltip(
             let offset = 14.0;
             let mut x = pos.x + offset;
             let mut y = pos.y + offset;
-            let tw = node.size().x.max(120.0);
-            let th = node.size().y.max(36.0);
+            let tw = computed.size.x.max(120.0);
+            let th = computed.size.y.max(36.0);
             if x + tw + m > w {
                 x = (w - tw - m).max(m);
             }
@@ -184,8 +181,8 @@ pub fn update_tooltip(
             if y < m {
                 y = m;
             }
-            style.left = Val::Px(x);
-            style.top = Val::Px(y);
+            panel.left = Val::Px(x);
+            panel.top = Val::Px(y);
             *vis = Visibility::Visible;
         }
     }

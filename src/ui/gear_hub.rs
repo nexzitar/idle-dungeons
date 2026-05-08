@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 use bevy::ui::{FocusPolicy, RelativeCursorPosition};
+use bevy::text::{TextColor, TextFont};
 
 use crate::save::StashSortOrder;
 use crate::ui::components::{
@@ -13,7 +14,7 @@ use crate::ui::placeholder_graphics::UiPlaceholderImages;
 use crate::ui::theme::{caption_text, headline_text, section_title, UiTheme};
 
 pub fn spawn_gear_hub_modal(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands<'_>,
     profile: &crate::app::ProfileState,
     inventory: &[crate::domain::items::ItemInstance],
     summary_loot: Option<&[crate::domain::items::ItemInstance]>,
@@ -25,15 +26,12 @@ pub fn spawn_gear_hub_modal(
 
     parent
         .spawn((
-            NodeBundle {
-                style: Style {
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(100.0),
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(0.0),
-                    top: Val::Px(0.0),
-                    ..default()
-                },
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                top: Val::Px(0.0),
                 ..default()
             },
             GearHubRoot,
@@ -49,26 +47,24 @@ pub fn spawn_gear_hub_modal(
                 pressed_border: Color::NONE,
             };
             layer.spawn((
-                ButtonBundle {
-                    style: Style {
-                        position_type: PositionType::Absolute,
-                        width: Val::Percent(100.0),
-                        height: Val::Percent(100.0),
-                        left: Val::Px(0.0),
-                        top: Val::Px(0.0),
-                        ..default()
-                    },
-                    background_color: backdrop_pal.idle_bg.into(),
-                    border_color: BorderColor(backdrop_pal.idle_border),
+                Node {
+                    position_type: PositionType::Absolute,
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    left: Val::Px(0.0),
+                    top: Val::Px(0.0),
                     ..default()
                 },
+                Button,
+                BackgroundColor(backdrop_pal.idle_bg),
+                BorderColor::from(backdrop_pal.idle_border),
                 GearHubBackdrop,
                 backdrop_pal,
                 UiTooltip::txt("Click outside to close the gear hub."),
             ));
             layer
-                .spawn(NodeBundle {
-                    style: Style {
+                .spawn((
+                    Node {
                         position_type: PositionType::Absolute,
                         left: Val::Percent(50.0),
                         top: Val::Percent(42.0),
@@ -87,20 +83,16 @@ pub fn spawn_gear_hub_modal(
                         border: UiRect::all(Val::Px(2.0)),
                         ..default()
                     },
-                    background_color: UiTheme::panel_bg_deep().into(),
-                    border_color: BorderColor(UiTheme::ornate_gold()),
-                    ..default()
-                })
+                    BackgroundColor(UiTheme::panel_bg_deep()),
+                    BorderColor::from(UiTheme::ornate_gold()),
+                ))
                 .with_children(|dialog| {
                     dialog.spawn(headline_text("Gear"));
                     dialog.spawn(section_title("LOADOUT"));
-                    dialog.spawn(NodeBundle {
-                        style: Style {
-                            width: Val::Percent(100.0),
-                            flex_direction: FlexDirection::Column,
-                            row_gap: Val::Px(6.0),
-                            ..default()
-                        },
+                    dialog.spawn(Node {
+                        width: Val::Percent(100.0),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(6.0),
                         ..default()
                     })
                     .with_children(|loadout| {
@@ -122,31 +114,26 @@ pub fn spawn_gear_hub_modal(
                     let close_pal = UiButtonPalette::panel_outlined();
                     dialog
                         .spawn((
-                            ButtonBundle {
-                                style: Style {
-                                    width: Val::Percent(100.0),
-                                    min_height: Val::Px(40.0),
-                                    justify_content: JustifyContent::Center,
-                                    align_items: AlignItems::Center,
-                                    border: UiRect::all(Val::Px(1.0)),
-                                    ..default()
-                                },
-                                background_color: close_pal.idle_bg.into(),
-                                border_color: BorderColor(close_pal.idle_border),
+                            Node {
+                                width: Val::Percent(100.0),
+                                min_height: Val::Px(40.0),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                border: UiRect::all(Val::Px(1.0)),
                                 ..default()
                             },
+                            Button,
+                            BackgroundColor(close_pal.idle_bg),
+                            BorderColor::from(close_pal.idle_border),
                             GearHubCloseButton,
                             close_pal,
                             UiTooltip::txt("Close the gear hub."),
                         ))
                         .with_children(|b| {
-                            b.spawn(TextBundle::from_section(
-                                "Close",
-                                TextStyle {
-                                    font_size: UiTheme::FONT_BODY,
-                                    color: UiTheme::muted_cream(),
-                                    ..default()
-                                },
+                            b.spawn((
+                                Text::new("Close"),
+                                TextFont::from_font_size(UiTheme::FONT_BODY),
+                                TextColor(UiTheme::muted_cream()),
                             ));
                         });
                 });
@@ -154,7 +141,7 @@ pub fn spawn_gear_hub_modal(
 }
 
 fn gear_hub_scroll_list(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands<'_>,
     rows: &[crate::domain::items::ItemInstance],
     interactive_inventory: bool,
     stash_sort: StashSortOrder,
@@ -162,22 +149,19 @@ fn gear_hub_scroll_list(
 ) {
     parent
         .spawn((
-            NodeBundle {
-                style: Style {
-                    width: Val::Percent(100.0),
-                    height: Val::Px(340.0),
-                    flex_shrink: 0.0,
-                    position_type: PositionType::Relative,
-                    flex_direction: FlexDirection::Column,
-                    overflow: Overflow::clip_y(),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                background_color: UiTheme::panel_bg().into(),
-                border_color: BorderColor(UiTheme::panel_border_inner()),
-                focus_policy: FocusPolicy::Pass,
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Px(340.0),
+                flex_shrink: 0.0,
+                position_type: PositionType::Relative,
+                flex_direction: FlexDirection::Column,
+                overflow: Overflow::clip_y(),
+                border: UiRect::all(Val::Px(1.0)),
                 ..default()
             },
+            BackgroundColor(UiTheme::panel_bg()),
+            BorderColor::from(UiTheme::panel_border_inner()),
+            FocusPolicy::Pass,
             RelativeCursorPosition::default(),
             UiScrollState::default(),
             UiScrollRegion,
@@ -185,18 +169,15 @@ fn gear_hub_scroll_list(
         .with_children(|viewport| {
             viewport
                 .spawn((
-                    NodeBundle {
-                        style: Style {
-                            position_type: PositionType::Absolute,
-                            left: Val::Px(0.0),
-                            right: Val::Px(0.0),
-                            top: Val::Px(0.0),
-                            padding: UiRect::all(Val::Px(UiTheme::PANEL_INSET_SM)),
-                            flex_direction: FlexDirection::Column,
-                            align_items: AlignItems::Stretch,
-                            row_gap: Val::Px(6.0),
-                            ..default()
-                        },
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(0.0),
+                        right: Val::Px(0.0),
+                        top: Val::Px(0.0),
+                        padding: UiRect::all(Val::Px(UiTheme::PANEL_INSET_SM)),
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Stretch,
+                        row_gap: Val::Px(6.0),
                         ..default()
                     },
                     UiScrollContent,
@@ -205,8 +186,7 @@ fn gear_hub_scroll_list(
                     if rows.is_empty() {
                         body.spawn(caption_text("No items in this list."));
                     } else {
-                        let ix =
-                            crate::ui::stash_sort::stash_display_indices(rows, stash_sort);
+                        let ix = crate::ui::stash_sort::stash_display_indices(rows, stash_sort);
                         for &i in ix.iter().take(40) {
                             let item = &rows[i];
                             if interactive_inventory {

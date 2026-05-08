@@ -52,12 +52,11 @@ use bevy::app::MainScheduleOrder;
 use bevy::asset::AssetPlugin;
 use bevy::ecs::schedule::ScheduleLabel;
 use bevy::input::mouse::{MouseButton, MouseWheel};
-use bevy::input::InputPlugin;
+use bevy::input::{keyboard::KeyboardInput, ButtonState, InputPlugin};
 use bevy::prelude::*;
-use bevy::transform::TransformSystem;
-use bevy::ui::{RelativeCursorPosition, UiSystem};
-#[allow(deprecated)]
-use bevy::window::ReceivedCharacter;
+use bevy::transform::prelude::TransformSystems;
+use bevy::ui::{ComputedNode, RelativeCursorPosition, UiSystems};
+use bevy::text::{TextColor, TextFont};
 
 #[derive(Resource, Default)]
 struct GearHubKeepOpen(pub bool);
@@ -85,8 +84,6 @@ impl Plugin for UiPlugin {
         if !app.is_plugin_added::<InputPlugin>() {
             app.add_plugins(InputPlugin);
         }
-        #[allow(deprecated)]
-        app.add_event::<ReceivedCharacter>();
         app.init_resource::<GearHubKeepOpen>();
         app.init_resource::<UiClickPress>();
         app.init_resource::<crate::ui::tooltip::TooltipState>();
@@ -94,7 +91,7 @@ impl Plugin for UiPlugin {
         app.init_resource::<PlaybackCombatLogVisible>();
         app.add_systems(
             Update,
-            crate::ui::tooltip::hide_tooltip_layer_before_pointer_focus.before(UiSystem::Focus),
+            crate::ui::tooltip::hide_tooltip_layer_before_pointer_focus.before(UiSystems::Focus),
         );
         app.add_schedule(Schedule::new(RegisterUiPlaceholderImages));
         app.add_systems(
@@ -190,12 +187,12 @@ impl Plugin for UiPlugin {
             .add_systems(
                 PostUpdate,
                 (
-                    apply_ui_scroll.after(TransformSystem::TransformPropagate),
+                    apply_ui_scroll.after(TransformSystems::Propagate),
                     pin_playback_combat_log_scroll
                         .run_if(in_state(GameState::Running))
                         .after(apply_ui_scroll),
                     refresh_profile_screen_on_profile_change,
-                    crate::ui::tooltip::update_tooltip.after(UiSystem::Layout),
+                    crate::ui::tooltip::update_tooltip.after(UiSystems::Layout),
                 ),
             );
     }
@@ -210,7 +207,7 @@ fn in_build_or_summary(state: Res<State<GameState>>) -> bool {
 }
 
 fn spawn_camera(mut commands: Commands) {
-    commands.spawn((Camera2dBundle::default(), MainCamera));
+    commands.spawn((Camera2d, MainCamera));
 }
 
 fn spawn_title_screen(
@@ -223,7 +220,7 @@ fn spawn_title_screen(
 }
 
 fn tick_campfire_flames(time: Res<Time>, mut q: Query<(&CampfireFlame, &mut BackgroundColor)>) {
-    let t = time.elapsed_seconds();
+    let t = time.elapsed_secs();
     for (flame, mut bg) in &mut q {
         let w = ((t * flame.speed + flame.phase_offset).sin() * 0.5 + 0.5).clamp(0.0, 1.0);
         let c = flame.base.mix(&flame.peak, w);
@@ -255,7 +252,7 @@ fn handle_title_quit(
     mouse: Res<ButtonInput<MouseButton>>,
     press: Res<UiClickPress>,
     buttons: Query<(Entity, &Interaction), With<TitleQuitButton>>,
-    mut exit: EventWriter<AppExit>,
+    mut exit: MessageWriter<AppExit>,
 ) {
     if !mouse.just_released(MouseButton::Left) {
         return;
@@ -265,7 +262,7 @@ fn handle_title_quit(
     };
     for (entity, interaction) in &buttons {
         if entity == target && ui_click_release_confirms(*interaction) {
-            exit.send(AppExit::Success);
+            exit.write(AppExit::Success);
             break;
         }
     }
@@ -301,9 +298,10 @@ fn clear_ui_click_after_release(
     }
 }
 
-fn root_shell() -> NodeBundle {
-    NodeBundle {
-        style: Style {
+fn root_shell() -> impl Bundle {
+    (
+        Node {
+            box_sizing: BoxSizing::BorderBox,
             width: Val::Percent(100.0),
             height: Val::Percent(100.0),
             position_type: PositionType::Relative,
@@ -311,14 +309,14 @@ fn root_shell() -> NodeBundle {
             align_items: AlignItems::Stretch,
             ..default()
         },
-        background_color: Color::NONE.into(),
-        ..default()
-    }
+        BackgroundColor(Color::NONE),
+    )
 }
 
-fn content_column_bundle() -> NodeBundle {
-    NodeBundle {
-        style: Style {
+fn content_column_bundle() -> impl Bundle {
+    (
+        Node {
+            box_sizing: BoxSizing::BorderBox,
             width: Val::Percent(100.0),
             flex_grow: 1.0,
             min_height: Val::Px(0.0),
@@ -328,13 +326,12 @@ fn content_column_bundle() -> NodeBundle {
             align_items: AlignItems::Stretch,
             ..default()
         },
-        ..default()
-    }
+    )
 }
 
 fn cleanup_running_exit(mut commands: Commands, roots: Query<Entity, With<UiRoot>>) {
     for root in &roots {
-        commands.entity(root).despawn_recursive();
+        commands.entity(root).despawn();
     }
     commands.remove_resource::<ActiveRunPlayback>();
 }
@@ -614,7 +611,7 @@ fn handle_stash_sort_button(
         match state.get() {
             GameState::Build => {
                 for e in &build_roots {
-                    commands.entity(e).despawn_recursive();
+                    commands.entity(e).despawn();
                 }
                 *name_edit = HeroNameEditState::default();
                 let root = spawn_build_screen_root(&mut commands, &profile, speed.0, &ph);
@@ -634,7 +631,7 @@ fn handle_stash_sort_button(
                     .map(|s| s.summary.clone())
                     .unwrap_or_else(crate::ui::summary_panel::empty_run_summary);
                 for e in &summary_roots {
-                    commands.entity(e).despawn_recursive();
+                    commands.entity(e).despawn();
                 }
                 *name_edit = HeroNameEditState::default();
                 let root = spawn_summary_screen_root(
@@ -656,7 +653,7 @@ fn handle_stash_sort_button(
             }
             GameState::Running => {
                 for e in &running_roots {
-                    commands.entity(e).despawn_recursive();
+                    commands.entity(e).despawn();
                 }
                 spawn_running_screen_root(&mut commands, &profile, speed.0, &ph);
             }
@@ -688,7 +685,7 @@ fn refresh_profile_screen_on_profile_change(
                 return;
             }
             for e in &title_roots {
-                commands.entity(e).despawn_recursive();
+                commands.entity(e).despawn();
             }
             crate::ui::title_camp::spawn_title_screen(&mut commands, &profile, speed.0, &ph);
         }
@@ -697,7 +694,7 @@ fn refresh_profile_screen_on_profile_change(
                 return;
             }
             for e in &build_roots {
-                commands.entity(e).despawn_recursive();
+                commands.entity(e).despawn();
             }
             *name_edit = HeroNameEditState::default();
             let root = spawn_build_screen_root(&mut commands, &profile, speed.0, &ph);
@@ -720,7 +717,7 @@ fn refresh_profile_screen_on_profile_change(
                 .map(|s| s.summary.clone())
                 .unwrap_or_else(crate::ui::summary_panel::empty_run_summary);
             for e in &summary_roots {
-                commands.entity(e).despawn_recursive();
+                commands.entity(e).despawn();
             }
             *name_edit = HeroNameEditState::default();
             let root =
@@ -740,13 +737,14 @@ fn refresh_profile_screen_on_profile_change(
 }
 
 pub(crate) fn spawn_item_card(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands<'_>,
     item: &ItemInstance,
     ph: &UiPlaceholderImages,
 ) {
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 padding: UiRect::all(Val::Px(UiTheme::PANEL_INSET)),
                 flex_direction: FlexDirection::Column,
@@ -755,36 +753,38 @@ pub(crate) fn spawn_item_card(
                 border: UiRect::all(Val::Px(1.0)),
                 ..default()
             },
-            background_color: UiTheme::panel_bg_deep().into(),
-            border_color: BorderColor(rarity_color(item.rarity).mix(&Color::BLACK, 0.45)),
-            ..default()
-        })
+            BackgroundColor(UiTheme::panel_bg_deep()),
+            BorderColor::from(rarity_color(item.rarity).mix(&Color::BLACK, 0.45)),
+        ))
         .with_children(|card| {
-            card.spawn(NodeBundle {
-                style: Style {
+            card.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
                     width: Val::Percent(100.0),
                     flex_direction: FlexDirection::Row,
                     column_gap: Val::Px(10.0),
                     align_items: AlignItems::FlexStart,
                     ..default()
                 },
-                ..default()
-            })
+            ))
             .with_children(|head| {
-                head.spawn(ImageBundle {
-                    style: Style {
+                head.spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
                         width: Val::Px(40.0),
                         height: Val::Px(40.0),
                         flex_shrink: 0.0,
                         ..default()
                     },
-                    image: UiImage::new(ph.item_generic.clone())
-                        .with_color(rarity_color(item.rarity).mix(&Color::WHITE, 0.35)),
-                    background_color: Color::NONE.into(),
-                    ..default()
-                });
-                head.spawn(NodeBundle {
-                    style: Style {
+                    ImageNode {
+                        image: ph.item_generic.clone(),
+                        color: rarity_color(item.rarity).mix(&Color::WHITE, 0.35),
+                        ..default()
+                    },
+                ));
+                head.spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
                         flex_direction: FlexDirection::Column,
                         align_items: AlignItems::FlexStart,
                         row_gap: Val::Px(4.0),
@@ -792,16 +792,12 @@ pub(crate) fn spawn_item_card(
                         min_width: Val::Px(0.0),
                         ..default()
                     },
-                    ..default()
-                })
+                ))
                 .with_children(|txt| {
-                    txt.spawn(TextBundle::from_section(
-                        &item.name,
-                        TextStyle {
-                            font_size: UiTheme::FONT_SECTION,
-                            color: rarity_color(item.rarity),
-                            ..default()
-                        },
+                    txt.spawn((
+                        Text::new(item.name.clone()),
+                        TextFont::from_font_size(UiTheme::FONT_SECTION),
+                        TextColor(rarity_color(item.rarity)),
                     ));
                     txt.spawn(caption_text(format!("{:?} · {:?}", item.rarity, item.slot)));
                     txt.spawn(body_text(format_item_stat_summary(item)));
@@ -811,31 +807,30 @@ pub(crate) fn spawn_item_card(
                     }
                 });
             });
-            card.spawn(NodeBundle {
-                style: Style {
+            card.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
                     flex_direction: FlexDirection::Row,
                     column_gap: Val::Px(10.0),
                     align_items: AlignItems::Center,
                     ..default()
                 },
-                ..default()
-            })
+            ))
             .with_children(|row| {
                 let equip_pal = UiButtonPalette::equip();
                 row.spawn((
-                    ButtonBundle {
-                        style: Style {
-                            width: Val::Px(108.0),
-                            height: Val::Px(36.0),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            border: UiRect::all(Val::Px(1.0)),
-                            ..default()
-                        },
-                        background_color: equip_pal.idle_bg.into(),
-                        border_color: BorderColor(equip_pal.idle_border),
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        width: Val::Px(108.0),
+                        height: Val::Px(36.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(Val::Px(1.0)),
                         ..default()
                     },
+                    Button,
+                    BackgroundColor(equip_pal.idle_bg),
+                    BorderColor::from(equip_pal.idle_border),
                     EquipItemButton { item_id: item.id },
                     equip_pal,
                     UiTooltip::txt(
@@ -843,30 +838,26 @@ pub(crate) fn spawn_item_card(
                     ),
                 ))
                 .with_children(|b| {
-                    b.spawn(TextBundle::from_section(
-                        "Equip",
-                        TextStyle {
-                            font_size: UiTheme::FONT_BODY,
-                            color: Color::WHITE,
-                            ..default()
-                        },
+                    b.spawn((
+                        Text::new("Equip"),
+                        TextFont::from_font_size(UiTheme::FONT_BODY),
+                        TextColor(Color::WHITE),
                     ));
                 });
                 let salvage_pal = UiButtonPalette::salvage();
                 row.spawn((
-                    ButtonBundle {
-                        style: Style {
-                            width: Val::Px(108.0),
-                            height: Val::Px(36.0),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            border: UiRect::all(Val::Px(1.0)),
-                            ..default()
-                        },
-                        background_color: salvage_pal.idle_bg.into(),
-                        border_color: BorderColor(salvage_pal.idle_border),
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        width: Val::Px(108.0),
+                        height: Val::Px(36.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(Val::Px(1.0)),
                         ..default()
                     },
+                    Button,
+                    BackgroundColor(salvage_pal.idle_bg),
+                    BorderColor::from(salvage_pal.idle_border),
                     SalvageItemButton { item_id: item.id },
                     salvage_pal,
                     UiTooltip::txt(
@@ -874,13 +865,10 @@ pub(crate) fn spawn_item_card(
                     ),
                 ))
                 .with_children(|b| {
-                    b.spawn(TextBundle::from_section(
-                        "Salvage",
-                        TextStyle {
-                            font_size: UiTheme::FONT_BODY,
-                            color: UiTheme::body(),
-                            ..default()
-                        },
+                    b.spawn((
+                        Text::new("Salvage"),
+                        TextFont::from_font_size(UiTheme::FONT_BODY),
+                        TextColor(UiTheme::body()),
                     ));
                 });
             });
@@ -933,8 +921,8 @@ fn sync_top_bar(
                 }
             }
         };
-        if text.sections[0].value != value {
-            text.sections[0].value = value;
+        if text.0 != value {
+            text.0 = value;
         }
     }
 }
@@ -957,7 +945,7 @@ fn apply_ui_button_palettes(
             Interaction::Pressed => (pal.pressed_bg, pal.pressed_border),
         };
         *bg = cb.into();
-        *border = BorderColor(bo);
+        *border = bo.into();
     }
 }
 
@@ -965,7 +953,7 @@ fn send_reset_progress_requests(
     mouse: Res<ButtonInput<MouseButton>>,
     press: Res<UiClickPress>,
     interactions: Query<(Entity, &Interaction), With<ResetProgressButton>>,
-    mut events: EventWriter<ResetProgress>,
+    mut events: MessageWriter<ResetProgress>,
 ) {
     if !mouse.just_released(MouseButton::Left) {
         return;
@@ -975,14 +963,14 @@ fn send_reset_progress_requests(
     };
     for (entity, interaction) in &interactions {
         if entity == target && ui_click_release_confirms(*interaction) {
-            events.send(ResetProgress);
+            events.write(ResetProgress);
             break;
         }
     }
 }
 
 fn fulfill_reset_progress(
-    mut events: EventReader<ResetProgress>,
+    mut events: MessageReader<ResetProgress>,
     mut profile: ResMut<ProfileState>,
     save_path: Res<ProfileSavePath>,
     mut commands: Commands,
@@ -1006,7 +994,7 @@ fn fulfill_reset_progress(
 
         if *state.get() == GameState::Title {
             for e in &roots {
-                commands.entity(e).despawn_recursive();
+                commands.entity(e).despawn();
             }
             crate::ui::title_camp::spawn_title_screen(&mut commands, &profile, speed.0, &ph);
         } else {
@@ -1037,7 +1025,7 @@ fn open_settings_modal(
         if !existing.is_empty() {
             return;
         }
-        let Ok(root) = roots.get_single() else {
+        let Ok(root) = roots.single() else {
             return;
         };
         commands.entity(root).with_children(|parent| {
@@ -1069,13 +1057,13 @@ fn close_settings_modal(
             .any(|(e, i)| e == target && ui_click_release_confirms(*i));
     if should_close {
         for entity in &modal {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
     }
 }
 
 fn handle_open_skill_book(
-    mut events: EventReader<OpenSkillBook>,
+    mut events: MessageReader<OpenSkillBook>,
     roots: Query<Entity, With<UiRoot>>,
     existing: Query<(), With<SkillBookRoot>>,
     mut commands: Commands,
@@ -1085,7 +1073,7 @@ fn handle_open_skill_book(
         if !existing.is_empty() {
             continue;
         }
-        let Ok(root) = roots.get_single() else {
+        let Ok(root) = roots.single() else {
             continue;
         };
         commands.entity(root).with_children(|parent| {
@@ -1098,7 +1086,7 @@ fn request_gear_hub_open(
     mouse: Res<ButtonInput<MouseButton>>,
     press: Res<UiClickPress>,
     open_btns: Query<(Entity, &Interaction), With<GearHubOpenButton>>,
-    mut writer: EventWriter<OpenGearHub>,
+    mut writer: MessageWriter<OpenGearHub>,
 ) {
     if !mouse.just_released(MouseButton::Left) {
         return;
@@ -1108,14 +1096,14 @@ fn request_gear_hub_open(
     };
     for (entity, interaction) in &open_btns {
         if entity == target && ui_click_release_confirms(*interaction) {
-            writer.send(OpenGearHub);
+            writer.write(OpenGearHub);
             return;
         }
     }
 }
 
 fn open_gear_hub_from_events(
-    mut events: EventReader<OpenGearHub>,
+    mut events: MessageReader<OpenGearHub>,
     roots: Query<Entity, With<UiRoot>>,
     existing: Query<Entity, With<GearHubRoot>>,
     mut commands: Commands,
@@ -1128,9 +1116,9 @@ fn open_gear_hub_from_events(
     for _ in events.read() {
         gear_keep.0 = true;
         for e in existing.iter() {
-            commands.entity(e).despawn_recursive();
+            commands.entity(e).despawn();
         }
-        let Ok(root) = roots.get_single() else {
+        let Ok(root) = roots.single() else {
             continue;
         };
         let interactive = matches!(*state.get(), GameState::Build | GameState::Summary);
@@ -1176,7 +1164,7 @@ fn close_gear_hub_modal(
     if should_close {
         gear_keep.0 = false;
         for entity in &modal {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
     }
 }
@@ -1203,7 +1191,7 @@ fn close_skill_book_modal(
             .any(|(e, i)| e == target && ui_click_release_confirms(*i));
     if should_close {
         for entity in &modal {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
     }
 }
@@ -1212,7 +1200,7 @@ fn handle_skill_book_pick(
     mouse: Res<ButtonInput<MouseButton>>,
     press: Res<UiClickPress>,
     buttons: Query<(Entity, &Interaction, &SkillBookPickButton)>,
-    mut writer: EventWriter<AssignHeroSkill>,
+    mut writer: MessageWriter<AssignHeroSkill>,
     modal: Query<Entity, With<SkillBookRoot>>,
     mut commands: Commands,
 ) {
@@ -1224,13 +1212,13 @@ fn handle_skill_book_pick(
     };
     for (entity, interaction, pick) in &buttons {
         if entity == target && ui_click_release_confirms(*interaction) {
-            writer.send(AssignHeroSkill {
+            writer.write(AssignHeroSkill {
                 slot: pick.slot,
                 skill: pick.skill,
                 kind: pick.kind,
             });
             for e in &modal {
-                commands.entity(e).despawn_recursive();
+                commands.entity(e).despawn();
             }
             break;
         }
@@ -1267,7 +1255,7 @@ fn handle_settings_modal_speed(
             format!("{:.1}x", speed.0)
         };
         for mut text in &mut labels {
-            text.sections[0].value = format!("Speed: {speed_label} (click to toggle)");
+            text.0 = format!("Speed: {speed_label} (click to toggle)");
         }
         break;
     }
@@ -1277,7 +1265,7 @@ fn handle_start_button(
     mouse: Res<ButtonInput<MouseButton>>,
     press: Res<UiClickPress>,
     buttons: Query<(Entity, &Interaction), With<StartRunButton>>,
-    mut start_run_events: EventWriter<StartRun>,
+    mut start_run_events: MessageWriter<StartRun>,
 ) {
     if !mouse.just_released(MouseButton::Left) {
         return;
@@ -1287,7 +1275,7 @@ fn handle_start_button(
     };
     for (entity, interaction) in &buttons {
         if entity == target && ui_click_release_confirms(*interaction) {
-            start_run_events.send(StartRun {
+            start_run_events.write(StartRun {
                 seed: crate::domain::run::DEFAULT_RUN_SEED,
             });
             break;
@@ -1299,7 +1287,7 @@ fn handle_skip_playback_button(
     mouse: Res<ButtonInput<MouseButton>>,
     press: Res<UiClickPress>,
     buttons: Query<(Entity, &Interaction), With<SkipPlaybackButton>>,
-    mut events: EventWriter<SkipRunPlayback>,
+    mut events: MessageWriter<SkipRunPlayback>,
 ) {
     if !mouse.just_released(MouseButton::Left) {
         return;
@@ -1309,7 +1297,7 @@ fn handle_skip_playback_button(
     };
     for (entity, interaction) in &buttons {
         if entity == target && ui_click_release_confirms(*interaction) {
-            events.send(SkipRunPlayback);
+            events.write(SkipRunPlayback);
             break;
         }
     }
@@ -1323,8 +1311,8 @@ fn sync_run_playback_ui(
         Query<&mut Text, With<PlaybackEnemyNameText>>,
         Query<&mut Text, With<PlaybackCaptionText>>,
         Query<&mut Text, With<PlaybackLogText>>,
-        Query<&mut Style, With<PlaybackHeroBarFill>>,
-        Query<&mut Style, With<PlaybackEnemyBarFill>>,
+        Query<&mut Node, With<PlaybackHeroBarFill>>,
+        Query<&mut Node, With<PlaybackEnemyBarFill>>,
     )>,
 ) {
     if playback.frames.is_empty() {
@@ -1351,32 +1339,31 @@ fn sync_run_playback_ui(
         ),
     };
 
-    let log_body = playback.log_lines.join("\n");
-    let log_rich = crate::ui::theme::playback_log_rich_text(&playback.log_lines);
+    let log_plain = crate::ui::theme::playback_log_plain(&playback.log_lines);
 
     for mut text in params.p0().iter_mut() {
-        if text.sections[0].value != depth_s {
-            text.sections[0].value = depth_s.clone();
+        if text.0 != depth_s {
+            text.0 = depth_s.clone();
         }
     }
     for mut text in params.p1().iter_mut() {
-        if text.sections[0].value != kind_s {
-            text.sections[0].value = kind_s.clone();
+        if text.0 != kind_s {
+            text.0 = kind_s.clone();
         }
     }
     for mut text in params.p2().iter_mut() {
-        if text.sections[0].value != enemy_name {
-            text.sections[0].value = enemy_name.clone();
+        if text.0 != enemy_name {
+            text.0 = enemy_name.clone();
         }
     }
     for mut text in params.p3().iter_mut() {
-        if text.sections[0].value != caption {
-            text.sections[0].value = caption.clone();
+        if text.0 != caption {
+            text.0 = caption.clone();
         }
     }
     for mut text in params.p4().iter_mut() {
-        if crate::ui::theme::text_flatten(&text) != log_body {
-            text.sections = log_rich.sections.clone();
+        if text.0 != log_plain {
+            text.0.clone_from(&log_plain);
         }
     }
 
@@ -1392,7 +1379,7 @@ fn sync_run_playback_ui(
 
 fn sync_run_playback_party_bars(
     playback: Res<ActiveRunPlayback>,
-    mut ally_bar: Query<&mut Style, With<PlaybackAllyBarFill>>,
+    mut ally_bar: Query<&mut Node, With<PlaybackAllyBarFill>>,
 ) {
     if playback.frames.is_empty() {
         return;
@@ -1437,8 +1424,8 @@ fn sync_playback_aggro_arrow(
         }
     };
     for mut text in &mut aggro {
-        if text.sections[0].value != arrow_s {
-            text.sections[0].value = arrow_s.clone();
+        if text.0 != arrow_s {
+            text.0 = arrow_s.clone();
         }
     }
 }
@@ -1485,14 +1472,14 @@ fn sync_playback_theater_slot_visibility(
 
 fn sync_playback_aggro_arrow_line(
     playback: Res<ActiveRunPlayback>,
-    mut q: Query<(&mut Style, &mut Visibility), With<PlaybackAggroArrowLine>>,
+    mut q: Query<(&mut Node, &mut Visibility), With<PlaybackAggroArrowLine>>,
 ) {
     if playback.frames.is_empty() {
         return;
     }
     let idx = playback.display_index.min(playback.frames.len() - 1);
     let frame = &playback.frames[idx];
-    let Ok((mut style, mut vis)) = q.get_single_mut() else {
+    let Ok((mut style, mut vis)) = q.single_mut() else {
         return;
     };
     match &frame.kind {
@@ -1528,9 +1515,9 @@ fn sync_playback_damage_meters(
     playback: Res<ActiveRunPlayback>,
     mut partner_row: Query<&mut Visibility, With<PlaybackDmgMeterPartnerRow>>,
     mut fills: ParamSet<(
-        Query<&mut Style, With<PlaybackDmgMeterLeadFill>>,
-        Query<&mut Style, With<PlaybackDmgMeterPartnerFill>>,
-        Query<&mut Style, With<PlaybackDmgMeterEnemyFill>>,
+        Query<&mut Node, With<PlaybackDmgMeterLeadFill>>,
+        Query<&mut Node, With<PlaybackDmgMeterPartnerFill>>,
+        Query<&mut Node, With<PlaybackDmgMeterEnemyFill>>,
     )>,
     mut vals: ParamSet<(
         Query<&mut Text, With<PlaybackDmgMeterLeadValue>>,
@@ -1569,18 +1556,18 @@ fn sync_playback_damage_meters(
     let s1 = p1.to_string();
     let sf = fe.to_string();
     for mut t in vals.p0().iter_mut() {
-        if t.sections[0].value != s0 {
-            t.sections[0].value = s0.clone();
+        if t.0 != s0 {
+            t.0.clone_from(&s0);
         }
     }
     for mut t in vals.p1().iter_mut() {
-        if t.sections[0].value != s1 {
-            t.sections[0].value = s1.clone();
+        if t.0 != s1 {
+            t.0.clone_from(&s1);
         }
     }
     for mut t in vals.p2().iter_mut() {
-        if t.sections[0].value != sf {
-            t.sections[0].value = sf.clone();
+        if t.0 != sf {
+            t.0.clone_from(&sf);
         }
     }
     for mut v in &mut partner_row {
@@ -1636,8 +1623,8 @@ fn sync_combat_log_toggle_label(
         "Show log"
     };
     for mut text in &mut labels {
-        if text.sections[0].value != s {
-            text.sections[0].value = s.to_string();
+        if text.0 != s {
+            text.0 = s.to_string();
         }
     }
 }
@@ -1665,37 +1652,35 @@ fn spawn_playback_floating_combat_text(
     if matches!(anchor, crate::domain::combat::CombatSfxAnchor::Neutral) {
         return;
     }
-    let Ok(parent) = float_layer.get_single() else {
+    let Ok(parent) = float_layer.single() else {
         return;
     };
     let color = crate::ui::theme::playback_float_text_color(&caption);
     let font_size = UiTheme::FONT_COMPACT;
-    let mut pos = NodeBundle {
-        style: Style {
-            position_type: PositionType::Absolute,
+    let mut pos = Node {
+                box_sizing: BoxSizing::BorderBox,
+                position_type: PositionType::Absolute,
             max_width: Val::Px(200.0),
             padding: UiRect::axes(Val::Px(6.0), Val::Px(2.0)),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
             ..default()
-        },
-        ..default()
-    };
+            };
     match anchor {
         crate::domain::combat::CombatSfxAnchor::Lead => {
-            pos.style.left = Val::Percent(4.0);
-            pos.style.right = Val::Auto;
-            pos.style.top = Val::Percent(10.0);
+            pos.left = Val::Percent(4.0);
+            pos.right = Val::Auto;
+            pos.top = Val::Percent(10.0);
         }
         crate::domain::combat::CombatSfxAnchor::Ally => {
-            pos.style.left = Val::Percent(4.0);
-            pos.style.right = Val::Auto;
-            pos.style.top = Val::Percent(52.0);
+            pos.left = Val::Percent(4.0);
+            pos.right = Val::Auto;
+            pos.top = Val::Percent(52.0);
         }
         crate::domain::combat::CombatSfxAnchor::Enemy => {
-            pos.style.right = Val::Percent(4.0);
-            pos.style.left = Val::Auto;
-            pos.style.top = Val::Percent(28.0);
+            pos.right = Val::Percent(4.0);
+            pos.left = Val::Auto;
+            pos.top = Val::Percent(28.0);
         }
         crate::domain::combat::CombatSfxAnchor::Neutral => return,
     }
@@ -1704,13 +1689,10 @@ fn spawn_playback_floating_combat_text(
         layer
             .spawn((pos, FloatingCombatPopup { ttl: 0.95 }))
             .with_children(|pop| {
-                pop.spawn(TextBundle::from_section(
-                    caption,
-                    TextStyle {
-                        font_size,
-                        color,
-                        ..default()
-                    },
+                pop.spawn((
+                    Text::new(caption),
+                    TextFont::from_font_size(font_size),
+                    TextColor(color),
                 ));
             });
     });
@@ -1721,11 +1703,11 @@ fn tick_floating_combat_popups(
     mut commands: Commands,
     mut q: Query<(Entity, &mut FloatingCombatPopup)>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
     for (entity, mut pop) in &mut q {
         pop.ttl -= dt;
         if pop.ttl <= 0.0 {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
     }
 }
@@ -1762,23 +1744,23 @@ fn sync_run_playback_debuff_slots(
             c.enemy_debuff_slots.join("  ·  "),
         ),
     };
-    let hero_text = crate::ui::theme::playback_debuff_status_text(&hero_line);
-    let foe_text = crate::ui::theme::playback_debuff_status_text(&foe_line);
+    let hs = crate::ui::theme::playback_debuff_line_string(&hero_line);
+    let fs = crate::ui::theme::playback_debuff_line_string(&foe_line);
     for mut text in &mut hero {
-        if crate::ui::theme::text_flatten(&text) != hero_line {
-            text.sections = hero_text.sections.clone();
+        if text.0 != hs {
+            text.0.clone_from(&hs);
         }
     }
     for mut text in &mut foe {
-        if crate::ui::theme::text_flatten(&text) != foe_line {
-            text.sections = foe_text.sections.clone();
+        if text.0 != fs {
+            text.0.clone_from(&fs);
         }
     }
 }
 
 fn sync_playback_delve_progress_bar(
     playback: Res<ActiveRunPlayback>,
-    mut fill: Query<&mut Style, With<PlaybackProgressBarFill>>,
+    mut fill: Query<&mut Node, With<PlaybackProgressBarFill>>,
     mut label: Query<&mut Text, With<PlaybackProgressLabel>>,
 ) {
     if playback.frames.is_empty() {
@@ -1794,8 +1776,8 @@ fn sync_playback_delve_progress_bar(
     }
     let line = format!("Floors cleared: {cleared} / {cap}");
     for mut text in &mut label {
-        if text.sections[0].value != line {
-            text.sections[0].value = line.clone();
+        if text.0 != line {
+            text.0 = line.clone();
         }
     }
 }
@@ -1804,7 +1786,7 @@ fn handle_accept_button(
     mouse: Res<ButtonInput<MouseButton>>,
     press: Res<UiClickPress>,
     buttons: Query<(Entity, &Interaction), With<AcceptRewardsButton>>,
-    mut events: EventWriter<AcceptRunRewards>,
+    mut events: MessageWriter<AcceptRunRewards>,
 ) {
     if !mouse.just_released(MouseButton::Left) {
         return;
@@ -1814,7 +1796,7 @@ fn handle_accept_button(
     };
     for (entity, interaction) in &buttons {
         if entity == target && ui_click_release_confirms(*interaction) {
-            events.send(AcceptRunRewards);
+            events.write(AcceptRunRewards);
             break;
         }
     }
@@ -1824,7 +1806,7 @@ fn handle_equip_buttons(
     mouse: Res<ButtonInput<MouseButton>>,
     press: Res<UiClickPress>,
     buttons: Query<(Entity, &Interaction, &EquipItemButton)>,
-    mut events: EventWriter<EquipInventoryItem>,
+    mut events: MessageWriter<EquipInventoryItem>,
 ) {
     if !mouse.just_released(MouseButton::Left) {
         return;
@@ -1834,7 +1816,7 @@ fn handle_equip_buttons(
     };
     for (entity, interaction, button) in &buttons {
         if entity == target && ui_click_release_confirms(*interaction) {
-            events.send(EquipInventoryItem {
+            events.write(EquipInventoryItem {
                 item_id: button.item_id,
             });
             break;
@@ -1846,7 +1828,7 @@ fn handle_skill_slot_buttons(
     mouse: Res<ButtonInput<MouseButton>>,
     press: Res<UiClickPress>,
     buttons: Query<(Entity, &Interaction, &SkillSlotButton)>,
-    mut events: EventWriter<OpenSkillBook>,
+    mut events: MessageWriter<OpenSkillBook>,
     state: Res<State<GameState>>,
 ) {
     if *state.get() != GameState::Build {
@@ -1860,7 +1842,7 @@ fn handle_skill_slot_buttons(
     };
     for (entity, interaction, btn) in &buttons {
         if entity == target && ui_click_release_confirms(*interaction) {
-            events.send(OpenSkillBook {
+            events.write(OpenSkillBook {
                 slot: btn.slot,
                 kind: btn.kind,
             });
@@ -1922,40 +1904,39 @@ fn sync_hero_name_labels(
         } else {
             hero_display_name_for_slot(&profile.profile, tag.slot)
         };
-        if text.sections[0].value != display {
-            text.sections[0].value = display;
+        if text.0 != display {
+            text.0 = display;
         }
     }
 }
 
-#[allow(deprecated)]
 fn hero_rename_keyboard(
     mut edit: ResMut<HeroNameEditState>,
     mut profile: ResMut<ProfileState>,
     save_path: Res<ProfileSavePath>,
     keys: Res<ButtonInput<KeyCode>>,
-    mut char_ev: EventReader<ReceivedCharacter>,
+    mut kb: MessageReader<KeyboardInput>,
     state: Res<State<GameState>>,
     settings_modal: Query<(), With<SettingsModalRoot>>,
     skill_book: Query<(), With<SkillBookRoot>>,
 ) {
     if edit.active_slot.is_none() {
-        for _ in char_ev.read() {}
+        for _ in kb.read() {}
         return;
     }
     if *state.get() != GameState::Build {
         *edit = HeroNameEditState::default();
-        for _ in char_ev.read() {}
+        for _ in kb.read() {}
         return;
     }
     if !settings_modal.is_empty() || !skill_book.is_empty() {
-        for _ in char_ev.read() {}
+        for _ in kb.read() {}
         return;
     }
 
     if keys.just_pressed(KeyCode::Escape) {
         *edit = HeroNameEditState::default();
-        for _ in char_ev.read() {}
+        for _ in kb.read() {}
         return;
     }
 
@@ -1985,7 +1966,7 @@ fn hero_rename_keyboard(
             warn!("failed to save after rename: {e}");
         }
         *edit = HeroNameEditState::default();
-        for _ in char_ev.read() {}
+        for _ in kb.read() {}
         return;
     }
 
@@ -1993,8 +1974,14 @@ fn hero_rename_keyboard(
         edit.buffer.pop();
     }
 
-    for ev in char_ev.read() {
-        for c in ev.char.chars() {
+    for ev in kb.read() {
+        if ev.state != ButtonState::Pressed || ev.repeat {
+            continue;
+        }
+        let Some(t) = ev.text.as_ref() else {
+            continue;
+        };
+        for c in t.chars() {
             if c == '\r' || c == '\n' {
                 continue;
             }
@@ -2013,7 +2000,7 @@ fn handle_salvage_buttons(
     mouse: Res<ButtonInput<MouseButton>>,
     press: Res<UiClickPress>,
     buttons: Query<(Entity, &Interaction, &SalvageItemButton)>,
-    mut events: EventWriter<SalvageInventoryItem>,
+    mut events: MessageWriter<SalvageInventoryItem>,
 ) {
     if !mouse.just_released(MouseButton::Left) {
         return;
@@ -2023,7 +2010,7 @@ fn handle_salvage_buttons(
     };
     for (entity, interaction, button) in &buttons {
         if entity == target && ui_click_release_confirms(*interaction) {
-            events.send(SalvageInventoryItem {
+            events.write(SalvageInventoryItem {
                 item_id: button.item_id,
             });
             break;
@@ -2035,11 +2022,11 @@ fn pin_playback_combat_log_scroll(
     playback: Res<ActiveRunPlayback>,
     vis: Res<PlaybackCombatLogVisible>,
     mut prev_log: Local<String>,
-    mut regions: Query<(Entity, &mut UiScrollState, &Node), With<PlaybackLogScrollRegion>>,
+    mut regions: Query<(Entity, &mut UiScrollState, &ComputedNode), With<PlaybackLogScrollRegion>>,
     children: Query<&Children>,
     mut content_set: ParamSet<(
-        Query<&Node, With<UiScrollContent>>,
-        Query<&mut Style, With<UiScrollContent>>,
+        Query<&ComputedNode, With<UiScrollContent>>,
+        Query<&mut Node, With<UiScrollContent>>,
     )>,
 ) {
     if !vis.0 {
@@ -2059,11 +2046,14 @@ fn pin_playback_combat_log_scroll(
         let Ok(ch) = children.get(entity) else {
             continue;
         };
-        let Some(child) = ch
-            .iter()
-            .copied()
-            .find(|&e| content_set.p0().get(e).is_ok())
-        else {
+        let mut scroll_child = None;
+        for e in ch.iter() {
+            if content_set.p0().get(e).is_ok() {
+                scroll_child = Some(e);
+                break;
+            }
+        }
+        let Some(child) = scroll_child else {
             continue;
         };
         let content_h = content_set
@@ -2080,14 +2070,14 @@ fn pin_playback_combat_log_scroll(
 }
 
 fn apply_ui_scroll(
-    mut wheel_events: EventReader<MouseWheel>,
+    mut wheel_events: MessageReader<MouseWheel>,
     mut regions: Query<
-        (Entity, &RelativeCursorPosition, &mut UiScrollState, &Node),
+        (Entity, &RelativeCursorPosition, &mut UiScrollState, &ComputedNode),
         With<UiScrollRegion>,
     >,
     children: Query<&Children>,
-    mut content_style: Query<&mut Style, With<UiScrollContent>>,
-    content_node: Query<&Node, With<UiScrollContent>>,
+    mut content_style: Query<&mut Node, With<UiScrollContent>>,
+    content_node: Query<&ComputedNode, With<UiScrollContent>>,
 ) {
     let delta: f32 = wheel_events.read().map(|e| e.y * 28.0).sum();
     if delta.abs() < f32::EPSILON {
@@ -2095,7 +2085,7 @@ fn apply_ui_scroll(
     }
 
     for (entity, rel_pos, mut state, viewport_node) in &mut regions {
-        if !rel_pos.mouse_over() {
+        if !rel_pos.cursor_over() {
             continue;
         }
         let view_h = viewport_node.size().y;
@@ -2105,7 +2095,14 @@ fn apply_ui_scroll(
         let Ok(ch) = children.get(entity) else {
             continue;
         };
-        let Some(child) = ch.iter().copied().find(|&e| content_node.get(e).is_ok()) else {
+        let mut scroll_child = None;
+        for e in ch.iter() {
+            if content_node.get(e).is_ok() {
+                scroll_child = Some(e);
+                break;
+            }
+        }
+        let Some(child) = scroll_child else {
             continue;
         };
         let Ok(inner_node) = content_node.get(child) else {
@@ -2123,7 +2120,7 @@ fn apply_ui_scroll(
 
 fn cleanup_ui(mut commands: Commands, roots: Query<Entity, With<UiRoot>>) {
     for root in &roots {
-        commands.entity(root).despawn_recursive();
+        commands.entity(root).despawn();
     }
 }
 
@@ -2137,6 +2134,7 @@ mod tests {
     use bevy::input::mouse::MouseButtonInput;
     use bevy::input::ButtonState;
     use bevy::state::app::StatesPlugin;
+    use bevy::ecs::message::Messages;
 
     fn enter_build_from_title(app: &mut App) {
         app.world_mut()
@@ -2169,7 +2167,7 @@ mod tests {
         // `mouse_button_input_system` clears `just_*` each frame and repopulates from events only,
         // so tests must submit `MouseButtonInput` (manual `press()`/`release()` is not visible as `just_pressed`/`just_released`).
         let window = app.world_mut().spawn_empty().id();
-        app.world_mut().send_event(MouseButtonInput {
+        app.world_mut().write_message(MouseButtonInput {
             button: MouseButton::Left,
             state: ButtonState::Pressed,
             window,
@@ -2178,7 +2176,7 @@ mod tests {
             .entity_mut(button)
             .insert(Interaction::Pressed);
         app.update();
-        app.world_mut().send_event(MouseButtonInput {
+        app.world_mut().write_message(MouseButtonInput {
             button: MouseButton::Left,
             state: ButtonState::Released,
             window,
@@ -2202,8 +2200,8 @@ mod tests {
         let button = single_entity::<StartRunButton>(app.world_mut());
         simulate_primary_click(&mut app, button);
 
-        let events = app.world().resource::<Events<StartRun>>();
-        assert_eq!(events.len(), 1);
+        let msgs = app.world().resource::<Messages<StartRun>>();
+        assert_eq!(msgs.len(), 1);
     }
 
     #[test]
@@ -2213,10 +2211,10 @@ mod tests {
         app.add_plugins(StatesPlugin);
         app.add_plugins(IdleDungeonsPlugin);
         app.add_plugins(UiPlugin);
-        app.world_mut().send_event(StartRun { seed: 1 });
+        app.world_mut().write_message(StartRun { seed: 1 });
 
         app.update();
-        app.world_mut().send_event(SkipRunPlayback);
+        app.world_mut().write_message(SkipRunPlayback);
         app.update();
         app.update();
 
@@ -2235,10 +2233,10 @@ mod tests {
         app.add_plugins(StatesPlugin);
         app.add_plugins(IdleDungeonsPlugin);
         app.add_plugins(UiPlugin);
-        app.world_mut().send_event(StartRun { seed: 1 });
+        app.world_mut().write_message(StartRun { seed: 1 });
 
         app.update();
-        app.world_mut().send_event(SkipRunPlayback);
+        app.world_mut().write_message(SkipRunPlayback);
         app.update();
         app.update();
 
@@ -2252,16 +2250,16 @@ mod tests {
         app.add_plugins(StatesPlugin);
         app.add_plugins(IdleDungeonsPlugin);
         app.add_plugins(UiPlugin);
-        app.world_mut().send_event(StartRun { seed: 1 });
+        app.world_mut().write_message(StartRun { seed: 1 });
         app.update();
-        app.world_mut().send_event(SkipRunPlayback);
+        app.world_mut().write_message(SkipRunPlayback);
         app.update();
         app.update();
 
         let button = single_entity::<AcceptRewardsButton>(app.world_mut());
         simulate_primary_click(&mut app, button);
 
-        assert_eq!(app.world().resource::<Events<AcceptRunRewards>>().len(), 1);
+        assert_eq!(app.world().resource::<Messages<AcceptRunRewards>>().len(), 1);
     }
 
     #[test]
@@ -2273,7 +2271,7 @@ mod tests {
         app.add_plugins(UiPlugin);
         app.update();
 
-        app.world_mut().send_event(OpenGearHub);
+        app.world_mut().write_message(OpenGearHub);
         app.update();
 
         assert_eq!(entity_count::<GearHubRoot>(app.world_mut()), 1);
@@ -2286,6 +2284,6 @@ mod tests {
 
     fn single_entity<T: Component>(world: &mut World) -> Entity {
         let mut query = world.query_filtered::<Entity, With<T>>();
-        query.single(world)
+        query.single(world).expect("expected exactly one matching entity")
     }
 }
