@@ -1,15 +1,16 @@
-# Idle Dungeons
+# Delvers
 
-Idle Dungeons is a Bevy-based roguelike incremental game: you configure a hero, run a seeded delve with automated combat, then spend gold and loot on gear, skills, and permanent upgrades. Progress is saved locally (default: `saves/profile.json`).
+Delvers is a Bevy-based roguelike incremental game: you configure a hero, run a seeded delve with automated combat, then spend gold and loot on gear, skills, and permanent upgrades. Progress is saved locally (default: `saves/profile.json`).
 
 **Stack:** Rust, **Bevy 0.14**, serde JSON saves. Crate name: `idle_dungeons`.
 
 ## Playable loop (today)
 
-1. **Briefing** — Inspect the hero column; **click unlocked skill slots** to open the **skill book**, pick a skill or clear the slot (build + camp). Start a run when ready.
-2. **Run** — Watch playback or **skip to results**.
-3. **Summary** — **Accept rewards** once; gold and loot merge into your profile.
-4. **Camp / upgrades** — **Equip** or **salvage** stash items; buy **caravan upgrades** with gold (including **Gold Gain**, which scales run gold). **Return to briefing** to change loadout again.
+1. **Title / campfire** — **Enter camp** opens briefing when you are ready (persistent camp visuals will grow with progression).
+2. **Briefing** — Inspect the hero column; **click unlocked skill slots** to open the **skill book**, pick a skill or clear the slot (build + camp). Start a run when ready.
+3. **Run** — Watch playback or **skip to results**.
+4. **Summary** — **Accept rewards** once; gold and loot merge into your profile.
+5. **Camp** — **Equip** or **salvage** stash items in the **Gear** hub. Adjust loadout and start another run.
 
 **UI:** Mockup-style three-column shell (hero · delve / summary · stash), settings (speed toggle, reset progress), hover **tooltips** on most controls, and reliable primary-click handling on buttons. Footer “RUN / CAMP / …” pills are decorative for now.
 
@@ -17,7 +18,7 @@ Idle Dungeons is a Bevy-based roguelike incremental game: you configure a hero, 
 
 | Path | Role |
 |------|------|
-| `src/app.rs` | `GameState`, events (start run, rewards, equip, salvage, upgrades, skill cycling), profile resource, save hooks |
+| `src/app.rs` | `GameState` (Title / Build / Running / Summary), events, profile resource, save hooks |
 | `src/domain/` | Hero, skills, combat simulation, dungeon, loot, run summarization |
 | `src/save.rs` | Load/save `SaveProfile` |
 | `src/ui/` | `UiPlugin`, mockup layout, theme, tooltips, panels |

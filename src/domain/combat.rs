@@ -96,6 +96,111 @@ fn combat_event_caption(event: &CombatEvent, partner_name: Option<&str>) -> Stri
     }
 }
 
+/// Where floating combat text should appear relative to the theater layout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CombatSfxAnchor {
+    /// Narration / engage / threat telemetry — skip floating spam.
+    #[default]
+    Neutral,
+    Lead,
+    Ally,
+    Enemy,
+}
+
+fn sfx_anchor_for_event(event: &CombatEvent) -> CombatSfxAnchor {
+    match event {
+        CombatEvent::HeroAttacked { .. } => CombatSfxAnchor::Enemy,
+        CombatEvent::PoisonTick { .. } => CombatSfxAnchor::Enemy,
+        CombatEvent::EnemyAttacked { target: 0, .. } => CombatSfxAnchor::Lead,
+        CombatEvent::EnemyAttacked { target: 1, .. } => CombatSfxAnchor::Ally,
+        CombatEvent::EnemyAttacked { .. } => CombatSfxAnchor::Lead,
+        CombatEvent::ThornsReflect { .. } => CombatSfxAnchor::Enemy,
+        CombatEvent::HeroHealed { target: 0, .. } => CombatSfxAnchor::Lead,
+        CombatEvent::HeroHealed { target: 1, .. } => CombatSfxAnchor::Ally,
+        CombatEvent::HeroHealed { .. } => CombatSfxAnchor::Lead,
+        CombatEvent::ThreatSnapshot { .. } => CombatSfxAnchor::Neutral,
+        CombatEvent::EnemyDefeated => CombatSfxAnchor::Enemy,
+        CombatEvent::PartyMemberDown { .. } => CombatSfxAnchor::Ally,
+        CombatEvent::HeroDefeated => CombatSfxAnchor::Lead,
+    }
+}
+
+/// Label for aggro arrow (who the foe is focusing by threat rules).
+pub fn aggro_arrow_target_label(
+    threat: [i32; 2],
+    h0: i32,
+    h1: i32,
+    has_partner: bool,
+    last_foe_target: Option<u8>,
+) -> &'static str {
+    let slot = pick_party_enemy_target(
+        0,
+        threat,
+        h0,
+        h1,
+        has_partner,
+        last_foe_target,
+    );
+    if slot == 0 {
+        "You"
+    } else {
+        "Ally"
+    }
+}
+
+enum PlaybackStep {
+    Event(CombatEvent),
+    MergedPoison {
+        total_damage: i32,
+        tick_count: u32,
+        stacks_before_last: u32,
+    },
+}
+
+fn merged_poison_caption(total: i32, count: u32) -> String {
+    if count <= 1 {
+        format!("Poison deals {total} damage.")
+    } else {
+        format!("Poison deals {total} damage (×{count}).")
+    }
+}
+
+fn flatten_playback_steps(events: &[CombatEvent]) -> Vec<PlaybackStep> {
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    while i < events.len() {
+        if let CombatEvent::PoisonTick { damage, stacks } = events[i] {
+            let mut total_damage = damage;
+            let mut tick_count = 1u32;
+            let mut stacks_before_last = stacks;
+            i += 1;
+            while i < events.len() {
+                if let CombatEvent::PoisonTick {
+                    damage: d2,
+                    stacks: s2,
+                } = events[i]
+                {
+                    total_damage += d2;
+                    tick_count += 1;
+                    stacks_before_last = s2;
+                    i += 1;
+                } else {
+                    break;
+                }
+            }
+            out.push(PlaybackStep::MergedPoison {
+                total_damage,
+                tick_count,
+                stacks_before_last,
+            });
+        } else {
+            out.push(PlaybackStep::Event(events[i].clone()));
+            i += 1;
+        }
+    }
+    out
+}
+
 /// One row of combat UI: HP totals after a combat event (plus an opening "engage" row).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CombatPlaybackFrame {
@@ -116,6 +221,13 @@ pub struct CombatPlaybackFrame {
     /// Latest threat totals from combat telemetry (`None` until a snapshot exists).
     pub threat_slot0: Option<i32>,
     pub threat_slot1: Option<i32>,
+    /// Cumulative damage the party dealt to the enemy this fight (lead hero attacks + shared DOT/thorns).
+    pub damage_meter_party_0: u32,
+    /// Cumulative damage from partner hero attacks (`0` when solo).
+    pub damage_meter_party_1: u32,
+    /// Cumulative damage the enemy dealt to the party (all targets).
+    pub damage_meter_foe: u32,
+    pub sfx_anchor: CombatSfxAnchor,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -750,6 +862,10 @@ pub fn combat_playback_frames_from_result(
 
     let (h0, e0) = debuff_slots_from_poison(hero_poison_stacks, enemy_poison_stacks);
 
+    let mut d0 = 0u32;
+    let mut d1 = 0u32;
+    let mut foe_meter = 0u32;
+
     let mut frames = vec![CombatPlaybackFrame {
         enemy_name: enemy_name.to_string(),
         hero_hp,
@@ -764,50 +880,90 @@ pub fn combat_playback_frames_from_result(
         foe_last_target: None,
         threat_slot0: None,
         threat_slot1: None,
+        damage_meter_party_0: 0,
+        damage_meter_party_1: 0,
+        damage_meter_foe: 0,
+        sfx_anchor: CombatSfxAnchor::Neutral,
     }];
 
-    for event in &result.events {
-        match event {
-            CombatEvent::HeroAttacked { damage, .. } => {
-                enemy_hp -= damage;
-                if has_poison {
-                    enemy_poison_stacks = (enemy_poison_stacks + 2).min(40);
+    for step in flatten_playback_steps(&result.events) {
+        match &step {
+            PlaybackStep::Event(event) => {
+                match event {
+                    CombatEvent::HeroAttacked { attacker, damage } => {
+                        if *attacker == 0 {
+                            d0 = d0.saturating_add(*damage as u32);
+                        } else {
+                            d1 = d1.saturating_add(*damage as u32);
+                        }
+                        enemy_hp -= damage;
+                        if has_poison {
+                            enemy_poison_stacks = (enemy_poison_stacks + 2).min(40);
+                        }
+                    }
+                    CombatEvent::PoisonTick { damage, stacks } => {
+                        d0 = d0.saturating_add(*damage as u32);
+                        enemy_hp -= damage;
+                        enemy_poison_stacks = stacks.saturating_sub(1);
+                    }
+                    CombatEvent::ThornsReflect { damage } => {
+                        d0 = d0.saturating_add(*damage as u32);
+                        enemy_hp -= damage;
+                    }
+                    CombatEvent::HeroHealed { target, amount } => {
+                        if *target == 0 {
+                            hero_hp = (hero_hp + amount).min(hero_max_hp);
+                        } else if let (Some(a), Some(m)) = (partner_hp.as_mut(), partner_max_hp) {
+                            *a = (*a + amount).min(m);
+                        }
+                    }
+                    CombatEvent::EnemyAttacked { target, damage } => {
+                        foe_last_target = Some(*target);
+                        foe_meter = foe_meter.saturating_add(*damage as u32);
+                        if *target == 0 {
+                            hero_hp -= damage;
+                        } else if let (Some(a), Some(m)) = (partner_hp.as_mut(), partner_max_hp) {
+                            *a = (*a - damage).clamp(0, m);
+                        }
+                    }
+                    CombatEvent::ThreatSnapshot { slot0, slot1 } => {
+                        threat_slot0 = Some(*slot0);
+                        threat_slot1 = Some(*slot1);
+                    }
+                    CombatEvent::PartyMemberDown { .. } => {}
+                    CombatEvent::EnemyDefeated | CombatEvent::HeroDefeated => {}
                 }
             }
-            CombatEvent::PoisonTick { damage, stacks } => {
-                enemy_hp -= damage;
-                enemy_poison_stacks = stacks.saturating_sub(1);
+            PlaybackStep::MergedPoison {
+                total_damage,
+                tick_count,
+                stacks_before_last,
+            } => {
+                d0 = d0.saturating_add(*total_damage as u32);
+                enemy_hp -= *total_damage;
+                enemy_poison_stacks = stacks_before_last.saturating_sub(1);
+                let _ = tick_count;
             }
-            CombatEvent::ThornsReflect { damage } => {
-                enemy_hp -= damage;
-            }
-            CombatEvent::HeroHealed { target, amount } => {
-                if *target == 0 {
-                    hero_hp = (hero_hp + amount).min(hero_max_hp);
-                } else if let (Some(a), Some(m)) = (partner_hp.as_mut(), partner_max_hp) {
-                    *a = (*a + amount).min(m);
-                }
-            }
-            CombatEvent::EnemyAttacked { target, damage } => {
-                foe_last_target = Some(*target);
-                if *target == 0 {
-                    hero_hp -= damage;
-                } else if let (Some(a), Some(m)) = (partner_hp.as_mut(), partner_max_hp) {
-                    *a = (*a - damage).clamp(0, m);
-                }
-            }
-            CombatEvent::ThreatSnapshot { slot0, slot1 } => {
-                threat_slot0 = Some(*slot0);
-                threat_slot1 = Some(*slot1);
-            }
-            CombatEvent::PartyMemberDown { .. } => {}
-            CombatEvent::EnemyDefeated | CombatEvent::HeroDefeated => {}
         }
+
         let partner_clamped = match (partner_hp, partner_max_hp) {
             (Some(h), Some(m)) => Some(h.clamp(0, m)),
             _ => None,
         };
         let (hd, ed) = debuff_slots_from_poison(hero_poison_stacks, enemy_poison_stacks);
+
+        let (caption, sfx_anchor) = match &step {
+            PlaybackStep::Event(ev) => (combat_event_caption(ev, partner_name), sfx_anchor_for_event(ev)),
+            PlaybackStep::MergedPoison {
+                total_damage,
+                tick_count,
+                ..
+            } => (
+                merged_poison_caption(*total_damage, *tick_count),
+                CombatSfxAnchor::Enemy,
+            ),
+        };
+
         frames.push(CombatPlaybackFrame {
             enemy_name: enemy_name.to_string(),
             hero_hp: hero_hp.clamp(0, hero_max_hp),
@@ -816,12 +972,16 @@ pub fn combat_playback_frames_from_result(
             partner_max_hp,
             enemy_hp: enemy_hp.clamp(0, enemy_max_hp),
             enemy_max_hp,
-            caption: combat_event_caption(event, partner_name),
+            caption,
             hero_debuff_slots: hd,
             enemy_debuff_slots: ed,
             foe_last_target,
             threat_slot0,
             threat_slot1,
+            damage_meter_party_0: d0,
+            damage_meter_party_1: d1,
+            damage_meter_foe: foe_meter,
+            sfx_anchor,
         });
         partner_hp = partner_clamped;
     }

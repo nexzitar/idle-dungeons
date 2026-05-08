@@ -342,3 +342,22 @@ pub fn format_item_affix_lines(item: &crate::domain::items::ItemInstance) -> Str
         .collect::<Vec<_>>()
         .join("\n")
 }
+
+/// Tint for floating combat text from a short caption.
+pub fn playback_float_text_color(caption: &str) -> Color {
+    let lower = caption.to_ascii_lowercase();
+    if lower.contains("recover") {
+        return UiTheme::healing();
+    }
+    if lower.contains("strike")
+        || lower.contains("damage")
+        || lower.contains("hits")
+        || lower.contains("thorns")
+        || lower.contains("defeated")
+        || lower.contains("collapse")
+        || lower.contains("down")
+    {
+        return UiTheme::danger();
+    }
+    UiTheme::muted_cream()
+}

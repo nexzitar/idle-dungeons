@@ -1,7 +1,6 @@
 use bevy::prelude::*;
 
 use crate::domain::party::PartyHeroKind;
-use crate::domain::progression::UpgradeId;
 use crate::domain::skills::SkillId;
 use crate::ui::theme::UiTheme;
 
@@ -25,9 +24,6 @@ pub struct BuildScreen;
 
 #[derive(Component)]
 pub struct SummaryScreen;
-
-#[derive(Component)]
-pub struct UpgradeScreen;
 
 #[derive(Component)]
 pub struct RunPlaybackScreen;
@@ -54,7 +50,75 @@ pub struct PlaybackAllyBarFill;
 pub struct PlaybackEnemyBarFill;
 
 #[derive(Component)]
-pub struct PlaybackAggroLineText;
+pub struct PlaybackAggroArrowText;
+
+/// Thin UI bar drawn from the enemy toward the focused party member (threat target).
+#[derive(Component)]
+pub struct PlaybackAggroArrowLine;
+
+#[derive(Component)]
+pub struct PlaybackLeadPortraitBlock;
+
+#[derive(Component)]
+pub struct PlaybackAllyPortraitBlock;
+
+#[derive(Component)]
+pub struct PlaybackEnemyPortraitBlock;
+
+#[derive(Component)]
+pub struct PlaybackTheaterFloatLayer;
+
+#[derive(Component)]
+pub struct FloatingCombatPopup {
+    pub ttl: f32,
+}
+
+#[derive(Component)]
+pub struct PlaybackCombatLogPanel;
+
+#[derive(Component)]
+pub struct ToggleCombatLogButton;
+
+#[derive(Component)]
+pub struct PlaybackCombatLogToggleLabel;
+
+/// Open the gear hub from chrome (footer).
+#[derive(Component)]
+pub struct GearHubOpenButton;
+
+#[derive(Component)]
+pub struct GearHubRoot;
+
+#[derive(Component)]
+pub struct GearHubBackdrop;
+
+#[derive(Component)]
+pub struct GearHubCloseButton;
+
+/// Run summary overlay: loot + accept rewards.
+#[derive(Component)]
+pub struct SummaryRewardsModalRoot;
+
+#[derive(Component)]
+pub struct PlaybackDmgMeterPartnerRow;
+
+#[derive(Component)]
+pub struct PlaybackDmgMeterLeadFill;
+
+#[derive(Component)]
+pub struct PlaybackDmgMeterPartnerFill;
+
+#[derive(Component)]
+pub struct PlaybackDmgMeterEnemyFill;
+
+#[derive(Component)]
+pub struct PlaybackDmgMeterLeadValue;
+
+#[derive(Component)]
+pub struct PlaybackDmgMeterPartnerValue;
+
+#[derive(Component)]
+pub struct PlaybackDmgMeterEnemyValue;
 
 #[derive(Component)]
 pub struct PlaybackHeroDebuffLine;
@@ -88,15 +152,7 @@ pub struct SalvageItemButton {
 }
 
 #[derive(Component)]
-pub struct BuyUpgradeButton {
-    pub upgrade: UpgradeId,
-}
-
-#[derive(Component)]
 pub struct StashSortCycleButton;
-
-#[derive(Component)]
-pub struct ReturnToBuildButton;
 
 #[derive(Component)]
 pub struct SettingsButton;
@@ -244,18 +300,6 @@ impl UiButtonPalette {
         }
     }
 
-    pub fn buy_upgrade() -> Self {
-        let idle = UiTheme::panel_bg_deep();
-        Self {
-            idle_bg: idle,
-            hover_bg: idle.mix(&Color::WHITE, 0.12),
-            pressed_bg: idle.mix(&Color::BLACK, 0.22),
-            idle_border: UiTheme::panel_border(),
-            hover_border: UiTheme::ornate_gold(),
-            pressed_border: UiTheme::muted_gold(),
-        }
-    }
-
     /// Compact hero skill slot (briefing / camp).
     pub fn skill_slot_chip() -> Self {
         let idle = UiTheme::panel_bg_deep();
@@ -314,4 +358,32 @@ pub struct UiScrollContent;
 #[derive(Component, Default)]
 pub struct UiScrollState {
     pub offset: f32,
+}
+
+// --- Title / campfire hub ---
+
+#[derive(Component)]
+pub struct TitleScreen;
+
+#[derive(Component)]
+pub struct TitleEnterCampButton;
+
+#[derive(Component)]
+pub struct TitleQuitButton;
+
+#[derive(Component)]
+pub struct TitleCampFigureSlot(pub u8);
+
+#[derive(Component)]
+pub struct TitleCampMilestoneExtras;
+
+#[derive(Component)]
+pub struct TitleCampSceneRoot;
+
+#[derive(Component)]
+pub struct CampfireFlame {
+    pub base: Color,
+    pub peak: Color,
+    pub speed: f32,
+    pub phase_offset: f32,
 }
