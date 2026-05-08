@@ -1,4 +1,5 @@
 use crate::domain::hero::HeroProfile;
+use crate::domain::party::PartyHeroKind;
 use crate::domain::items::ItemInstance;
 use crate::domain::loot::salvage_value;
 use crate::domain::progression::UpgradeId;
@@ -23,12 +24,14 @@ pub enum GameState {
 #[derive(Debug, Clone, Copy, Event)]
 pub struct OpenSkillBook {
     pub slot: usize,
+    pub kind: PartyHeroKind,
 }
 
 #[derive(Debug, Clone, Copy, Event)]
 pub struct AssignHeroSkill {
     pub slot: usize,
     pub skill: Option<crate::domain::skills::SkillId>,
+    pub kind: PartyHeroKind,
 }
 
 #[derive(Debug, Clone, Copy, Event)]
@@ -122,6 +125,15 @@ impl ProfileState {
         hero.unlock_skill_slots(self.profile.meta.unlocked_skill_slots);
         hero
     }
+
+    /// Same bonus skill slots / camp upgrades as [`Self::effective_hero`], for the ally sheet.
+    pub fn effective_party_partner(&self) -> Option<HeroProfile> {
+        let p = self.profile.active_party_partner()?;
+        let mut hero = p.clone();
+        hero.base_stats = hero.base_stats + self.profile.meta.stat_bonus();
+        hero.unlock_skill_slots(self.profile.meta.unlocked_skill_slots);
+        Some(hero)
+    }
 }
 
 pub struct IdleDungeonsPlugin;
@@ -175,7 +187,7 @@ fn start_run(
             1.0 + 0.1 * profile.profile.meta.upgrade_level(UpgradeId::GoldGain) as f32;
         let RunSimulation { summary, playback } = simulate_run_with_playback(
             &hero,
-            profile.profile.party_partner.as_ref(),
+            profile.effective_party_partner().as_ref(),
             RunConfig {
                 seed: event.seed,
                 max_depth: DEFAULT_RUN_MAX_DEPTH,
@@ -325,6 +337,13 @@ fn apply_run_rewards(profile: &mut SaveProfile, summary: &RunSummary) {
     profile.meta.gold += summary.gold_earned;
     profile.meta.salvage += summary.salvage_earned;
     profile.meta.add_skill_slot_progress(summary.deepest_depth);
+    profile.meta.deepest_floor_reached = profile
+        .meta
+        .deepest_floor_reached
+        .max(summary.deepest_depth);
+    if profile.meta.party_slots_unlocked() >= 2 && profile.party_partner.is_none() {
+        profile.party_partner = Some(crate::domain::party::default_party_partner_hero());
+    }
     profile.inventory.extend(summary.loot.iter().cloned());
     profile.sync_skill_slot_unlocks();
 }
@@ -339,12 +358,20 @@ fn assign_hero_skill_from_event(
         if ev.slot >= profile.profile.meta.unlocked_skill_slots {
             continue;
         }
-        if profile
-            .profile
-            .hero
-            .assign_skill_to_slot(ev.slot, ev.skill)
-            .is_ok()
-        {
+        let ok = match ev.kind {
+            PartyHeroKind::Lead => profile
+                .profile
+                .hero
+                .assign_skill_to_slot(ev.slot, ev.skill)
+                .is_ok(),
+            PartyHeroKind::Partner => {
+                let Some(partner) = profile.profile.party_partner.as_mut() else {
+                    continue;
+                };
+                partner.assign_skill_to_slot(ev.slot, ev.skill).is_ok()
+            }
+        };
+        if ok {
             save_current_profile(&save_path, &profile);
         }
     }
@@ -548,6 +575,7 @@ mod tests {
         app.world_mut().send_event(AssignHeroSkill {
             slot: 0,
             skill: Some(crate::domain::skills::SkillId::Guard),
+            kind: PartyHeroKind::Lead,
         });
         app.update();
 

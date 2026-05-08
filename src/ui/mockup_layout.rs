@@ -4,16 +4,19 @@ use bevy::prelude::*;
 use bevy::ui::{FocusPolicy, RelativeCursorPosition};
 
 use crate::domain::dungeon::RoomKind;
-use crate::domain::items::GearSlot;
+use crate::domain::party::PartyHeroKind;
 use crate::domain::progression::MetaProgression;
+use crate::domain::progression::PARTY_SLOT_2_UNLOCK_DEPTH;
+use crate::domain::items::GearSlot;
 use crate::domain::progression::UpgradeId;
 use crate::domain::run::{RunOutcome, RunSummary, DEFAULT_RUN_MAX_DEPTH, DEFAULT_RUN_SEED};
 use crate::domain::skills::{skill_definition, SkillKind};
 use crate::save::StashSortOrder;
 use crate::ui::components::{
-    AcceptRewardsButton, BuyUpgradeButton, PlaybackCaptionText, PlaybackDepthText,
-    PlaybackEnemyBarFill, PlaybackEnemyDebuffLine, PlaybackEnemyNameText, PlaybackHeroBarFill,
-    PlaybackHeroDebuffLine, PlaybackLogScrollRegion, PlaybackLogText, PlaybackProgressBarFill,
+    AcceptRewardsButton, BuyUpgradeButton, HeroNameDisplayText, HeroNameEditButton,
+    PlaybackCaptionText, PlaybackDepthText,
+    PlaybackEnemyBarFill, PlaybackEnemyDebuffLine, PlaybackEnemyNameText, PlaybackAggroLineText,
+    PlaybackHeroBarFill, PlaybackAllyBarFill, PlaybackHeroDebuffLine, PlaybackLogScrollRegion, PlaybackLogText, PlaybackProgressBarFill,
     PlaybackProgressLabel, PlaybackRoomKindText, ResetProgressButton, ReturnToBuildButton,
     SettingsButton, SettingsModalBackdrop, SettingsModalCloseButton, SettingsModalRoot,
     SettingsModalSpeedButton, SettingsModalSpeedLabel, SkillSlotButton, SkipPlaybackButton,
@@ -629,17 +632,85 @@ fn panel_title_centered(text: impl Into<String>) -> TextBundle {
     .with_text_justify(JustifyText::Center)
 }
 
+fn spawn_hero_name_row(parent: &mut ChildBuilder, slot: u8, allow_rename: bool) {
+    parent
+        .spawn(NodeBundle {
+            style: Style {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
+                column_gap: Val::Px(8.0),
+                padding: UiRect::vertical(Val::Px(2.0)),
+                ..default()
+            },
+            ..default()
+        })
+        .with_children(|r| {
+            r.spawn((
+                TextBundle::from_section(
+                    "",
+                    TextStyle {
+                        font_size: UiTheme::FONT_BODY,
+                        color: UiTheme::muted_cream(),
+                        ..default()
+                    },
+                ),
+                HeroNameDisplayText { slot },
+            ));
+            if allow_rename {
+                let p = UiButtonPalette::panel_outlined();
+                r.spawn((
+                    ButtonBundle {
+                        style: Style {
+                            min_width: Val::Px(72.0),
+                            min_height: Val::Px(30.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            padding: UiRect::horizontal(Val::Px(6.0)),
+                            border: UiRect::all(Val::Px(1.0)),
+                            ..default()
+                        },
+                        background_color: p.idle_bg.into(),
+                        border_color: BorderColor(p.idle_border),
+                        ..default()
+                    },
+                    HeroNameEditButton { slot },
+                    p,
+                    UiTooltip::txt(
+                        "Rename this hero: type, Enter to save, Esc to cancel.".to_string(),
+                    ),
+                ))
+                .with_children(|b| {
+                    b.spawn(TextBundle::from_section(
+                        "Rename",
+                        TextStyle {
+                            font_size: UiTheme::FONT_LABEL,
+                            color: UiTheme::body(),
+                            ..default()
+                        },
+                    ));
+                });
+            }
+        });
+}
+
 pub fn spawn_hero_column_mockup(
     parent: &mut ChildBuilder,
     ph: &UiPlaceholderImages,
-    hero: &crate::domain::hero::HeroProfile,
+    lead: &crate::domain::hero::HeroProfile,
+    partner: Option<&crate::domain::hero::HeroProfile>,
+    party_slots_unlocked: usize,
     loadout_lines: &[String],
     skill_slots_interactive: bool,
+    allow_rename: bool,
 ) {
     let inner = move |p: &mut ChildBuilder| {
-        p.spawn(panel_title_centered("HERO"));
+        p.spawn(panel_title_centered("PARTY"));
         spawn_column_flex_scroll(p, move |body| {
-            let stats = hero.derived_stats();
+            body.spawn(section_title("Lead"));
+            spawn_hero_name_row(body, 0, allow_rename);
+            let stats = lead.derived_stats();
             body.spawn(section_title("Vitals"));
             stat_line_row(body, "Max Health", stats.max_health);
             stat_line_row(body, "Damage", stats.damage);
@@ -655,7 +726,48 @@ pub fn spawn_hero_column_mockup(
             if skill_slots_interactive {
                 body.spawn(caption_text("Click a slot to open the skill book."));
             }
-            skill_slot_row(body, ph, hero, skill_slots_interactive);
+            skill_slot_row(
+                body,
+                ph,
+                lead,
+                skill_slots_interactive,
+                PartyHeroKind::Lead,
+            );
+
+            if party_slots_unlocked >= 2 {
+                body.spawn(section_title("Ally"));
+                if let Some(phero) = partner {
+                    spawn_hero_name_row(body, 1, allow_rename);
+                    body.spawn(section_title("Vitals"));
+                    let pst = phero.derived_stats();
+                    stat_line_row(body, "Max Health", pst.max_health);
+                    stat_line_row(body, "Damage", pst.damage);
+                    stat_line_row(body, "Armor", pst.armor);
+                    stat_line_row(body, "Healing", pst.healing_power);
+                    body.spawn(section_title("Skills"));
+                    if skill_slots_interactive {
+                        body.spawn(caption_text(
+                            "Ally has their own skills — click a slot to change them.",
+                        ));
+                    }
+                    skill_slot_row(
+                        body,
+                        ph,
+                        phero,
+                        skill_slots_interactive,
+                        PartyHeroKind::Partner,
+                    );
+                } else {
+                    body.spawn(caption_text(
+                        "Companion will appear after rewards sync (new unlock).",
+                    ));
+                }
+            } else {
+                body.spawn(caption_text(format!(
+                    "Reach depth {} on a run to unlock a second party hero.",
+                    PARTY_SLOT_2_UNLOCK_DEPTH
+                )));
+            }
         });
     };
     inner(parent);
@@ -720,6 +832,7 @@ fn skill_slot_row(
     ph: &UiPlaceholderImages,
     hero: &crate::domain::hero::HeroProfile,
     skill_slots_interactive: bool,
+    sheet: PartyHeroKind,
 ) {
     parent
         .spawn(NodeBundle {
@@ -771,7 +884,7 @@ fn skill_slot_row(
                             border_color: BorderColor(p.idle_border),
                             ..default()
                         },
-                        SkillSlotButton { slot: i },
+                        SkillSlotButton { slot: i, kind: sheet },
                         p,
                         UiTooltip::txt(tip),
                     ))
@@ -1027,6 +1140,36 @@ fn playback_hero_bar(parent: &mut ChildBuilder, fill_pct: f32) {
         });
 }
 
+fn playback_ally_bar(parent: &mut ChildBuilder, fill_pct: f32) {
+    let tone = Color::srgb(0.38, 0.72, 0.92);
+    parent
+        .spawn(NodeBundle {
+            style: Style {
+                width: Val::Percent(100.0),
+                height: Val::Px(14.0),
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            background_color: UiTheme::void_black().into(),
+            border_color: BorderColor(UiTheme::panel_border()),
+            ..default()
+        })
+        .with_children(|bar| {
+            bar.spawn((
+                NodeBundle {
+                    style: Style {
+                        width: Val::Percent((fill_pct * 100.0).clamp(0.0, 100.0)),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    background_color: tone.into(),
+                    ..default()
+                },
+                PlaybackAllyBarFill,
+            ));
+        });
+}
+
 fn playback_enemy_bar(parent: &mut ChildBuilder, fill_pct: f32) {
     parent
         .spawn(NodeBundle {
@@ -1117,8 +1260,14 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildBuilder) {
             })
             .with_children(|col| {
                 col.spawn((headline_text("—"), PlaybackEnemyNameText));
-                col.spawn(caption_text("Your health"));
+                col.spawn(caption_text("You (lead)"));
                 playback_hero_bar(col, 1.0);
+                col.spawn(caption_text("Ally"));
+                playback_ally_bar(col, 1.0);
+                col.spawn((
+                    caption_text("Foe focus · threat: —"),
+                    PlaybackAggroLineText,
+                ));
                 col.spawn(caption_text("Hero statuses"));
                 col.spawn((
                     playback_debuff_text_bundle("—  ·  —  ·  —  ·  —"),
@@ -1145,7 +1294,11 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildBuilder) {
     inner(parent);
 }
 
-pub fn spawn_dungeon_briefing_column(parent: &mut ChildBuilder, stash_count: usize) {
+pub fn spawn_dungeon_briefing_column(
+    parent: &mut ChildBuilder,
+    stash_count: usize,
+    meta: &MetaProgression,
+) {
     let inner = move |p: &mut ChildBuilder| {
         p.spawn(panel_title_centered("DUNGEON RUN"));
         p.spawn(NodeBundle {
@@ -1212,6 +1365,16 @@ pub fn spawn_dungeon_briefing_column(parent: &mut ChildBuilder, stash_count: usi
                 )));
                 health_bar(col, 1.0, UiTheme::healing());
                 col.spawn(caption_text(format!("Stash waiting: {stash_count} items")));
+                if meta.party_slots_unlocked() < 2 {
+                    col.spawn(caption_text(format!(
+                        "Reach depth {} to unlock a second hero slot.",
+                        PARTY_SLOT_2_UNLOCK_DEPTH
+                    )));
+                } else {
+                    col.spawn(caption_text(
+                        "Second party slot unlocked — meet your ally in the party panel.",
+                    ));
+                }
             });
         });
         p.spawn(section_title("COMBAT LOG"));

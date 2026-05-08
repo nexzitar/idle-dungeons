@@ -10,7 +10,7 @@ use crate::domain::loot::{roll_loot, salvage_value};
 use serde::{Deserialize, Serialize};
 
 /// Default floor cap for a full delve (matches typical [`RunConfig::max_depth`]).
-pub const DEFAULT_RUN_MAX_DEPTH: u32 = 25;
+pub const DEFAULT_RUN_MAX_DEPTH: u32 = 100;
 
 /// Fixed seed for the MVP “Start run” control until a seed picker exists.
 pub const DEFAULT_RUN_SEED: u64 = 1;

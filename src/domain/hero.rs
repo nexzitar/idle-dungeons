@@ -4,8 +4,13 @@ use crate::domain::stats::Stats;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+pub const DEFAULT_HERO_NAME: &str = "Adventurer";
+
+/// Max length (Unicode scalar count) for persisted hero names from the build UI.
+pub const MAX_HERO_NAME_LEN: usize = 32;
+
 fn default_hero_name() -> String {
-    "Adventurer".to_string()
+    DEFAULT_HERO_NAME.to_string()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

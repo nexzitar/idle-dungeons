@@ -4,6 +4,14 @@ use crate::domain::hero::HeroProfile;
 use crate::domain::skills::SkillId;
 use crate::domain::stats::Stats;
 
+/// Which persisted hero sheet skills / rename controls apply to.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum PartyHeroKind {
+    #[default]
+    Lead,
+    Partner,
+}
+
 /// Extra starting threat for a hero in a **tank stance** (baseline “sticky” aggro like WoW tanks).
 pub fn threat_stance_seed(hero: &HeroProfile) -> i32 {
     let skills: Vec<SkillId> = hero.equipped_skill_ids().collect();

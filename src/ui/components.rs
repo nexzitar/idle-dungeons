@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::domain::party::PartyHeroKind;
 use crate::domain::progression::UpgradeId;
 use crate::domain::skills::SkillId;
 use crate::ui::theme::UiTheme;
@@ -16,6 +17,7 @@ pub struct StartRunButton;
 #[derive(Component)]
 pub struct SkillSlotButton {
     pub slot: usize,
+    pub kind: PartyHeroKind,
 }
 
 #[derive(Component)]
@@ -46,7 +48,13 @@ pub struct PlaybackEnemyNameText;
 pub struct PlaybackHeroBarFill;
 
 #[derive(Component)]
+pub struct PlaybackAllyBarFill;
+
+#[derive(Component)]
 pub struct PlaybackEnemyBarFill;
+
+#[derive(Component)]
+pub struct PlaybackAggroLineText;
 
 #[derive(Component)]
 pub struct PlaybackHeroDebuffLine;
@@ -127,11 +135,29 @@ pub struct SkillBookCloseButton;
 pub struct SkillBookPickButton {
     pub slot: usize,
     pub skill: Option<SkillId>,
+    pub kind: PartyHeroKind,
 }
 
 /// Scroll region for the live delve combat log (auto-scroll to latest).
 #[derive(Component)]
 pub struct PlaybackLogScrollRegion;
+
+#[derive(Component, Clone, Copy)]
+pub struct HeroNameDisplayText {
+    pub slot: u8,
+}
+
+#[derive(Component, Clone, Copy)]
+pub struct HeroNameEditButton {
+    pub slot: u8,
+}
+
+/// Build-screen hero rename: click Edit, type, Enter saves, Esc cancels.
+#[derive(Resource, Default)]
+pub struct HeroNameEditState {
+    pub active_slot: Option<u8>,
+    pub buffer: String,
+}
 
 /// Text shown after a short hover delay (`crate::ui::tooltip`).
 #[derive(Component, Clone)]

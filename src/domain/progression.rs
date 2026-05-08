@@ -23,6 +23,9 @@ pub struct MetaProgression {
     pub salvage: u32,
     pub unlocked_skill_slots: usize,
     pub skill_slot_progress: u32,
+    /// Deepest floor reached on any finished run (used for party slot unlocks).
+    #[serde(default)]
+    pub deepest_floor_reached: u32,
     upgrades: HashMap<UpgradeId, u32>,
 }
 
@@ -33,10 +36,14 @@ impl Default for MetaProgression {
             salvage: 0,
             unlocked_skill_slots: 2,
             skill_slot_progress: 0,
+            deepest_floor_reached: 0,
             upgrades: HashMap::new(),
         }
     }
 }
+
+/// Second party member unlocks after reaching this floor depth on at least one run.
+pub const PARTY_SLOT_2_UNLOCK_DEPTH: u32 = 75;
 
 impl MetaProgression {
     pub fn upgrade_level(&self, upgrade: UpgradeId) -> u32 {
@@ -84,6 +91,15 @@ impl MetaProgression {
             2
         };
         self.unlocked_skill_slots = self.unlocked_skill_slots.max(cap);
+    }
+
+    /// Party size cap from meta progression (currently 1 until [`PARTY_SLOT_2_UNLOCK_DEPTH`], then 2).
+    pub fn party_slots_unlocked(&self) -> usize {
+        if self.deepest_floor_reached >= PARTY_SLOT_2_UNLOCK_DEPTH {
+            2
+        } else {
+            1
+        }
     }
 }
 
@@ -143,6 +159,15 @@ mod tests {
 
         profile.add_skill_slot_progress(400);
         assert_eq!(profile.unlocked_skill_slots, 6);
+    }
+
+    #[test]
+    fn party_second_slot_unlocks_at_depth_75() {
+        let mut m = MetaProgression::default();
+        m.deepest_floor_reached = 74;
+        assert_eq!(m.party_slots_unlocked(), 1);
+        m.deepest_floor_reached = 75;
+        assert_eq!(m.party_slots_unlocked(), 2);
     }
 
     #[test]

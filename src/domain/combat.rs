@@ -111,6 +111,11 @@ pub struct CombatPlaybackFrame {
     /// Up to four debuff / status chips per side (e.g. `Poison ×4`, or `—` for empty).
     pub hero_debuff_slots: [String; 4],
     pub enemy_debuff_slots: [String; 4],
+    /// Last party slot the foe attacked (`0` lead, `1` ally), when known.
+    pub foe_last_target: Option<u8>,
+    /// Latest threat totals from combat telemetry (`None` until a snapshot exists).
+    pub threat_slot0: Option<i32>,
+    pub threat_slot1: Option<i32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -242,6 +247,60 @@ fn apply_lifesteal(
         target: target_slot,
         amount,
     });
+}
+
+/// Party enemy target: highest threat wins; on a tie, reuse [`last_enemy_target`] when still valid,
+/// otherwise [`deterministic_tie_break_target`].
+pub fn pick_party_enemy_target(
+    tick: u32,
+    threat: [i32; 2],
+    h0: i32,
+    h1: i32,
+    has_partner: bool,
+    last_enemy_target: Option<u8>,
+) -> u8 {
+    let h0_alive = h0 > 0;
+    let h1_alive = h1 > 0;
+    if !has_partner || !h1_alive {
+        return 0;
+    }
+    if threat[0] > threat[1] {
+        0
+    } else if threat[1] > threat[0] {
+        1
+    } else if let Some(last) = last_enemy_target {
+        let last_valid = (last == 0 && h0_alive) || (last == 1 && h1_alive);
+        if last_valid {
+            last
+        } else {
+            deterministic_tie_break_target(tick, threat, h0_alive, h1_alive)
+        }
+    } else {
+        deterministic_tie_break_target(tick, threat, h0_alive, h1_alive)
+    }
+}
+
+fn deterministic_tie_break_target(
+    tick: u32,
+    threat: [i32; 2],
+    h0_alive: bool,
+    h1_alive: bool,
+) -> u8 {
+    match (h0_alive, h1_alive) {
+        (true, false) => 0,
+        (false, true) => 1,
+        (false, false) => 0,
+        (true, true) => {
+            let mut h = tick as u64;
+            h ^= (threat[0] as u64).wrapping_mul(0x85eb_ca6b);
+            h = h.rotate_left(13) ^ (threat[1] as u64);
+            if h % 2 == 0 {
+                0
+            } else {
+                1
+            }
+        }
+    }
 }
 
 /// `max_clock_ticks` — upper bound on combat time steps (each step adds attack speed to both
@@ -402,6 +461,8 @@ pub fn simulate_combat_party(
         };
     }
 
+    let mut last_enemy_target: Option<u8> = None;
+
     for tick in 0..max_clock_ticks {
         if h0 <= 0 || enemy_health <= 0 || (has_partner && h1 <= 0) {
             break;
@@ -490,14 +551,16 @@ pub fn simulate_combat_party(
                 break;
             }
 
-            let target: u8 = if !has_partner || h1 <= 0 {
-                0
-            } else if threat[0] > threat[1] {
-                0
-            } else {
-                1
-            };
+            let target: u8 = pick_party_enemy_target(
+                tick,
+                threat,
+                h0,
+                h1,
+                has_partner,
+                last_enemy_target,
+            );
 
+            last_enemy_target = Some(target);
             let prep_t = if target == 0 {
                 &p0
             } else {
@@ -526,6 +589,13 @@ pub fn simulate_combat_party(
                 target,
                 damage: hp_loss,
             });
+
+            if has_partner && h0 > 0 && h1 > 0 && events.len() < MAX_EVENTS {
+                events.push(CombatEvent::ThreatSnapshot {
+                    slot0: threat[0],
+                    slot1: threat[1],
+                });
+            }
 
             if prep_t.has_thorns && hp_loss > 0 {
                 let mut reflect = (hp_loss / 3).max(1);
@@ -572,15 +642,6 @@ pub fn simulate_combat_party(
                 events.push(CombatEvent::EnemyDefeated);
                 maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
                 hero_win!();
-            }
-        }
-
-        if has_partner && tick % 8 == 0 && h0 > 0 && h1 > 0 && enemy_health > 0 {
-            if events.len() < MAX_EVENTS {
-                events.push(CombatEvent::ThreatSnapshot {
-                    slot0: threat[0],
-                    slot1: threat[1],
-                });
             }
         }
     }
@@ -683,6 +744,10 @@ pub fn combat_playback_frames_from_result(
     let mut enemy_poison_stacks = 0u32;
     let hero_poison_stacks = 0u32;
 
+    let mut foe_last_target: Option<u8> = None;
+    let mut threat_slot0: Option<i32> = None;
+    let mut threat_slot1: Option<i32> = None;
+
     let (h0, e0) = debuff_slots_from_poison(hero_poison_stacks, enemy_poison_stacks);
 
     let mut frames = vec![CombatPlaybackFrame {
@@ -696,6 +761,9 @@ pub fn combat_playback_frames_from_result(
         caption: format!("Engaging {enemy_name}."),
         hero_debuff_slots: h0,
         enemy_debuff_slots: e0,
+        foe_last_target: None,
+        threat_slot0: None,
+        threat_slot1: None,
     }];
 
     for event in &result.events {
@@ -721,13 +789,18 @@ pub fn combat_playback_frames_from_result(
                 }
             }
             CombatEvent::EnemyAttacked { target, damage } => {
+                foe_last_target = Some(*target);
                 if *target == 0 {
                     hero_hp -= damage;
                 } else if let (Some(a), Some(m)) = (partner_hp.as_mut(), partner_max_hp) {
                     *a = (*a - damage).clamp(0, m);
                 }
             }
-            CombatEvent::ThreatSnapshot { .. } | CombatEvent::PartyMemberDown { .. } => {}
+            CombatEvent::ThreatSnapshot { slot0, slot1 } => {
+                threat_slot0 = Some(*slot0);
+                threat_slot1 = Some(*slot1);
+            }
+            CombatEvent::PartyMemberDown { .. } => {}
             CombatEvent::EnemyDefeated | CombatEvent::HeroDefeated => {}
         }
         let partner_clamped = match (partner_hp, partner_max_hp) {
@@ -746,6 +819,9 @@ pub fn combat_playback_frames_from_result(
             caption: combat_event_caption(event, partner_name),
             hero_debuff_slots: hd,
             enemy_debuff_slots: ed,
+            foe_last_target,
+            threat_slot0,
+            threat_slot1,
         });
         partner_hp = partner_clamped;
     }
@@ -781,6 +857,86 @@ mod tests {
     use crate::domain::items::{GearSlot, ItemAffix, ItemInstance};
     use crate::domain::skills::SkillId;
     use crate::domain::stats::Stats;
+
+    #[test]
+    fn pick_party_enemy_no_partner_is_always_lead() {
+        assert_eq!(
+            pick_party_enemy_target(0, [99, 1], 100, 100, false, Some(1)),
+            0
+        );
+    }
+
+    #[test]
+    fn pick_party_enemy_partner_down_targets_lead() {
+        assert_eq!(pick_party_enemy_target(0, [1, 99], 100, 0, true, Some(1)), 0);
+    }
+
+    #[test]
+    fn pick_party_enemy_higher_threat_on_lead_targets_lead() {
+        assert_eq!(pick_party_enemy_target(0, [30, 10], 100, 100, true, Some(1)), 0);
+    }
+
+    #[test]
+    fn pick_party_enemy_higher_threat_on_ally_targets_ally() {
+        assert_eq!(pick_party_enemy_target(0, [10, 40], 100, 100, true, Some(0)), 1);
+    }
+
+    #[test]
+    fn pick_party_enemy_threat_tie_keeps_last_target_on_ally() {
+        assert_eq!(pick_party_enemy_target(7, [20, 20], 100, 100, true, Some(1)), 1);
+    }
+
+    #[test]
+    fn pick_party_enemy_threat_tie_keeps_last_target_on_lead() {
+        assert_eq!(pick_party_enemy_target(7, [20, 20], 100, 100, true, Some(0)), 0);
+    }
+
+    #[test]
+    fn pick_party_enemy_strict_threat_beats_sticky_memory() {
+        assert_eq!(pick_party_enemy_target(0, [50, 10], 100, 100, true, Some(1)), 0);
+    }
+
+    #[test]
+    fn pick_party_enemy_invalid_sticky_falls_back_when_only_ally_alive() {
+        assert_eq!(pick_party_enemy_target(3, [5, 5], 0, 100, true, Some(0)), 1);
+    }
+
+    #[test]
+    fn pick_party_enemy_tie_without_sticky_is_stable_for_tick() {
+        let t = pick_party_enemy_target(4, [0, 0], 100, 100, true, None);
+        assert_eq!(t, pick_party_enemy_target(4, [0, 0], 100, 100, true, None));
+    }
+
+    #[test]
+    fn party_foe_hit_is_followed_by_threat_snapshot_when_both_alive() {
+        let lead = HeroProfile::default();
+        let mut partner = HeroProfile::default();
+        partner.base_stats.attack_speed = 0.05;
+        let enemy = Enemy {
+            name: "Rival".into(),
+            max_health: 9999,
+            damage: 4,
+            armor: 0,
+            attack_speed: 1.0,
+        };
+        let r = simulate_combat_party(
+            &lead,
+            &enemy,
+            6,
+            lead.derived_stats().max_health,
+            Some((&partner, partner.derived_stats().max_health)),
+        );
+        let idx = r
+            .events
+            .iter()
+            .position(|e| matches!(e, CombatEvent::EnemyAttacked { .. }))
+            .expect("expected a foe swing");
+        assert!(
+            matches!(r.events.get(idx + 1), Some(CombatEvent::ThreatSnapshot { .. })),
+            "expected threat telemetry after foe swing, got {:?}",
+            r.events.get(idx + 1)
+        );
+    }
 
     #[test]
     fn hero_defeats_weaker_enemy() {
