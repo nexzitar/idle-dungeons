@@ -34,6 +34,9 @@ impl StashSortOrder {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SaveProfile {
     pub hero: HeroProfile,
+    /// Second party hero for delve combat (`None` = solo lead only). Omitted in older saves.
+    #[serde(default)]
+    pub party_partner: Option<HeroProfile>,
     pub inventory: Vec<ItemInstance>,
     pub meta: MetaProgression,
     #[serde(default)]
@@ -51,6 +54,7 @@ impl Default for SaveProfile {
     fn default() -> Self {
         let mut s = Self {
             hero: HeroProfile::default(),
+            party_partner: Some(crate::domain::party::default_party_partner_hero()),
             inventory: vec![],
             meta: MetaProgression::default(),
             stash_sort: StashSortOrder::default(),

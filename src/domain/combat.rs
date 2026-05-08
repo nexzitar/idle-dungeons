@@ -2,6 +2,7 @@ use crate::domain::dungeon::Enemy;
 use crate::domain::hero::HeroProfile;
 use crate::domain::items::ItemAffix;
 use crate::domain::skills::SkillId;
+use crate::domain::stats::Stats;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CombatOutcome {
@@ -12,7 +13,9 @@ pub enum CombatOutcome {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CombatEvent {
+    /// `attacker` 0 = lead hero ("you" in UI), 1 = party partner.
     HeroAttacked {
+        attacker: u8,
         damage: i32,
     },
     /// Poison at end of clock iteration. `stacks` is potency **before** this tick (and before decrement).
@@ -20,44 +23,75 @@ pub enum CombatEvent {
         damage: i32,
         stacks: u32,
     },
-    /// `target`: 0 = lead hero, 1 = party ally (tank NPC in delve party mode).
+    /// `target` 0 = lead hero, 1 = party partner ([`HeroProfile`]).
     EnemyAttacked { target: u8, damage: i32 },
     ThornsReflect {
         damage: i32,
     },
+    /// `target` 0 = lead, 1 = partner.
     HeroHealed {
+        target: u8,
         amount: i32,
     },
-    /// Emitted each combat clock while a party has threat routing (debug / playback telemetry).
-    ThreatSnapshot { hero: i32, ally: i32 },
+    /// Threat totals per party slot (WoW-style aggro telemetry).
+    ThreatSnapshot { slot0: i32, slot1: i32 },
     EnemyDefeated,
-    /// Tank ally dropped — run ends in delve party mode.
-    AllyDefeated,
+    /// Party member defeated (currently slot `1` = partner). Lead uses [`HeroDefeated`].
+    PartyMemberDown { party_index: u8 },
     HeroDefeated,
 }
 
-fn combat_event_caption(event: &CombatEvent) -> String {
+fn combat_event_caption(event: &CombatEvent, partner_name: Option<&str>) -> String {
     match event {
-        CombatEvent::HeroAttacked { damage } => format!("You strike for {} damage.", damage),
+        CombatEvent::HeroAttacked { attacker, damage } => {
+            if *attacker == 0 {
+                format!("You strike for {damage} damage.")
+            } else if let Some(n) = partner_name {
+                format!("{n} strikes for {damage} damage.")
+            } else {
+                format!("Partner strikes for {damage} damage.")
+            }
+        }
         CombatEvent::PoisonTick { damage, stacks } => {
             format!("Poison deals {} damage ({} stacks).", damage, stacks)
         }
         CombatEvent::EnemyAttacked { target, damage } => {
             if *target == 0 {
                 format!("The foe hits you for {damage} damage.")
+            } else if let Some(n) = partner_name {
+                format!("The foe hits {n} for {damage} damage.")
             } else {
-                format!("The foe hits {ally} for {damage} damage.", ally = crate::domain::party::TANK_ALLY_NAME)
+                format!("The foe hits your partner for {damage} damage.")
             }
         }
         CombatEvent::ThornsReflect { damage } => {
             format!("Thorns bite back for {} damage.", damage)
         }
-        CombatEvent::HeroHealed { amount } => format!("You recover {} health.", amount),
-        CombatEvent::ThreatSnapshot { hero, ally } => {
-            format!("Threat · Hero {hero} · {an} {ally}", an = crate::domain::party::TANK_ALLY_NAME)
+        CombatEvent::HeroHealed { target, amount } => {
+            if *target == 0 {
+                format!("You recover {amount} health.")
+            } else if let Some(n) = partner_name {
+                format!("{n} recovers {amount} health.")
+            } else {
+                format!("Partner recovers {amount} health.")
+            }
+        }
+        CombatEvent::ThreatSnapshot { slot0, slot1 } => {
+            let p1 = partner_name.unwrap_or("Partner");
+            format!("Threat · You {slot0} · {p1} {slot1}")
         }
         CombatEvent::EnemyDefeated => "Enemy defeated.".to_string(),
-        CombatEvent::AllyDefeated => format!("{} is down.", crate::domain::party::TANK_ALLY_NAME),
+        CombatEvent::PartyMemberDown { party_index } => {
+            if *party_index == 1 {
+                if let Some(n) = partner_name {
+                    format!("{n} is down.")
+                } else {
+                    "A party member is down.".to_string()
+                }
+            } else {
+                "A party member is down.".to_string()
+            }
+        }
         CombatEvent::HeroDefeated => "You collapse...".to_string(),
     }
 }
@@ -68,9 +102,9 @@ pub struct CombatPlaybackFrame {
     pub enemy_name: String,
     pub hero_hp: i32,
     pub hero_max_hp: i32,
-    /// Tank ally HP when party combat is active (`None` in solo tests / legacy frames).
-    pub ally_hp: Option<i32>,
-    pub ally_max_hp: Option<i32>,
+    /// Second party hero HP when a partner is in the fight (`None` in solo).
+    pub partner_hp: Option<i32>,
+    pub partner_max_hp: Option<i32>,
     pub enemy_hp: i32,
     pub enemy_max_hp: i32,
     pub caption: String,
@@ -83,76 +117,52 @@ pub struct CombatPlaybackFrame {
 pub struct CombatResult {
     pub outcome: CombatOutcome,
     pub hero_health: i32,
-    /// Present when a second party member joined this encounter (delve party mode).
-    pub ally_health: Option<i32>,
-    pub ally_max_health: Option<i32>,
+    /// Second party hero (slot 1) when present.
+    pub partner_health: Option<i32>,
+    pub partner_max_health: Option<i32>,
     pub enemy_health: i32,
     pub events: Vec<CombatEvent>,
 }
 
-/// `max_clock_ticks` — upper bound on combat time steps (each step adds attack speed to both
-/// sides' action meters; extra hero or enemy swings in one step when speed is higher).
-pub fn simulate_combat_party(
-    hero: &HeroProfile,
-    enemy: &Enemy,
-    max_clock_ticks: u32,
-    hero_health_start: i32,
-    ally: Option<(crate::domain::stats::Stats, i32)>,
-) -> CombatResult {
-    let has_ally = ally.is_some();
-    let (ally_stats, mut ally_health, ally_max) = match ally {
-        Some((s, h)) => (s, h.clamp(0, s.max_health), s.max_health),
-        None => (crate::domain::stats::Stats::default_zero(), 0, 0),
-    };
+struct PreparedHero {
+    stats: Stats,
+    max_h: i32,
+    has_lifesteal: bool,
+    has_guard: bool,
+    has_heavy: bool,
+    has_poison: bool,
+    has_thorns: bool,
+    has_second_wind: bool,
+    has_toxic_mastery: bool,
+    has_vampiric_aura: bool,
+    affix_heavy: bool,
+    affix_vamp: bool,
+    affix_spiked: bool,
+    affix_shattering: bool,
+    affix_virulent: bool,
+    affix_titans: bool,
+    barrier: i32,
+    guard_flat: i32,
+    attack_speed: f32,
+}
 
-    let stats = hero.derived_stats();
-    let max_h = stats.max_health;
-    let mut hero_health = hero_health_start.clamp(0, max_h);
-    if hero_health <= 0 {
-        return CombatResult {
-            outcome: CombatOutcome::EnemyWon,
-            hero_health: 0,
-            ally_health: if has_ally { Some(ally_health) } else { None },
-            ally_max_health: if has_ally { Some(ally_max) } else { None },
-            enemy_health: enemy.max_health,
-            events: vec![CombatEvent::HeroDefeated],
-        };
-    }
-    if has_ally && ally_health <= 0 {
-        return CombatResult {
-            outcome: CombatOutcome::EnemyWon,
-            hero_health,
-            ally_health: Some(ally_health),
-            ally_max_health: Some(ally_max),
-            enemy_health: enemy.max_health,
-            events: vec![CombatEvent::AllyDefeated],
-        };
-    }
-
-    let mut enemy_health = enemy.max_health;
-
+fn prepare_hero_combat(hero: &HeroProfile) -> PreparedHero {
     let skills: Vec<SkillId> = hero.equipped_skill_ids().collect();
     let has = |id: SkillId| skills.iter().any(|&s| s == id);
 
-    let has_lifesteal = has(SkillId::LifestealStrike);
-    let has_guard = has(SkillId::Guard);
     let has_heavy = has(SkillId::HeavyStrike) || has(SkillId::Cleave);
-    let has_poison = has(SkillId::PoisonEdge);
-    let has_thorns = has(SkillId::ThornSkin);
     let has_barrier = has(SkillId::BarrierPulse);
-    let has_second_wind = has(SkillId::SecondWind);
-    let has_toxic_mastery = has(SkillId::ToxicMastery);
-    let has_vampiric_aura = has(SkillId::VampiricAura);
-
-    let affix_heavy = hero.has_affix(ItemAffix::Heavy);
-    let affix_vamp = hero.has_affix(ItemAffix::Vampiric);
-    let affix_spiked = hero.has_affix(ItemAffix::Spiked);
+    let stats = hero.derived_stats();
+    let max_h = stats.max_health;
     let affix_cursed = hero.has_affix(ItemAffix::Cursed);
-    let affix_shattering = hero.has_affix(ItemAffix::Shattering);
-    let affix_virulent = hero.has_affix(ItemAffix::Virulent);
-    let affix_titans = hero.has_affix(ItemAffix::TitansFury);
 
-    let mut barrier = if has_barrier {
+    let mut attack_speed = stats.attack_speed.max(0.12);
+    if has_heavy {
+        attack_speed *= 0.75;
+        attack_speed = attack_speed.max(0.12);
+    }
+
+    let barrier = if has_barrier {
         let mut b = (10 + stats.healing_power.saturating_mul(2)).clamp(4, max_h / 2);
         if affix_cursed {
             b = (b * 3 / 4).max(2);
@@ -162,40 +172,190 @@ pub fn simulate_combat_party(
         0
     };
 
-    let poison_tick = (3 + stats.healing_power.max(0) / 2).clamp(1, 25);
-
-    // Guard: flat reduction on each foe hit; scales with healing_power (baseline 3 when HP stat is 0).
     let mut guard_flat = (3 + stats.healing_power.max(0) / 2).clamp(3, 25);
-    if has_guard && hero.has_affix(ItemAffix::Bastion) {
+    if has(SkillId::Guard) && hero.has_affix(ItemAffix::Bastion) {
         guard_flat += 2;
     }
 
-    let mut hero_as = stats.attack_speed.max(0.12);
-    // Heavy Strike / Cleave: slower pacing; penalty after gear is summed into attack_speed.
-    if has_heavy {
-        hero_as *= 0.75;
-        hero_as = hero_as.max(0.12);
+    PreparedHero {
+        stats,
+        max_h,
+        has_lifesteal: has(SkillId::LifestealStrike),
+        has_guard: has(SkillId::Guard),
+        has_heavy,
+        has_poison: has(SkillId::PoisonEdge),
+        has_thorns: has(SkillId::ThornSkin),
+        has_second_wind: has(SkillId::SecondWind),
+        has_toxic_mastery: has(SkillId::ToxicMastery),
+        has_vampiric_aura: has(SkillId::VampiricAura),
+        affix_heavy: hero.has_affix(ItemAffix::Heavy),
+        affix_vamp: hero.has_affix(ItemAffix::Vampiric),
+        affix_spiked: hero.has_affix(ItemAffix::Spiked),
+        affix_shattering: hero.has_affix(ItemAffix::Shattering),
+        affix_virulent: hero.has_affix(ItemAffix::Virulent),
+        affix_titans: hero.has_affix(ItemAffix::TitansFury),
+        barrier,
+        guard_flat,
+        attack_speed,
     }
+}
+
+fn swing_damage(p: &PreparedHero, enemy: &Enemy, cur_hp: i32, max_h: i32) -> i32 {
+    let effective_armor = if p.affix_shattering {
+        (enemy.armor - 4).max(0)
+    } else {
+        enemy.armor
+    };
+    let mut d = (p.stats.damage - effective_armor).max(1);
+    if p.has_heavy {
+        d += d / 2;
+    }
+    if p.has_heavy && p.affix_heavy {
+        d += d / 5;
+    }
+    if p.affix_titans && cur_hp * 2 <= max_h {
+        d = ((d as i64 * 5 / 4).max(1)) as i32;
+    }
+    d
+}
+
+fn apply_lifesteal(
+    p: &PreparedHero,
+    hero_damage: i32,
+    hp: &mut i32,
+    max_h: i32,
+    target_slot: u8,
+    events: &mut Vec<CombatEvent>,
+) {
+    if !p.has_lifesteal {
+        return;
+    }
+    let mut amount = (hero_damage / 4).max(1);
+    if p.affix_vamp {
+        amount = (hero_damage / 3).max(1);
+    }
+    if p.has_vampiric_aura {
+        amount = ((amount as i64 * 6 / 5).max(1)) as i32;
+    }
+    *hp = (*hp + amount).min(max_h);
+    events.push(CombatEvent::HeroHealed {
+        target: target_slot,
+        amount,
+    });
+}
+
+/// `max_clock_ticks` — upper bound on combat time steps (each step adds attack speed to both
+/// sides' action meters; extra hero or enemy swings in one step when speed is higher).
+///
+/// `partner`: optional second [`HeroProfile`] (party slot 1) and their current HP. Threat is
+/// WoW-style: damage generates threat; tank-stance passives add baseline / drip aggro.
+pub fn simulate_combat_party(
+    lead: &HeroProfile,
+    enemy: &Enemy,
+    max_clock_ticks: u32,
+    lead_health_start: i32,
+    partner: Option<(&HeroProfile, i32)>,
+) -> CombatResult {
+    let p0 = prepare_hero_combat(lead);
+    let p1 = partner.map(|(h, hp)| (prepare_hero_combat(h), h, hp));
+    let has_partner = p1.is_some();
+
+    let partner_max = p1.as_ref().map(|(p, _, _)| p.max_h).unwrap_or(0);
+    let mut h0 = lead_health_start.clamp(0, p0.max_h);
+    let mut h1 = p1
+        .as_ref()
+        .map(|(prep, _, hp)| (*hp).clamp(0, prep.max_h))
+        .unwrap_or(0);
+
+    if h0 <= 0 {
+        return CombatResult {
+            outcome: CombatOutcome::EnemyWon,
+            hero_health: 0,
+            partner_health: if has_partner {
+                Some(h1)
+            } else {
+                None
+            },
+            partner_max_health: if has_partner {
+                Some(partner_max)
+            } else {
+                None
+            },
+            enemy_health: enemy.max_health,
+            events: vec![CombatEvent::HeroDefeated],
+        };
+    }
+    if has_partner && h1 <= 0 {
+        return CombatResult {
+            outcome: CombatOutcome::EnemyWon,
+            hero_health: h0,
+            partner_health: Some(h1),
+            partner_max_health: Some(partner_max),
+            enemy_health: enemy.max_health,
+            events: vec![CombatEvent::PartyMemberDown { party_index: 1 }],
+        };
+    }
+
+    let mut enemy_health = enemy.max_health;
+    let poison_heal = |p: &PreparedHero| {
+        if p.has_poison {
+            p.stats.healing_power.max(0)
+        } else {
+            0
+        }
+    };
+    let poison_tick = (3
+        + poison_heal(&p0).max(
+            p1.as_ref()
+                .map(|(prep, _, _)| poison_heal(prep))
+                .unwrap_or(0),
+        )
+        / 2)
+    .clamp(1, 25);
+    let has_poison_any =
+        p0.has_poison || p1.as_ref().is_some_and(|(prep, _, _)| prep.has_poison);
+    let has_toxic_any =
+        p0.has_toxic_mastery || p1.as_ref().is_some_and(|(prep, _, _)| prep.has_toxic_mastery);
+
+    let mut barrier = [
+        p0.barrier,
+        p1.as_ref().map(|(p, _, _)| p.barrier).unwrap_or(0),
+    ];
+
     let enemy_as = enemy.attack_speed.max(0.12);
-    let mut hero_meter = 0.0_f32;
+    let mut meters = [0.0_f32, 0.0_f32];
     let mut enemy_meter = 0.0_f32;
 
-    // Poison Edge: stacks on hit; end-of-tick damage scales with current stacks (capped), then one stack burns off.
     let mut poison_stacks: u32 = 0;
     const POISON_DAMAGE_STACK_CAP: u32 = 12;
 
     let mut threat = [0i32; 2];
-    if has_ally {
-        threat[1] = 8;
+    if let Some((_, h1hero, _)) = &p1 {
+        threat[1] = crate::domain::party::threat_stance_seed(h1hero);
     }
 
     let mut events = Vec::new();
 
-    if has_second_wind && hero_health > 0 {
-        let h = (max_h / 20).max(1).min(8);
-        if h > 0 && hero_health < max_h {
-            hero_health = (hero_health + h).min(max_h);
-            events.push(CombatEvent::HeroHealed { amount: h });
+    if p0.has_second_wind && h0 > 0 {
+        let h = (p0.max_h / 20).max(1).min(8);
+        if h > 0 && h0 < p0.max_h {
+            h0 = (h0 + h).min(p0.max_h);
+            events.push(CombatEvent::HeroHealed {
+                target: 0,
+                amount: h,
+            });
+        }
+    }
+    if let Some((p1prep, _, _)) = &p1 {
+        if p1prep.has_second_wind && h1 > 0 {
+            let h = (p1prep.max_h / 20).max(1).min(8);
+            if h > 0 && h1 < p1prep.max_h {
+                h1 = (h1 + h).min(p1prep.max_h);
+                events.push(CombatEvent::HeroHealed {
+                    target: 1,
+                    amount: h,
+                });
+            }
         }
     }
 
@@ -205,9 +365,17 @@ pub fn simulate_combat_party(
         () => {
             return CombatResult {
                 outcome: CombatOutcome::HeroWon,
-                hero_health,
-                ally_health: if has_ally { Some(ally_health) } else { None },
-                ally_max_health: if has_ally { Some(ally_max) } else { None },
+                hero_health: h0,
+                partner_health: if has_partner {
+                    Some(h1)
+                } else {
+                    None
+                },
+                partner_max_health: if has_partner {
+                    Some(partner_max)
+                } else {
+                    None
+                },
                 enemy_health,
                 events,
             };
@@ -217,9 +385,17 @@ pub fn simulate_combat_party(
         () => {
             return CombatResult {
                 outcome: CombatOutcome::EnemyWon,
-                hero_health,
-                ally_health: if has_ally { Some(ally_health) } else { None },
-                ally_max_health: if has_ally { Some(ally_max) } else { None },
+                hero_health: h0,
+                partner_health: if has_partner {
+                    Some(h1)
+                } else {
+                    None
+                },
+                partner_max_health: if has_partner {
+                    Some(partner_max)
+                } else {
+                    None
+                },
                 enemy_health,
                 events,
             };
@@ -227,82 +403,94 @@ pub fn simulate_combat_party(
     }
 
     for tick in 0..max_clock_ticks {
-        if hero_health <= 0 || enemy_health <= 0 || (has_ally && ally_health <= 0) {
+        if h0 <= 0 || enemy_health <= 0 || (has_partner && h1 <= 0) {
             break;
         }
         if events.len() >= MAX_EVENTS {
             break;
         }
 
-        if has_ally && hero_health > 0 && ally_health > 0 && enemy_health > 0 {
-            threat[1] = threat[1].saturating_add(1);
+        if let Some((_, h1hero, _)) = &p1 {
+            if h0 > 0 && h1 > 0 && enemy_health > 0
+                && crate::domain::party::threat_stance_tick_drip(h1hero)
+            {
+                threat[1] = threat[1].saturating_add(1);
+            }
         }
 
-        hero_meter += hero_as;
+        meters[0] += p0.attack_speed;
+        if let Some((p1prep, _, _)) = &p1 {
+            meters[1] += p1prep.attack_speed;
+        }
         enemy_meter += enemy_as;
 
-        while hero_meter >= 1.0 && hero_health > 0 && enemy_health > 0 {
-            hero_meter -= 1.0;
+        while meters[0] >= 1.0 && h0 > 0 && enemy_health > 0 {
+            meters[0] -= 1.0;
             if events.len() >= MAX_EVENTS {
                 break;
             }
 
-            let effective_armor = if affix_shattering {
-                (enemy.armor - 4).max(0)
-            } else {
-                enemy.armor
-            };
-            let mut hero_damage = (stats.damage - effective_armor).max(1);
-            if has_heavy {
-                hero_damage += hero_damage / 2;
-            }
-            if has_heavy && affix_heavy {
-                hero_damage += hero_damage / 5;
-            }
-            if affix_titans && hero_health * 2 <= max_h {
-                hero_damage = ((hero_damage as i64 * 5 / 4).max(1)) as i32;
-            }
-
+            let hero_damage = swing_damage(&p0, enemy, h0, p0.max_h);
             enemy_health -= hero_damage;
             events.push(CombatEvent::HeroAttacked {
+                attacker: 0,
                 damage: hero_damage,
             });
-            if has_ally {
+            if has_partner {
                 threat[0] = threat[0].saturating_add(hero_damage);
             }
 
-            if has_lifesteal {
-                let mut amount = (hero_damage / 4).max(1);
-                if affix_vamp {
-                    amount = (hero_damage / 3).max(1);
-                }
-                if has_vampiric_aura {
-                    amount = ((amount as i64 * 6 / 5).max(1)) as i32;
-                }
-                hero_health = (hero_health + amount).min(max_h);
-                events.push(CombatEvent::HeroHealed { amount });
-            }
+            apply_lifesteal(&p0, hero_damage, &mut h0, p0.max_h, 0, &mut events);
 
-            if has_poison {
-                let inc = if affix_virulent { 3 } else { 2 };
+            if p0.has_poison {
+                let inc = if p0.affix_virulent { 3 } else { 2 };
                 poison_stacks = (poison_stacks + inc).min(40);
             }
 
             if enemy_health <= 0 {
                 events.push(CombatEvent::EnemyDefeated);
-                maybe_devourer_heal_on_kill(hero, &mut hero_health, max_h, &mut events);
+                maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
                 hero_win!();
             }
         }
 
-        while enemy_meter >= 1.0 && enemy_health > 0 && hero_health > 0 && (!has_ally || ally_health > 0)
-        {
+        if let Some((ref p1prep, _, _)) = p1 {
+            while meters[1] >= 1.0 && h1 > 0 && enemy_health > 0 {
+                meters[1] -= 1.0;
+                if events.len() >= MAX_EVENTS {
+                    break;
+                }
+
+                let hero_damage = swing_damage(p1prep, enemy, h1, p1prep.max_h);
+                enemy_health -= hero_damage;
+                events.push(CombatEvent::HeroAttacked {
+                    attacker: 1,
+                    damage: hero_damage,
+                });
+                threat[1] = threat[1].saturating_add(hero_damage);
+
+                apply_lifesteal(p1prep, hero_damage, &mut h1, p1prep.max_h, 1, &mut events);
+
+                if p1prep.has_poison {
+                    let inc = if p1prep.affix_virulent { 3 } else { 2 };
+                    poison_stacks = (poison_stacks + inc).min(40);
+                }
+
+                if enemy_health <= 0 {
+                    events.push(CombatEvent::EnemyDefeated);
+                    maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
+                    hero_win!();
+                }
+            }
+        }
+
+        while enemy_meter >= 1.0 && enemy_health > 0 && h0 > 0 && (!has_partner || h1 > 0) {
             enemy_meter -= 1.0;
             if events.len() >= MAX_EVENTS {
                 break;
             }
 
-            let target: u8 = if !has_ally || ally_health <= 0 {
+            let target: u8 = if !has_partner || h1 <= 0 {
                 0
             } else if threat[0] > threat[1] {
                 0
@@ -310,67 +498,67 @@ pub fn simulate_combat_party(
                 1
             };
 
-            let base_armor = if target == 0 {
-                stats.armor
+            let prep_t = if target == 0 {
+                &p0
             } else {
-                ally_stats.armor
+                &p1.as_ref().unwrap().0
             };
-            let mut enemy_damage = (enemy.damage - base_armor).max(1);
+            let mut enemy_damage = (enemy.damage - prep_t.stats.armor).max(1);
+
+            if prep_t.has_guard {
+                enemy_damage = (enemy_damage - prep_t.guard_flat).max(1);
+            }
+
+            let bi = target as usize;
+            let absorbed = enemy_damage.min(barrier[bi]);
+            barrier[bi] -= absorbed;
+            let hp_loss = enemy_damage - absorbed;
 
             if target == 0 {
-                if has_guard {
-                    enemy_damage = (enemy_damage - guard_flat).max(1);
-                }
-                let absorbed = enemy_damage.min(barrier);
-                barrier -= absorbed;
-                let hp_loss = enemy_damage - absorbed;
-                hero_health -= hp_loss;
-                events.push(CombatEvent::EnemyAttacked {
-                    target: 0,
-                    damage: hp_loss,
-                });
-
-                if has_thorns && hp_loss > 0 {
-                    let mut reflect = (hp_loss / 3).max(1);
-                    if affix_spiked {
-                        reflect = (hp_loss / 2).max(1);
-                    }
-                    enemy_health -= reflect;
-                    events.push(CombatEvent::ThornsReflect { damage: reflect });
-                    if enemy_health <= 0 {
-                        events.push(CombatEvent::EnemyDefeated);
-                        maybe_devourer_heal_on_kill(hero, &mut hero_health, max_h, &mut events);
-                        hero_win!();
-                    }
-                }
-
-                if hero_health <= 0 {
-                    events.push(CombatEvent::HeroDefeated);
-                    enemy_win!();
-                }
+                h0 -= hp_loss;
             } else {
-                let hp_loss = enemy_damage;
-                ally_health -= hp_loss;
-                threat[1] = threat[1].saturating_add(hp_loss);
-                events.push(CombatEvent::EnemyAttacked {
-                    target: 1,
-                    damage: hp_loss,
-                });
-                if ally_health <= 0 {
-                    events.push(CombatEvent::AllyDefeated);
-                    enemy_win!();
+                h1 -= hp_loss;
+            }
+
+            threat[target as usize] = threat[target as usize].saturating_add(hp_loss);
+
+            events.push(CombatEvent::EnemyAttacked {
+                target,
+                damage: hp_loss,
+            });
+
+            if prep_t.has_thorns && hp_loss > 0 {
+                let mut reflect = (hp_loss / 3).max(1);
+                if prep_t.affix_spiked {
+                    reflect = (hp_loss / 2).max(1);
                 }
+                enemy_health -= reflect;
+                events.push(CombatEvent::ThornsReflect { damage: reflect });
+                if enemy_health <= 0 {
+                    events.push(CombatEvent::EnemyDefeated);
+                    maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
+                    hero_win!();
+                }
+            }
+
+            if target == 0 && h0 <= 0 {
+                events.push(CombatEvent::HeroDefeated);
+                enemy_win!();
+            }
+            if target == 1 && h1 <= 0 {
+                events.push(CombatEvent::PartyMemberDown { party_index: 1 });
+                enemy_win!();
             }
         }
 
-        if has_poison && poison_stacks > 0 && hero_health > 0 && enemy_health > 0 {
+        if has_poison_any && poison_stacks > 0 && h0 > 0 && enemy_health > 0 {
             if events.len() >= MAX_EVENTS {
                 break;
             }
             let potency = poison_stacks.min(POISON_DAMAGE_STACK_CAP);
             let mult = potency.max(1) as i32;
             let mut d = poison_tick * mult;
-            if has_toxic_mastery {
+            if has_toxic_any {
                 d = (d as i64 * 5 / 4).max(1) as i32;
             }
             d = d.min(enemy_health);
@@ -382,22 +570,22 @@ pub fn simulate_combat_party(
             enemy_health -= d;
             if enemy_health <= 0 {
                 events.push(CombatEvent::EnemyDefeated);
-                maybe_devourer_heal_on_kill(hero, &mut hero_health, max_h, &mut events);
+                maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
                 hero_win!();
             }
         }
 
-        if has_ally && tick % 8 == 0 && hero_health > 0 && ally_health > 0 && enemy_health > 0 {
+        if has_partner && tick % 8 == 0 && h0 > 0 && h1 > 0 && enemy_health > 0 {
             if events.len() < MAX_EVENTS {
                 events.push(CombatEvent::ThreatSnapshot {
-                    hero: threat[0],
-                    ally: threat[1],
+                    slot0: threat[0],
+                    slot1: threat[1],
                 });
             }
         }
     }
 
-    let outcome = if hero_health <= 0 {
+    let outcome = if h0 <= 0 {
         CombatOutcome::EnemyWon
     } else if enemy_health <= 0 {
         CombatOutcome::HeroWon
@@ -407,15 +595,19 @@ pub fn simulate_combat_party(
 
     CombatResult {
         outcome,
-        hero_health,
-        ally_health: if has_ally { Some(ally_health) } else { None },
-        ally_max_health: if has_ally { Some(ally_max) } else { None },
+        hero_health: h0,
+        partner_health: if has_partner { Some(h1) } else { None },
+        partner_max_health: if has_partner {
+            Some(partner_max)
+        } else {
+            None
+        },
         enemy_health,
         events,
     }
 }
 
-/// Solo combat: no party ally (tests and legacy call sites).
+/// Solo combat: no party partner (tests and legacy call sites).
 pub fn simulate_combat(
     hero: &HeroProfile,
     enemy: &Enemy,
@@ -438,7 +630,10 @@ fn maybe_devourer_heal_on_kill(
     let h = (max_h / 12).max(2).min(14);
     if h > 0 && *hero_health < max_h {
         *hero_health = (*hero_health + h).min(max_h);
-        events.push(CombatEvent::HeroHealed { amount: h });
+        events.push(CombatEvent::HeroHealed {
+            target: 0,
+            amount: h,
+        });
     }
 }
 
@@ -464,19 +659,23 @@ fn debuff_slots_from_poison(hero_poison: u32, enemy_poison: u32) -> ([String; 4]
 }
 
 pub fn combat_playback_frames_from_result(
-    hero: &HeroProfile,
+    lead: &HeroProfile,
+    partner: Option<&HeroProfile>,
     result: &CombatResult,
     enemy_name: &str,
     hero_max_hp: i32,
     enemy_max_hp: i32,
     hero_hp_at_start: i32,
-    ally_hp_at_start: Option<i32>,
-    ally_max_hp: Option<i32>,
+    partner_hp_at_start: Option<i32>,
+    partner_max_hp: Option<i32>,
 ) -> Vec<CombatPlaybackFrame> {
-    let has_poison = hero.equipped_skill_ids().any(|s| s == SkillId::PoisonEdge);
+    let partner_name = partner.map(|p| p.name.as_str());
+    let has_poison = lead.equipped_skill_ids().any(|s| s == SkillId::PoisonEdge)
+        || partner
+            .is_some_and(|p| p.equipped_skill_ids().any(|s| s == SkillId::PoisonEdge));
 
     let mut hero_hp = hero_hp_at_start.clamp(0, hero_max_hp);
-    let mut ally_hp = match (ally_hp_at_start, ally_max_hp) {
+    let mut partner_hp = match (partner_hp_at_start, partner_max_hp) {
         (Some(h), Some(m)) => Some(h.clamp(0, m)),
         _ => None,
     };
@@ -490,8 +689,8 @@ pub fn combat_playback_frames_from_result(
         enemy_name: enemy_name.to_string(),
         hero_hp,
         hero_max_hp,
-        ally_hp,
-        ally_max_hp,
+        partner_hp,
+        partner_max_hp,
         enemy_hp,
         enemy_max_hp,
         caption: format!("Engaging {enemy_name}."),
@@ -501,7 +700,7 @@ pub fn combat_playback_frames_from_result(
 
     for event in &result.events {
         match event {
-            CombatEvent::HeroAttacked { damage } => {
+            CombatEvent::HeroAttacked { damage, .. } => {
                 enemy_hp -= damage;
                 if has_poison {
                     enemy_poison_stacks = (enemy_poison_stacks + 2).min(40);
@@ -514,20 +713,24 @@ pub fn combat_playback_frames_from_result(
             CombatEvent::ThornsReflect { damage } => {
                 enemy_hp -= damage;
             }
-            CombatEvent::HeroHealed { amount } => {
-                hero_hp = (hero_hp + amount).min(hero_max_hp);
+            CombatEvent::HeroHealed { target, amount } => {
+                if *target == 0 {
+                    hero_hp = (hero_hp + amount).min(hero_max_hp);
+                } else if let (Some(a), Some(m)) = (partner_hp.as_mut(), partner_max_hp) {
+                    *a = (*a + amount).min(m);
+                }
             }
             CombatEvent::EnemyAttacked { target, damage } => {
                 if *target == 0 {
                     hero_hp -= damage;
-                } else if let (Some(a), Some(m)) = (ally_hp.as_mut(), ally_max_hp) {
+                } else if let (Some(a), Some(m)) = (partner_hp.as_mut(), partner_max_hp) {
                     *a = (*a - damage).clamp(0, m);
                 }
             }
-            CombatEvent::ThreatSnapshot { .. } | CombatEvent::AllyDefeated => {}
+            CombatEvent::ThreatSnapshot { .. } | CombatEvent::PartyMemberDown { .. } => {}
             CombatEvent::EnemyDefeated | CombatEvent::HeroDefeated => {}
         }
-        let ally_clamped = match (ally_hp, ally_max_hp) {
+        let partner_clamped = match (partner_hp, partner_max_hp) {
             (Some(h), Some(m)) => Some(h.clamp(0, m)),
             _ => None,
         };
@@ -536,15 +739,15 @@ pub fn combat_playback_frames_from_result(
             enemy_name: enemy_name.to_string(),
             hero_hp: hero_hp.clamp(0, hero_max_hp),
             hero_max_hp,
-            ally_hp: ally_clamped,
-            ally_max_hp,
+            partner_hp: partner_clamped,
+            partner_max_hp,
             enemy_hp: enemy_hp.clamp(0, enemy_max_hp),
             enemy_max_hp,
-            caption: combat_event_caption(event),
+            caption: combat_event_caption(event, partner_name),
             hero_debuff_slots: hd,
             enemy_debuff_slots: ed,
         });
-        ally_hp = ally_clamped;
+        partner_hp = partner_clamped;
     }
     frames
 }
@@ -559,6 +762,7 @@ pub fn combat_playback_frames(
     let result = simulate_combat(hero, enemy, max_ticks, hero_start);
     combat_playback_frames_from_result(
         hero,
+        None,
         &result,
         &enemy.name,
         stats.max_health,
@@ -622,7 +826,7 @@ mod tests {
         assert!(result
             .events
             .iter()
-            .any(|event| matches!(event, CombatEvent::HeroHealed { amount } if *amount > 0)));
+            .any(|event| matches!(event, CombatEvent::HeroHealed { amount, .. } if *amount > 0)));
     }
 
     #[test]
@@ -761,14 +965,14 @@ mod tests {
         let a = simulate_combat(&plain, &enemy, 2, 100);
         let b = simulate_combat(&heavy, &enemy, 2, 100);
         let plain_fist = a.events.iter().find_map(|e| {
-            if let CombatEvent::HeroAttacked { damage } = e {
+            if let CombatEvent::HeroAttacked { damage, .. } = e {
                 Some(*damage)
             } else {
                 None
             }
         });
         let heavy_fist = b.events.iter().find_map(|e| {
-            if let CombatEvent::HeroAttacked { damage } = e {
+            if let CombatEvent::HeroAttacked { damage, .. } = e {
                 Some(*damage)
             } else {
                 None
@@ -798,11 +1002,11 @@ mod tests {
         let h = simulate_combat(&heavy, &enemy, 2, 100);
         let c = simulate_combat(&cleave, &enemy, 2, 100);
         let heavy_dmg = h.events.iter().find_map(|e| match e {
-            CombatEvent::HeroAttacked { damage } => Some(*damage),
+            CombatEvent::HeroAttacked { damage, .. } => Some(*damage),
             _ => None,
         });
         let cleave_dmg = c.events.iter().find_map(|e| match e {
-            CombatEvent::HeroAttacked { damage } => Some(*damage),
+            CombatEvent::HeroAttacked { damage, .. } => Some(*damage),
             _ => None,
         });
         assert_eq!(heavy_dmg, cleave_dmg);
@@ -1453,7 +1657,7 @@ mod tests {
                 continue;
             }
             if saw_defeat {
-                if let CombatEvent::HeroHealed { amount } = e {
+                if let CombatEvent::HeroHealed { amount, .. } = e {
                     assert!(*amount > 0);
                     heal_after_defeat = true;
                     break;
@@ -1490,7 +1694,7 @@ mod tests {
         r.events
             .iter()
             .find_map(|e| {
-                if let CombatEvent::HeroAttacked { damage } = e {
+                if let CombatEvent::HeroAttacked { damage, .. } = e {
                     Some(*damage)
                 } else {
                     None
@@ -1503,7 +1707,7 @@ mod tests {
         r.events
             .iter()
             .find_map(|e| {
-                if let CombatEvent::HeroHealed { amount } = e {
+                if let CombatEvent::HeroHealed { amount, .. } = e {
                     Some(*amount)
                 } else {
                     None
@@ -1525,7 +1729,7 @@ mod tests {
             .unwrap()
     }
 
-    use crate::domain::party::tank_ally_starting_stats;
+    use crate::domain::party::default_party_partner_hero;
 
     #[test]
     fn party_threat_routes_first_foe_hit_to_tank_when_hero_is_slower() {
@@ -1538,13 +1742,13 @@ mod tests {
             armor: 0,
             attack_speed: 1.0,
         };
-        let tank = tank_ally_starting_stats();
+        let partner = default_party_partner_hero();
         let r = simulate_combat_party(
             &hero,
             &enemy,
             3,
             100,
-            Some((tank, tank.max_health)),
+            Some((&partner, partner.derived_stats().max_health)),
         );
         let first_foe = r
             .events

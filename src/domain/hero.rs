@@ -4,6 +4,10 @@ use crate::domain::stats::Stats;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+fn default_hero_name() -> String {
+    "Adventurer".to_string()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum HeroError {
     #[error("skill slot {slot} is locked")]
@@ -14,6 +18,9 @@ pub enum HeroError {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HeroProfile {
+    /// Character name (party combat log / threat UI). Persisted; defaults for older saves.
+    #[serde(default = "default_hero_name")]
+    pub name: String,
     pub base_stats: Stats,
     pub unlocked_skill_slots: usize,
     pub equipped_skills: Vec<Option<SkillId>>,
@@ -29,6 +36,7 @@ impl Default for HeroProfile {
 impl HeroProfile {
     pub fn new(base_stats: Stats) -> Self {
         Self {
+            name: default_hero_name(),
             base_stats,
             unlocked_skill_slots: 0,
             equipped_skills: vec![None, None, None, None, None, None],
@@ -219,6 +227,7 @@ mod tests {
     #[test]
     fn invalid_skill_slot_state_returns_error_instead_of_panicking() {
         let mut hero = HeroProfile {
+            name: default_hero_name(),
             base_stats: Stats::default(),
             unlocked_skill_slots: 3,
             equipped_skills: vec![None],

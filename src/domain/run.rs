@@ -1,7 +1,6 @@
 use crate::domain::combat::{
     combat_playback_frames_from_result, simulate_combat_party, CombatOutcome, CombatPlaybackFrame,
 };
-use crate::domain::party::tank_ally_starting_stats;
 use crate::domain::dungeon::{
     generate_dungeon, peak_risk_note, room_risk_hint, room_risk_rank, DungeonRoom, RoomKind,
 };
@@ -74,9 +73,9 @@ pub struct RunPlaybackFrame {
     /// Hero HP for the status bar (carries across rooms).
     pub hero_snapshot_hp: i32,
     pub hero_snapshot_max_hp: i32,
-    /// Tank ally HP when the delve includes the fixed tank NPC (`None` reserved for solo playback).
-    pub ally_snapshot_hp: Option<i32>,
-    pub ally_snapshot_max_hp: Option<i32>,
+    /// Second party hero snapshot for playback (`None` when running solo).
+    pub partner_snapshot_hp: Option<i32>,
+    pub partner_snapshot_max_hp: Option<i32>,
     /// Floors fully cleared before this frame (`0` until the first room is done).
     pub delve_floors_cleared: u32,
     /// Same as run max depth (`RunConfig.max_depth`).
@@ -102,8 +101,8 @@ fn playback_frame(
     room_kind: RoomKind,
     hero_hp: i32,
     hero_max: i32,
-    ally_hp: Option<i32>,
-    ally_max: Option<i32>,
+    partner_hp: Option<i32>,
+    partner_max: Option<i32>,
     floors_cleared: u32,
     cap: u32,
     kind: RunPlaybackFrameKind,
@@ -113,8 +112,8 @@ fn playback_frame(
         room_kind,
         hero_snapshot_hp: hero_hp,
         hero_snapshot_max_hp: hero_max,
-        ally_snapshot_hp: ally_hp,
-        ally_snapshot_max_hp: ally_max,
+        partner_snapshot_hp: partner_hp,
+        partner_snapshot_max_hp: partner_max,
         delve_floors_cleared: floors_cleared,
         delve_floors_cap: cap,
         risk_hint: room_risk_hint(room_kind).to_string(),
@@ -122,8 +121,12 @@ fn playback_frame(
     }
 }
 
-pub fn simulate_run_with_playback(hero: &HeroProfile, config: RunConfig) -> RunSimulation {
-    let mut sim = simulate_run_with_playback_inner(hero, config);
+pub fn simulate_run_with_playback(
+    lead: &HeroProfile,
+    party_partner: Option<&HeroProfile>,
+    config: RunConfig,
+) -> RunSimulation {
+    let mut sim = simulate_run_with_playback_inner(lead, party_partner, config);
     let m = config.gold_gain_multiplier.max(0.0);
     if m != 1.0 {
         sim.summary.gold_earned = (sim.summary.gold_earned as f32 * m).round() as u32;
@@ -131,13 +134,18 @@ pub fn simulate_run_with_playback(hero: &HeroProfile, config: RunConfig) -> RunS
     sim
 }
 
-fn simulate_run_with_playback_inner(hero: &HeroProfile, config: RunConfig) -> RunSimulation {
+fn simulate_run_with_playback_inner(
+    lead: &HeroProfile,
+    party_partner: Option<&HeroProfile>,
+    config: RunConfig,
+) -> RunSimulation {
     let rooms = generate_dungeon(config.max_depth, config.seed);
-    simulate_run_with_playback_for_rooms(hero, config, rooms)
+    simulate_run_with_playback_for_rooms(lead, party_partner, config, rooms)
 }
 
 fn simulate_run_with_playback_for_rooms(
-    hero: &HeroProfile,
+    lead: &HeroProfile,
+    party_partner: Option<&HeroProfile>,
     config: RunConfig,
     rooms: Vec<DungeonRoom>,
 ) -> RunSimulation {
@@ -148,11 +156,10 @@ fn simulate_run_with_playback_for_rooms(
     let mut loot = Vec::new();
     let mut log = Vec::new();
     let mut playback = RunPlayback::default();
-    let hero_max_hp = hero.derived_stats().max_health;
+    let hero_max_hp = lead.derived_stats().max_health;
     let mut hero_current_hp = hero_max_hp;
-    let tank_stats = tank_ally_starting_stats();
-    let ally_max_hp = tank_stats.max_health;
-    let mut ally_current_hp = ally_max_hp;
+    let partner_max_hp = party_partner.map(|p| p.derived_stats().max_health);
+    let mut partner_current_hp = partner_max_hp.unwrap_or(0);
     let mut floors_cleared = 0u32;
     let mut peak_risk_rank = 0u8;
 
@@ -188,29 +195,30 @@ fn simulate_run_with_playback_for_rooms(
                 let enemy = encounter.enemy.clone();
                 let at_start = hero_current_hp;
                 let combat = simulate_combat_party(
-                    hero,
+                    lead,
                     &enemy,
                     240,
                     at_start,
-                    Some((tank_stats, ally_current_hp)),
+                    party_partner.map(|p| (p, partner_current_hp)),
                 );
                 for frame in combat_playback_frames_from_result(
-                    hero,
+                    lead,
+                    party_partner,
                     &combat,
                     &enemy.name,
                     hero_max_hp,
                     enemy.max_health,
                     at_start,
-                    Some(ally_current_hp),
-                    Some(ally_max_hp),
+                    partner_max_hp.map(|_| partner_current_hp),
+                    partner_max_hp,
                 ) {
                     playback.frames.push(playback_frame(
                         room.depth,
                         room.kind,
                         frame.hero_hp,
                         frame.hero_max_hp,
-                        frame.ally_hp,
-                        frame.ally_max_hp,
+                        frame.partner_hp,
+                        frame.partner_max_hp,
                         floors_cleared,
                         cap,
                         RunPlaybackFrameKind::Combat(frame),
@@ -219,8 +227,8 @@ fn simulate_run_with_playback_for_rooms(
                 match combat.outcome {
                     CombatOutcome::HeroWon => {
                         hero_current_hp = combat.hero_health;
-                        if let Some(h) = combat.ally_health {
-                            ally_current_hp = h;
+                        if let Some(h) = combat.partner_health {
+                            partner_current_hp = h;
                         }
                         log.push(format!("Depth {}: defeated {}", room.depth, enemy.name));
                         gold_earned += room.depth * 3;
@@ -232,8 +240,8 @@ fn simulate_run_with_playback_for_rooms(
                                 room.kind,
                                 hero_current_hp,
                                 hero_max_hp,
-                                Some(ally_current_hp),
-                                Some(ally_max_hp),
+                                partner_max_hp.map(|_| partner_current_hp),
+                                partner_max_hp,
                                 floors_cleared,
                                 cap,
                                 RunPlaybackFrameKind::Narration {
@@ -290,8 +298,8 @@ fn simulate_run_with_playback_for_rooms(
                     room.kind,
                     hero_current_hp,
                     hero_max_hp,
-                    Some(ally_current_hp),
-                    Some(ally_max_hp),
+                    partner_max_hp.map(|_| partner_current_hp),
+                    partner_max_hp,
                     floors_cleared,
                     cap,
                     RunPlaybackFrameKind::Narration { text: line },
@@ -307,8 +315,8 @@ fn simulate_run_with_playback_for_rooms(
                     room.kind,
                     hero_current_hp,
                     hero_max_hp,
-                    Some(ally_current_hp),
-                    Some(ally_max_hp),
+                    partner_max_hp.map(|_| partner_current_hp),
+                    partner_max_hp,
                     floors_cleared,
                     cap,
                     RunPlaybackFrameKind::Narration { text: line },
@@ -334,8 +342,12 @@ fn simulate_run_with_playback_for_rooms(
     }
 }
 
-pub fn simulate_run(hero: &HeroProfile, config: RunConfig) -> RunSummary {
-    simulate_run_with_playback(hero, config).summary
+pub fn simulate_run(
+    lead: &HeroProfile,
+    party_partner: Option<&HeroProfile>,
+    config: RunConfig,
+) -> RunSummary {
+    simulate_run_with_playback(lead, party_partner, config).summary
 }
 
 #[cfg(test)]
@@ -352,7 +364,7 @@ mod tests {
             kind: RoomKind::Monster,
             encounter: None,
         }];
-        let sim = simulate_run_with_playback_for_rooms(&hero, config, rooms);
+        let sim = simulate_run_with_playback_for_rooms(&hero, None, config, rooms);
         assert_eq!(sim.summary.outcome, RunOutcome::HeroDied);
         assert!(
             sim.summary

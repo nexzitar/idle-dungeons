@@ -175,6 +175,7 @@ fn start_run(
             1.0 + 0.1 * profile.profile.meta.upgrade_level(UpgradeId::GoldGain) as f32;
         let RunSimulation { summary, playback } = simulate_run_with_playback(
             &hero,
+            profile.profile.party_partner.as_ref(),
             RunConfig {
                 seed: event.seed,
                 max_depth: DEFAULT_RUN_MAX_DEPTH,
