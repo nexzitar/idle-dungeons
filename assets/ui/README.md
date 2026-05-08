@@ -13,3 +13,4 @@ Suggested filenames (optional convention):
 - `skill_active.png`, `skill_passive.png`, `skill_empty.png`, `skill_locked.png`
 - `gold.png`, `salvage.png`
 - `item_generic.png`
+- `dungeon_theater.png` — wide strip (~256×96 or larger) for combat backdrop; loaded in place of `gen_dungeon_theater()` when you wire `AssetServer`.

@@ -116,7 +116,7 @@ pub fn spawn_top_resource_bar(
         })
         .with_children(|row| {
             row.spawn(TextBundle::from_section(
-                "Idle Dungeons",
+                "Delvers",
                 TextStyle {
                     font_size: UiTheme::FONT_TITLE,
                     color: UiTheme::muted_gold(),

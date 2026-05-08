@@ -34,6 +34,9 @@ impl StashSortOrder {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SaveProfile {
     pub hero: HeroProfile,
+    /// Second party hero for delve combat (`None` = solo lead only). Omitted in older saves.
+    #[serde(default)]
+    pub party_partner: Option<HeroProfile>,
     pub inventory: Vec<ItemInstance>,
     pub meta: MetaProgression,
     #[serde(default)]
@@ -44,6 +47,17 @@ impl SaveProfile {
     /// Keep [`HeroProfile::unlocked_skill_slots`] aligned with meta progression (source of truth).
     pub fn sync_skill_slot_unlocks(&mut self) {
         self.hero.unlock_skill_slots(self.meta.unlocked_skill_slots);
+        if let Some(ref mut p) = self.party_partner {
+            p.unlock_skill_slots(self.meta.unlocked_skill_slots);
+        }
+    }
+
+    /// Second hero joins combat only after [`crate::domain::progression::PARTY_SLOT_2_UNLOCK_DEPTH`] is reached.
+    pub fn active_party_partner(&self) -> Option<&HeroProfile> {
+        if self.meta.party_slots_unlocked() < 2 {
+            return None;
+        }
+        self.party_partner.as_ref()
     }
 }
 
@@ -51,6 +65,7 @@ impl Default for SaveProfile {
     fn default() -> Self {
         let mut s = Self {
             hero: HeroProfile::default(),
+            party_partner: None,
             inventory: vec![],
             meta: MetaProgression::default(),
             stash_sort: StashSortOrder::default(),

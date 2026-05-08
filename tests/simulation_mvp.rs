@@ -6,8 +6,8 @@ fn seeded_run_reaches_same_result_every_time() {
     let hero = HeroProfile::default();
     let config = RunConfig::new(7, 25);
 
-    let first = simulate_run(&hero, config);
-    let second = simulate_run(&hero, config);
+    let first = simulate_run(&hero, None, config);
+    let second = simulate_run(&hero, None, config);
 
     assert_eq!(first, second);
 }
@@ -15,7 +15,7 @@ fn seeded_run_reaches_same_result_every_time() {
 #[test]
 fn run_summary_reports_depth_gold_and_outcome() {
     let hero = HeroProfile::default();
-    let result = simulate_run(&hero, RunConfig::new(5, 25));
+    let result = simulate_run(&hero, None, RunConfig::new(5, 25));
 
     assert!(result.deepest_depth >= 1);
     assert!(result.gold_earned > 0);
@@ -32,7 +32,7 @@ fn run_summary_reports_depth_gold_and_outcome() {
 #[test]
 fn run_summary_reports_playback_log() {
     let hero = HeroProfile::default();
-    let result = simulate_run(&hero, RunConfig::new(5, 25));
+    let result = simulate_run(&hero, None, RunConfig::new(5, 25));
 
     assert!(!result.log.is_empty());
     assert!(result.log.first().unwrap().contains("Depth"));
@@ -42,9 +42,10 @@ fn run_summary_reports_playback_log() {
 fn gold_gain_multiplier_scales_run_gold() {
     let hero = HeroProfile::default();
     let seed = 11u64;
-    let base = simulate_run(&hero, RunConfig::new(seed, 25));
+    let base = simulate_run(&hero, None, RunConfig::new(seed, 25));
     let boosted = simulate_run(
         &hero,
+        None,
         RunConfig {
             seed,
             max_depth: 25,

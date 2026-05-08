@@ -1,5 +1,6 @@
 pub mod build_panel;
 pub mod components;
+pub mod gear_hub;
 pub mod inventory_panel;
 pub mod log_panel;
 pub mod mockup_layout;
@@ -9,31 +10,38 @@ pub mod skill_book;
 pub mod stash_sort;
 pub mod summary_panel;
 pub mod theme;
+pub mod title_camp;
 pub mod tooltip;
-pub mod upgrade_panel;
 pub mod widgets;
 
 use crate::app::{
-    AcceptRunRewards, ActiveRunPlayback, AssignHeroSkill, BuyUpgrade, EquipInventoryItem,
-    GameState, LatestRunSummary, OpenSkillBook, ProfileSavePath, ProfileState, ResetProgress,
-    ReturnToBuild, RunSpeedSetting, SalvageInventoryItem, SkipRunPlayback, StartRun,
+    AcceptRunRewards, ActiveRunPlayback, AssignHeroSkill, EquipInventoryItem, GameState,
+    LatestRunSummary, OpenGearHub, OpenSkillBook, ProfileSavePath, ProfileState, ResetProgress,
+    RunSpeedSetting, SalvageInventoryItem, SkipRunPlayback, StartRun,
 };
 use crate::domain::items::ItemInstance;
 use crate::domain::run::{RunPlaybackFrameKind, RunSummary};
 use crate::ui::build_panel::build_panel_text;
 use crate::ui::components::{
-    AcceptRewardsButton, BuildScreen, BuyUpgradeButton, EquipItemButton, MainCamera,
-    PlaybackCaptionText, PlaybackDepthText, PlaybackEnemyBarFill, PlaybackEnemyDebuffLine,
-    PlaybackEnemyNameText, PlaybackHeroBarFill, PlaybackHeroDebuffLine, PlaybackLogScrollRegion,
-    PlaybackLogText, PlaybackProgressBarFill, PlaybackProgressLabel, PlaybackRoomKindText,
-    ResetProgressButton, ReturnToBuildButton, RunPlaybackScreen, SalvageItemButton, SettingsButton,
-    SettingsModalBackdrop, SettingsModalCloseButton, SettingsModalRoot, SettingsModalSpeedButton,
-    SettingsModalSpeedLabel, SkillBookBackdrop, SkillBookCloseButton, SkillBookPickButton,
-    SkillBookRoot, SkillSlotButton, SkipPlaybackButton, StartRunButton, StashSortCycleButton,
-    SummaryScreen, TopBarField, UiButtonPalette, UiRoot, UiScrollContent, UiScrollRegion,
-    UiScrollState, UiTooltip, UpgradeScreen,
+    AcceptRewardsButton, BuildScreen, CampfireFlame, EquipItemButton, GearHubBackdrop,
+    GearHubCloseButton, GearHubOpenButton, GearHubRoot, HeroNameDisplayText, HeroNameEditButton,
+    HeroNameEditState, MainCamera, PlaybackAggroArrowLine, PlaybackAggroArrowText,
+    PlaybackAllyPortraitBlock,
+    PlaybackCaptionText, PlaybackCombatLogPanel, PlaybackCombatLogToggleLabel, PlaybackDepthText,
+    PlaybackDmgMeterEnemyFill, PlaybackDmgMeterEnemyValue, PlaybackDmgMeterLeadFill,
+    PlaybackDmgMeterLeadValue, PlaybackDmgMeterPartnerFill, PlaybackDmgMeterPartnerRow,
+    PlaybackDmgMeterPartnerValue, PlaybackEnemyBarFill, PlaybackEnemyDebuffLine,
+    PlaybackEnemyNameText, PlaybackEnemyPortraitBlock, PlaybackHeroBarFill, PlaybackAllyBarFill,
+    PlaybackHeroDebuffLine, PlaybackLogScrollRegion, PlaybackLogText, PlaybackProgressBarFill,
+    PlaybackProgressLabel, PlaybackRoomKindText, PlaybackTheaterFloatLayer, ResetProgressButton,
+    RunPlaybackScreen, SalvageItemButton, SettingsButton, SettingsModalBackdrop,
+    SettingsModalCloseButton, SettingsModalRoot, SettingsModalSpeedButton, SettingsModalSpeedLabel,
+    SkillBookBackdrop, SkillBookCloseButton, SkillBookPickButton, SkillBookRoot, SkillSlotButton,
+    SkipPlaybackButton, StartRunButton, StashSortCycleButton, SummaryScreen,
+    TitleEnterCampButton, TitleQuitButton, TitleScreen, ToggleCombatLogButton, TopBarField,
+    UiButtonPalette, UiRoot, UiScrollContent, UiScrollRegion, UiScrollState, UiTooltip,
+    FloatingCombatPopup,
 };
-use crate::ui::mockup_layout::RightPanelTab;
 use crate::ui::placeholder_graphics::UiPlaceholderImages;
 use crate::ui::theme::{
     body_text, caption_text, format_item_affix_lines, format_item_stat_summary, rarity_color,
@@ -48,6 +56,14 @@ use bevy::input::InputPlugin;
 use bevy::prelude::*;
 use bevy::transform::TransformSystem;
 use bevy::ui::{RelativeCursorPosition, UiSystem};
+#[allow(deprecated)]
+use bevy::window::ReceivedCharacter;
+
+#[derive(Resource, Default)]
+struct GearHubKeepOpen(pub bool);
+
+#[derive(Resource, Default)]
+struct PlaybackCombatLogVisible(pub bool);
 
 /// Button that received [`Interaction::Pressed`] on press; used to confirm click on mouse-up.
 #[derive(Resource, Default)]
@@ -69,9 +85,13 @@ impl Plugin for UiPlugin {
         if !app.is_plugin_added::<InputPlugin>() {
             app.add_plugins(InputPlugin);
         }
-        app.init_resource::<RightPanelTab>();
+        #[allow(deprecated)]
+        app.add_event::<ReceivedCharacter>();
+        app.init_resource::<GearHubKeepOpen>();
         app.init_resource::<UiClickPress>();
         app.init_resource::<crate::ui::tooltip::TooltipState>();
+        app.init_resource::<HeroNameEditState>();
+        app.init_resource::<PlaybackCombatLogVisible>();
         app.add_systems(
             Update,
             crate::ui::tooltip::hide_tooltip_layer_before_pointer_focus.before(UiSystem::Focus),
@@ -85,62 +105,88 @@ impl Plugin for UiPlugin {
             .resource_mut::<MainScheduleOrder>()
             .insert_startup_before(StateTransition, RegisterUiPlaceholderImages);
         app.add_systems(Startup, spawn_camera)
-            .add_systems(
-                OnEnter(GameState::Build),
-                (reset_right_tab_inventory, spawn_build_screen).chain(),
-            )
+            .add_systems(OnEnter(GameState::Title), spawn_title_screen)
+            .add_systems(OnExit(GameState::Title), cleanup_ui)
+            .add_systems(OnEnter(GameState::Build), spawn_build_screen)
             .add_systems(OnExit(GameState::Build), cleanup_ui)
-            .add_systems(OnEnter(GameState::Running), spawn_running_screen)
+            .add_systems(
+                OnEnter(GameState::Running),
+                (reset_playback_combat_log_visibility, spawn_running_screen).chain(),
+            )
             .add_systems(OnExit(GameState::Running), cleanup_running_exit)
             .add_systems(
                 Update,
                 (
                     (
-                        capture_ui_click_start,
-                        apply_ui_button_palettes,
-                        handle_start_button.run_if(in_state(GameState::Build)),
-                        handle_skip_playback_button.run_if(in_state(GameState::Running)),
-                        send_reset_progress_requests,
-                        fulfill_reset_progress,
-                        open_settings_modal,
-                        close_settings_modal,
-                        handle_settings_modal_speed,
-                        close_skill_book_modal,
-                        handle_skill_book_pick,
-                        handle_right_panel_tab_buttons,
-                        handle_stash_sort_button,
-                        handle_skill_slot_buttons,
-                        handle_open_skill_book,
+                        (
+                            capture_ui_click_start,
+                            apply_ui_button_palettes,
+                            handle_title_enter_camp.run_if(in_state(GameState::Title)),
+                            handle_title_quit.run_if(in_state(GameState::Title)),
+                            handle_start_button.run_if(in_state(GameState::Build)),
+                            handle_skip_playback_button.run_if(in_state(GameState::Running)),
+                            send_reset_progress_requests,
+                            fulfill_reset_progress,
+                            open_settings_modal,
+                            close_settings_modal,
+                            handle_settings_modal_speed,
+                        )
+                            .chain(),
+                        (
+                            close_skill_book_modal,
+                            close_gear_hub_modal,
+                            handle_skill_book_pick,
+                            handle_stash_sort_button,
+                            handle_skill_slot_buttons,
+                            request_gear_hub_open,
+                            handle_open_skill_book,
+                            open_gear_hub_from_events,
+                            handle_hero_name_edit_button,
+                            hero_rename_keyboard,
+                        )
+                            .chain(),
                     )
                         .chain(),
                     (
                         handle_accept_button.run_if(in_state(GameState::Summary)),
-                        handle_equip_buttons.run_if(in_state(GameState::Upgrades)),
-                        handle_salvage_buttons.run_if(in_state(GameState::Upgrades)),
-                        handle_buy_upgrade_buttons.run_if(in_state(GameState::Upgrades)),
-                        handle_return_to_build_button.run_if(in_state(GameState::Upgrades)),
+                        handle_equip_buttons.run_if(in_build_or_summary),
+                        handle_salvage_buttons.run_if(in_build_or_summary),
                         clear_ui_click_after_release,
                     )
                         .chain()
                         .after(handle_open_skill_book),
                     sync_top_bar,
+                    tick_campfire_flames.run_if(in_state(GameState::Title)),
+                    sync_hero_name_labels,
                     sync_run_playback_ui.run_if(in_state(GameState::Running)),
+                    sync_run_playback_party_bars
+                        .run_if(in_state(GameState::Running))
+                        .after(sync_run_playback_ui),
+                    sync_playback_aggro_arrow
+                        .run_if(in_state(GameState::Running))
+                        .after(sync_run_playback_ui),
+                    sync_playback_aggro_arrow_line
+                        .run_if(in_state(GameState::Running))
+                        .after(sync_run_playback_ui),
+                    sync_playback_damage_meters
+                        .run_if(in_state(GameState::Running))
+                        .after(sync_run_playback_ui),
+                    sync_playback_theater_slot_visibility
+                        .run_if(in_state(GameState::Running))
+                        .after(sync_run_playback_ui),
+                    handle_toggle_combat_log_button.run_if(in_state(GameState::Running)),
+                    sync_playback_combat_log_panel_visibility.run_if(in_state(GameState::Running)),
+                    sync_combat_log_toggle_label.run_if(in_state(GameState::Running)),
+                    spawn_playback_floating_combat_text.run_if(in_state(GameState::Running)),
+                    tick_floating_combat_popups.run_if(in_state(GameState::Running)),
                     sync_run_playback_debuff_slots
                         .run_if(in_state(GameState::Running))
                         .after(sync_run_playback_ui),
                     sync_playback_delve_progress_bar.run_if(in_state(GameState::Running)),
                 ),
             )
-            .add_systems(
-                OnEnter(GameState::Summary),
-                (reset_right_tab_loot, spawn_summary_screen).chain(),
-            )
+            .add_systems(OnEnter(GameState::Summary), spawn_summary_screen)
             .add_systems(OnExit(GameState::Summary), cleanup_ui)
-            .add_systems(
-                OnEnter(GameState::Upgrades),
-                (reset_right_tab_camp, spawn_upgrade_screen).chain(),
-            )
-            .add_systems(OnExit(GameState::Upgrades), cleanup_ui)
             .add_systems(
                 PostUpdate,
                 (
@@ -148,16 +194,81 @@ impl Plugin for UiPlugin {
                     pin_playback_combat_log_scroll
                         .run_if(in_state(GameState::Running))
                         .after(apply_ui_scroll),
-                    refresh_build_screen_on_profile_change.run_if(in_state(GameState::Build)),
-                    refresh_upgrade_screen_on_profile_change.run_if(in_state(GameState::Upgrades)),
+                    refresh_profile_screen_on_profile_change,
                     crate::ui::tooltip::update_tooltip.after(UiSystem::Layout),
                 ),
             );
     }
 }
 
+fn reset_playback_combat_log_visibility(mut v: ResMut<PlaybackCombatLogVisible>) {
+    v.0 = false;
+}
+
+fn in_build_or_summary(state: Res<State<GameState>>) -> bool {
+    matches!(*state.get(), GameState::Build | GameState::Summary)
+}
+
 fn spawn_camera(mut commands: Commands) {
     commands.spawn((Camera2dBundle::default(), MainCamera));
+}
+
+fn spawn_title_screen(
+    mut commands: Commands,
+    profile: Res<ProfileState>,
+    speed: Res<RunSpeedSetting>,
+    ph: Res<UiPlaceholderImages>,
+) {
+    crate::ui::title_camp::spawn_title_screen(&mut commands, &profile, speed.0, &ph);
+}
+
+fn tick_campfire_flames(time: Res<Time>, mut q: Query<(&CampfireFlame, &mut BackgroundColor)>) {
+    let t = time.elapsed_seconds();
+    for (flame, mut bg) in &mut q {
+        let w = ((t * flame.speed + flame.phase_offset).sin() * 0.5 + 0.5).clamp(0.0, 1.0);
+        let c = flame.base.mix(&flame.peak, w);
+        *bg = c.into();
+    }
+}
+
+fn handle_title_enter_camp(
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    buttons: Query<(Entity, &Interaction), With<TitleEnterCampButton>>,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction) in &buttons {
+        if entity == target && ui_click_release_confirms(*interaction) {
+            next_state.set(GameState::Build);
+            break;
+        }
+    }
+}
+
+fn handle_title_quit(
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    buttons: Query<(Entity, &Interaction), With<TitleQuitButton>>,
+    mut exit: EventWriter<AppExit>,
+) {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction) in &buttons {
+        if entity == target && ui_click_release_confirms(*interaction) {
+            exit.send(AppExit::Success);
+            break;
+        }
+    }
 }
 
 fn capture_ui_click_start(
@@ -221,18 +332,6 @@ fn content_column_bundle() -> NodeBundle {
     }
 }
 
-fn reset_right_tab_inventory(mut tab: ResMut<RightPanelTab>) {
-    *tab = RightPanelTab::Inventory;
-}
-
-fn reset_right_tab_loot(mut tab: ResMut<RightPanelTab>) {
-    *tab = RightPanelTab::Loot;
-}
-
-fn reset_right_tab_camp(mut tab: ResMut<RightPanelTab>) {
-    *tab = RightPanelTab::Inventory;
-}
-
 fn cleanup_running_exit(mut commands: Commands, roots: Query<Entity, With<UiRoot>>) {
     for root in &roots {
         commands.entity(root).despawn_recursive();
@@ -244,22 +343,22 @@ fn spawn_running_screen(
     mut commands: Commands,
     profile: Res<ProfileState>,
     speed: Res<RunSpeedSetting>,
-    tab: Res<RightPanelTab>,
     ph: Res<UiPlaceholderImages>,
 ) {
-    spawn_running_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
+    spawn_running_screen_root(&mut commands, &profile, speed.0, &ph);
 }
 
 fn spawn_running_screen_root(
     commands: &mut Commands,
     profile: &ProfileState,
     speed_mult: f32,
-    tab: RightPanelTab,
     ph: &UiPlaceholderImages,
 ) {
-    let hero = profile.effective_hero();
+    let lead = profile.effective_hero();
+    let partner = profile.effective_party_partner();
+    let party_slots = profile.profile.meta.party_slots_unlocked();
     let meta = &profile.profile.meta;
-    let loadout_lines: Vec<String> = build_panel_text(&hero)
+    let loadout_lines: Vec<String> = build_panel_text(&lead)
         .lines()
         .map(|s| s.to_string())
         .collect();
@@ -275,34 +374,25 @@ fn spawn_running_screen_root(
                     meta.gold,
                     meta.salvage,
                     meta.unlocked_skill_slots,
-                    hero.equipped_skills.len(),
+                    lead.equipped_skills.len(),
                     "—",
                     speed_mult,
                 );
                 crate::ui::mockup_layout::spawn_three_column_row(col, |row| {
-                    crate::ui::mockup_layout::spawn_ornate_column(row, 0.95, |panel| {
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
                         crate::ui::mockup_layout::spawn_hero_column_mockup(
                             panel,
                             ph,
-                            &hero,
+                            &lead,
+                            partner.as_ref(),
+                            party_slots,
                             &loadout_lines,
                             false,
-                        );
-                    });
-                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.05, |panel| {
-                        crate::ui::mockup_layout::spawn_run_playback_middle_column(panel);
-                    });
-                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
-                        crate::ui::mockup_layout::spawn_right_management_column(
-                            panel,
-                            ph,
-                            tab,
-                            meta,
-                            profile,
-                            &profile.profile.inventory,
-                            None,
                             false,
                         );
+                    });
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.25, |panel| {
+                        crate::ui::mockup_layout::spawn_run_playback_middle_column(panel, ph);
                     });
                 });
                 crate::ui::mockup_layout::spawn_mockup_footer(
@@ -318,30 +408,29 @@ fn spawn_build_screen(
     mut commands: Commands,
     profile: Res<ProfileState>,
     speed: Res<RunSpeedSetting>,
-    tab: Res<RightPanelTab>,
     ph: Res<UiPlaceholderImages>,
 ) {
-    spawn_build_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
+    spawn_build_screen_root(&mut commands, &profile, speed.0, &ph);
 }
 
 fn spawn_build_screen_root(
     commands: &mut Commands,
     profile: &ProfileState,
     speed_mult: f32,
-    tab: RightPanelTab,
     ph: &UiPlaceholderImages,
-) {
-    let hero = profile.effective_hero();
+) -> Entity {
+    let lead = profile.effective_hero();
+    let partner = profile.effective_party_partner();
+    let party_slots = profile.profile.meta.party_slots_unlocked();
     let meta = &profile.profile.meta;
-    let loadout_lines: Vec<String> = build_panel_text(&hero)
+    let loadout_lines: Vec<String> = build_panel_text(&lead)
         .lines()
         .map(|s| s.to_string())
         .collect();
     let stash = profile.profile.inventory.len();
 
-    commands
-        .spawn((root_shell(), UiRoot, BuildScreen))
-        .with_children(|root| {
+    let root_entity = commands.spawn((root_shell(), UiRoot, BuildScreen)).id();
+    commands.entity(root_entity).with_children(|root| {
             spawn_atmosphere(root);
             root.spawn(content_column_bundle()).with_children(|col| {
                 crate::ui::mockup_layout::spawn_mockup_header(
@@ -350,33 +439,26 @@ fn spawn_build_screen_root(
                     meta.gold,
                     meta.salvage,
                     meta.unlocked_skill_slots,
-                    hero.equipped_skills.len(),
+                    lead.equipped_skills.len(),
                     "—",
                     speed_mult,
                 );
                 crate::ui::mockup_layout::spawn_three_column_row(col, |row| {
-                    crate::ui::mockup_layout::spawn_ornate_column(row, 0.95, |panel| {
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
                         crate::ui::mockup_layout::spawn_hero_column_mockup(
                             panel,
                             ph,
-                            &hero,
+                            &lead,
+                            partner.as_ref(),
+                            party_slots,
                             &loadout_lines,
+                            true,
                             true,
                         );
                     });
-                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.05, |panel| {
-                        crate::ui::mockup_layout::spawn_dungeon_briefing_column(panel, stash);
-                    });
-                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
-                        crate::ui::mockup_layout::spawn_right_management_column(
-                            panel,
-                            ph,
-                            tab,
-                            meta,
-                            profile,
-                            &profile.profile.inventory,
-                            None,
-                            false,
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.25, |panel| {
+                        crate::ui::mockup_layout::spawn_dungeon_briefing_column(
+                            panel, stash, meta,
                         );
                     });
                 });
@@ -387,6 +469,7 @@ fn spawn_build_screen_root(
             });
             crate::ui::tooltip::spawn_tooltip_layer(root);
         });
+    root_entity
 }
 
 fn spawn_summary_screen(
@@ -394,14 +477,13 @@ fn spawn_summary_screen(
     profile: Res<ProfileState>,
     latest_summary: Option<Res<LatestRunSummary>>,
     speed: Res<RunSpeedSetting>,
-    tab: Res<RightPanelTab>,
     ph: Res<UiPlaceholderImages>,
 ) {
     let summary = latest_summary
         .as_deref()
         .map(|s| s.summary.clone())
         .unwrap_or_else(crate::ui::summary_panel::empty_run_summary);
-    spawn_summary_screen_root(&mut commands, &profile, &summary, speed.0, *tab, &ph);
+    spawn_summary_screen_root(&mut commands, &profile, &summary, speed.0, &ph);
 }
 
 fn spawn_summary_screen_root(
@@ -409,19 +491,19 @@ fn spawn_summary_screen_root(
     profile: &ProfileState,
     summary: &RunSummary,
     speed_mult: f32,
-    tab: RightPanelTab,
     ph: &UiPlaceholderImages,
-) {
+) -> Entity {
     let meta = &profile.profile.meta;
-    let hero = profile.effective_hero();
-    let loadout_lines: Vec<String> = build_panel_text(&hero)
+    let lead = profile.effective_hero();
+    let partner = profile.effective_party_partner();
+    let party_slots = profile.profile.meta.party_slots_unlocked();
+    let loadout_lines: Vec<String> = build_panel_text(&lead)
         .lines()
         .map(|s| s.to_string())
         .collect();
 
-    commands
-        .spawn((root_shell(), UiRoot, SummaryScreen))
-        .with_children(|root| {
+    let root_entity = commands.spawn((root_shell(), UiRoot, SummaryScreen)).id();
+    commands.entity(root_entity).with_children(|root| {
             spawn_atmosphere(root);
             root.spawn(content_column_bundle()).with_children(|col| {
                 crate::ui::mockup_layout::spawn_mockup_header(
@@ -430,34 +512,25 @@ fn spawn_summary_screen_root(
                     meta.gold,
                     meta.salvage,
                     meta.unlocked_skill_slots,
-                    hero.equipped_skills.len(),
+                    lead.equipped_skills.len(),
                     &summary.deepest_depth.to_string(),
                     speed_mult,
                 );
                 crate::ui::mockup_layout::spawn_three_column_row(col, |row| {
-                    crate::ui::mockup_layout::spawn_ornate_column(row, 0.95, |panel| {
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
                         crate::ui::mockup_layout::spawn_hero_column_mockup(
                             panel,
                             ph,
-                            &hero,
+                            &lead,
+                            partner.as_ref(),
+                            party_slots,
                             &loadout_lines,
                             false,
-                        );
-                    });
-                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.05, |panel| {
-                        crate::ui::mockup_layout::spawn_dungeon_summary_column(panel, summary);
-                    });
-                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
-                        crate::ui::mockup_layout::spawn_right_management_column(
-                            panel,
-                            ph,
-                            tab,
-                            meta,
-                            profile,
-                            &profile.profile.inventory,
-                            Some(summary.loot.as_slice()),
                             false,
                         );
+                    });
+                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.25, |panel| {
+                        crate::ui::mockup_layout::spawn_dungeon_summary_column(panel, summary);
                     });
                 });
                 crate::ui::mockup_layout::spawn_mockup_footer(
@@ -465,145 +538,45 @@ fn spawn_summary_screen_root(
                     crate::ui::mockup_layout::FooterMode::Summary,
                 );
             });
+            crate::ui::mockup_layout::spawn_summary_rewards_modal(
+                root,
+                summary,
+                profile.profile.stash_sort,
+            );
             crate::ui::tooltip::spawn_tooltip_layer(root);
         });
+    root_entity
 }
 
-fn spawn_upgrade_screen(
-    mut commands: Commands,
-    profile: Res<ProfileState>,
-    speed: Res<RunSpeedSetting>,
-    tab: Res<RightPanelTab>,
-    ph: Res<UiPlaceholderImages>,
-) {
-    spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
-}
-
-fn spawn_upgrade_screen_root(
+/// Re-spawns the gear hub modal after a full UI root rebuild when the player still has it open.
+fn attach_gear_hub_if_kept_open(
     commands: &mut Commands,
+    root: Entity,
+    gear_keep: &GearHubKeepOpen,
     profile: &ProfileState,
-    speed_mult: f32,
-    tab: RightPanelTab,
+    game_state: GameState,
+    latest: Option<&LatestRunSummary>,
     ph: &UiPlaceholderImages,
 ) {
-    let hero = profile.effective_hero();
-    let meta = &profile.profile.meta;
-    let loadout_lines: Vec<String> = build_panel_text(&hero)
-        .lines()
-        .map(|s| s.to_string())
-        .collect();
-    let inventory = &profile.profile.inventory;
-
-    commands
-        .spawn((root_shell(), UiRoot, UpgradeScreen))
-        .with_children(|root| {
-            spawn_atmosphere(root);
-            root.spawn(content_column_bundle()).with_children(|col| {
-                crate::ui::mockup_layout::spawn_mockup_header(
-                    col,
-                    ph,
-                    meta.gold,
-                    meta.salvage,
-                    meta.unlocked_skill_slots,
-                    hero.equipped_skills.len(),
-                    "—",
-                    speed_mult,
-                );
-                crate::ui::mockup_layout::spawn_three_column_row(col, |row| {
-                    crate::ui::mockup_layout::spawn_ornate_column(row, 0.95, |panel| {
-                        crate::ui::mockup_layout::spawn_hero_column_mockup(
-                            panel,
-                            ph,
-                            &hero,
-                            &loadout_lines,
-                            true,
-                        );
-                    });
-                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.05, |panel| {
-                        crate::ui::mockup_layout::spawn_dungeon_camp_column(panel);
-                    });
-                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
-                        crate::ui::mockup_layout::spawn_right_management_column(
-                            panel, ph, tab, meta, profile, inventory, None, true,
-                        );
-                    });
-                });
-                crate::ui::mockup_layout::spawn_mockup_footer(
-                    col,
-                    crate::ui::mockup_layout::FooterMode::Camp,
-                );
-            });
-            crate::ui::tooltip::spawn_tooltip_layer(root);
-        });
-}
-
-fn handle_right_panel_tab_buttons(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    tab_buttons: Query<(
-        Entity,
-        &Interaction,
-        &crate::ui::mockup_layout::RightTabButton,
-    )>,
-    mut tab: ResMut<RightPanelTab>,
-    mut commands: Commands,
-    profile: Res<ProfileState>,
-    speed: Res<RunSpeedSetting>,
-    latest_summary: Option<Res<LatestRunSummary>>,
-    state: Res<State<GameState>>,
-    build_roots: Query<Entity, With<BuildScreen>>,
-    upgrade_roots: Query<Entity, With<UpgradeScreen>>,
-    summary_roots: Query<Entity, With<SummaryScreen>>,
-    running_roots: Query<Entity, With<RunPlaybackScreen>>,
-    ph: Res<UiPlaceholderImages>,
-) {
-    if !mouse.just_released(MouseButton::Left) {
+    if !gear_keep.0 {
         return;
     }
-    let Some(target) = press.0 else {
-        return;
+    let interactive = matches!(game_state, GameState::Build | GameState::Summary);
+    let summary_loot = if matches!(game_state, GameState::Summary) {
+        latest.map(|s| s.summary.loot.as_slice())
+    } else {
+        None
     };
-    for (entity, interaction, btn) in &tab_buttons {
-        if entity != target || !ui_click_release_confirms(*interaction) {
-            continue;
-        }
-        if *tab == btn.0 {
-            return;
-        }
-        *tab = btn.0;
-
-        match state.get() {
-            GameState::Build => {
-                for e in &build_roots {
-                    commands.entity(e).despawn_recursive();
-                }
-                spawn_build_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
-            }
-            GameState::Upgrades => {
-                for e in &upgrade_roots {
-                    commands.entity(e).despawn_recursive();
-                }
-                spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
-            }
-            GameState::Summary => {
-                let summary = latest_summary
-                    .as_deref()
-                    .map(|s| s.summary.clone())
-                    .unwrap_or_else(crate::ui::summary_panel::empty_run_summary);
-                for e in &summary_roots {
-                    commands.entity(e).despawn_recursive();
-                }
-                spawn_summary_screen_root(&mut commands, &profile, &summary, speed.0, *tab, &ph);
-            }
-            GameState::Running => {
-                for e in &running_roots {
-                    commands.entity(e).despawn_recursive();
-                }
-                spawn_running_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
-            }
-        }
-        break;
-    }
+    commands.entity(root).with_children(|parent| {
+        crate::ui::gear_hub::spawn_gear_hub_modal(
+            parent,
+            profile,
+            &profile.profile.inventory,
+            summary_loot,
+            interactive,
+            ph,
+        );
+    });
 }
 
 fn handle_stash_sort_button(
@@ -614,14 +587,14 @@ fn handle_stash_sort_button(
     save_path: Res<ProfileSavePath>,
     mut commands: Commands,
     speed: Res<RunSpeedSetting>,
-    tab: Res<RightPanelTab>,
     latest_summary: Option<Res<LatestRunSummary>>,
     state: Res<State<GameState>>,
     build_roots: Query<Entity, With<BuildScreen>>,
-    upgrade_roots: Query<Entity, With<UpgradeScreen>>,
     summary_roots: Query<Entity, With<SummaryScreen>>,
     running_roots: Query<Entity, With<RunPlaybackScreen>>,
     ph: Res<UiPlaceholderImages>,
+    mut name_edit: ResMut<HeroNameEditState>,
+    gear_keep: Res<GearHubKeepOpen>,
 ) {
     if !mouse.just_released(MouseButton::Left) {
         return;
@@ -637,19 +610,23 @@ fn handle_stash_sort_button(
         if let Err(e) = crate::save::save_profile(&save_path.0, &profile.profile) {
             warn!("failed to save stash sort preference: {e}");
         }
-
+    
         match state.get() {
             GameState::Build => {
                 for e in &build_roots {
                     commands.entity(e).despawn_recursive();
                 }
-                spawn_build_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
-            }
-            GameState::Upgrades => {
-                for e in &upgrade_roots {
-                    commands.entity(e).despawn_recursive();
-                }
-                spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
+                *name_edit = HeroNameEditState::default();
+                let root = spawn_build_screen_root(&mut commands, &profile, speed.0, &ph);
+                attach_gear_hub_if_kept_open(
+                    &mut commands,
+                    root,
+                    &*gear_keep,
+                    &profile,
+                    GameState::Build,
+                    latest_summary.as_deref(),
+                    &ph,
+                );
             }
             GameState::Summary => {
                 let summary = latest_summary
@@ -659,53 +636,107 @@ fn handle_stash_sort_button(
                 for e in &summary_roots {
                     commands.entity(e).despawn_recursive();
                 }
-                spawn_summary_screen_root(&mut commands, &profile, &summary, speed.0, *tab, &ph);
+                *name_edit = HeroNameEditState::default();
+                let root = spawn_summary_screen_root(
+                    &mut commands,
+                    &profile,
+                    &summary,
+                    speed.0,
+                    &ph,
+                );
+                attach_gear_hub_if_kept_open(
+                    &mut commands,
+                    root,
+                    &*gear_keep,
+                    &profile,
+                    GameState::Summary,
+                    latest_summary.as_deref(),
+                    &ph,
+                );
             }
             GameState::Running => {
                 for e in &running_roots {
                     commands.entity(e).despawn_recursive();
                 }
-                spawn_running_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
+                spawn_running_screen_root(&mut commands, &profile, speed.0, &ph);
             }
+            GameState::Title => {}
         }
         break;
     }
 }
 
-fn refresh_upgrade_screen_on_profile_change(
+fn refresh_profile_screen_on_profile_change(
     mut commands: Commands,
     profile: Res<ProfileState>,
     speed: Res<RunSpeedSetting>,
-    tab: Res<RightPanelTab>,
-    upgrade_roots: Query<Entity, With<UpgradeScreen>>,
-    ph: Res<UiPlaceholderImages>,
-) {
-    if !profile.is_changed() || upgrade_roots.is_empty() {
-        return;
-    }
-
-    for root in &upgrade_roots {
-        commands.entity(root).despawn_recursive();
-    }
-    spawn_upgrade_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
-}
-
-fn refresh_build_screen_on_profile_change(
-    mut commands: Commands,
-    profile: Res<ProfileState>,
-    speed: Res<RunSpeedSetting>,
-    tab: Res<RightPanelTab>,
+    state: Res<State<GameState>>,
+    latest_summary: Option<Res<LatestRunSummary>>,
     build_roots: Query<Entity, With<BuildScreen>>,
+    summary_roots: Query<Entity, With<SummaryScreen>>,
+    title_roots: Query<Entity, With<TitleScreen>>,
     ph: Res<UiPlaceholderImages>,
+    mut name_edit: ResMut<HeroNameEditState>,
+    gear_keep: Res<GearHubKeepOpen>,
 ) {
-    if !profile.is_changed() || build_roots.is_empty() {
+    if !profile.is_changed() {
         return;
     }
-
-    for root in &build_roots {
-        commands.entity(root).despawn_recursive();
+    match state.get() {
+        GameState::Title => {
+            if title_roots.is_empty() {
+                return;
+            }
+            for e in &title_roots {
+                commands.entity(e).despawn_recursive();
+            }
+            crate::ui::title_camp::spawn_title_screen(&mut commands, &profile, speed.0, &ph);
+        }
+        GameState::Build => {
+            if build_roots.is_empty() {
+                return;
+            }
+            for e in &build_roots {
+                commands.entity(e).despawn_recursive();
+            }
+            *name_edit = HeroNameEditState::default();
+            let root = spawn_build_screen_root(&mut commands, &profile, speed.0, &ph);
+            attach_gear_hub_if_kept_open(
+                &mut commands,
+                root,
+                &*gear_keep,
+                &profile,
+                GameState::Build,
+                latest_summary.as_deref(),
+                &ph,
+            );
+        }
+        GameState::Summary => {
+            if summary_roots.is_empty() {
+                return;
+            }
+            let summary = latest_summary
+                .as_deref()
+                .map(|s| s.summary.clone())
+                .unwrap_or_else(crate::ui::summary_panel::empty_run_summary);
+            for e in &summary_roots {
+                commands.entity(e).despawn_recursive();
+            }
+            *name_edit = HeroNameEditState::default();
+            let root =
+                spawn_summary_screen_root(&mut commands, &profile, &summary, speed.0, &ph);
+            attach_gear_hub_if_kept_open(
+                &mut commands,
+                root,
+                &*gear_keep,
+                &profile,
+                GameState::Summary,
+                latest_summary.as_deref(),
+                &ph,
+            );
+        }
+        GameState::Running => {}
     }
-    spawn_build_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
 }
 
 pub(crate) fn spawn_item_card(
@@ -881,7 +912,7 @@ fn sync_top_bar(
                 Some(p.frames[idx].depth.to_string())
             })
             .unwrap_or_else(|| "—".to_string()),
-        _ => "—".to_string(),
+        GameState::Title | GameState::Build => meta.deepest_floor_reached.to_string(),
     };
     let skill_cap = hero.equipped_skills.len().max(1);
     for (field, mut text) in &mut q {
@@ -956,11 +987,12 @@ fn fulfill_reset_progress(
     save_path: Res<ProfileSavePath>,
     mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
-    mut tab: ResMut<RightPanelTab>,
     state: Res<State<GameState>>,
     speed: Res<RunSpeedSetting>,
-    build_roots: Query<Entity, With<BuildScreen>>,
+    roots: Query<Entity, With<UiRoot>>,
     ph: Res<UiPlaceholderImages>,
+    mut name_edit: ResMut<HeroNameEditState>,
+    mut gear_keep: ResMut<GearHubKeepOpen>,
 ) {
     for _ in events.read() {
         profile.profile = crate::save::SaveProfile::default();
@@ -969,15 +1001,16 @@ fn fulfill_reset_progress(
         }
         commands.remove_resource::<LatestRunSummary>();
         commands.remove_resource::<ActiveRunPlayback>();
+        *name_edit = HeroNameEditState::default();
+        gear_keep.0 = false;
 
-        if *state.get() == GameState::Build {
-            *tab = RightPanelTab::Inventory;
-            for e in &build_roots {
+        if *state.get() == GameState::Title {
+            for e in &roots {
                 commands.entity(e).despawn_recursive();
             }
-            spawn_build_screen_root(&mut commands, &profile, speed.0, *tab, &ph);
+            crate::ui::title_camp::spawn_title_screen(&mut commands, &profile, speed.0, &ph);
         } else {
-            next_state.set(GameState::Build);
+            next_state.set(GameState::Title);
         }
     }
 }
@@ -1056,8 +1089,95 @@ fn handle_open_skill_book(
             continue;
         };
         commands.entity(root).with_children(|parent| {
-            crate::ui::skill_book::spawn_skill_book_modal(parent, ev.slot, &ph);
+            crate::ui::skill_book::spawn_skill_book_modal(parent, ev.slot, ev.kind, &ph);
         });
+    }
+}
+
+fn request_gear_hub_open(
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    open_btns: Query<(Entity, &Interaction), With<GearHubOpenButton>>,
+    mut writer: EventWriter<OpenGearHub>,
+) {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction) in &open_btns {
+        if entity == target && ui_click_release_confirms(*interaction) {
+            writer.send(OpenGearHub);
+            return;
+        }
+    }
+}
+
+fn open_gear_hub_from_events(
+    mut events: EventReader<OpenGearHub>,
+    roots: Query<Entity, With<UiRoot>>,
+    existing: Query<Entity, With<GearHubRoot>>,
+    mut commands: Commands,
+    ph: Res<UiPlaceholderImages>,
+    profile: Res<ProfileState>,
+    state: Res<State<GameState>>,
+    latest: Option<Res<LatestRunSummary>>,
+    mut gear_keep: ResMut<GearHubKeepOpen>,
+) {
+    for _ in events.read() {
+        gear_keep.0 = true;
+        for e in existing.iter() {
+            commands.entity(e).despawn_recursive();
+        }
+        let Ok(root) = roots.get_single() else {
+            continue;
+        };
+        let interactive = matches!(*state.get(), GameState::Build | GameState::Summary);
+        let summary_loot = if matches!(*state.get(), GameState::Summary) {
+            latest.as_ref().map(|s| s.summary.loot.as_slice())
+        } else {
+            None
+        };
+        commands.entity(root).with_children(|parent| {
+            crate::ui::gear_hub::spawn_gear_hub_modal(
+                parent,
+                &profile,
+                &profile.profile.inventory,
+                summary_loot,
+                interactive,
+                &ph,
+            );
+        });
+    }
+}
+
+fn close_gear_hub_modal(
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    backdrop: Query<(Entity, &Interaction), With<GearHubBackdrop>>,
+    close_btn: Query<(Entity, &Interaction), With<GearHubCloseButton>>,
+    modal: Query<Entity, With<GearHubRoot>>,
+    mut commands: Commands,
+    mut gear_keep: ResMut<GearHubKeepOpen>,
+) {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    let should_close = backdrop
+        .iter()
+        .any(|(e, i)| e == target && ui_click_release_confirms(*i))
+        || close_btn
+            .iter()
+            .any(|(e, i)| e == target && ui_click_release_confirms(*i));
+    if should_close {
+        gear_keep.0 = false;
+        for entity in &modal {
+            commands.entity(entity).despawn_recursive();
+        }
     }
 }
 
@@ -1107,6 +1227,7 @@ fn handle_skill_book_pick(
             writer.send(AssignHeroSkill {
                 slot: pick.slot,
                 skill: pick.skill,
+                kind: pick.kind,
             });
             for e in &modal {
                 commands.entity(e).despawn_recursive();
@@ -1269,6 +1390,346 @@ fn sync_run_playback_ui(
     }
 }
 
+fn sync_run_playback_party_bars(
+    playback: Res<ActiveRunPlayback>,
+    mut ally_bar: Query<&mut Style, With<PlaybackAllyBarFill>>,
+) {
+    if playback.frames.is_empty() {
+        return;
+    }
+    let idx = playback.display_index.min(playback.frames.len() - 1);
+    let frame = &playback.frames[idx];
+
+    let ally_w = match (frame.partner_snapshot_hp, frame.partner_snapshot_max_hp) {
+        (Some(h), Some(m)) if m > 0 => Val::Percent(
+            ((h as f32 / m as f32).clamp(0.0, 1.0) * 100.0).clamp(0.0, 100.0),
+        ),
+        _ => Val::Percent(0.0),
+    };
+    for mut style in &mut ally_bar {
+        style.width = ally_w;
+    }
+}
+
+fn sync_playback_aggro_arrow(
+    playback: Res<ActiveRunPlayback>,
+    mut aggro: Query<&mut Text, With<PlaybackAggroArrowText>>,
+) {
+    if playback.frames.is_empty() {
+        return;
+    }
+    let idx = playback.display_index.min(playback.frames.len() - 1);
+    let frame = &playback.frames[idx];
+    let arrow_s = match &frame.kind {
+        RunPlaybackFrameKind::Narration { .. } => "\u{2014}".to_string(),
+        RunPlaybackFrameKind::Combat(c) => {
+            let has_partner = frame.partner_snapshot_max_hp.is_some();
+            let t0 = c.threat_slot0.unwrap_or(0);
+            let t1 = c.threat_slot1.unwrap_or(0);
+            let label = crate::domain::combat::aggro_arrow_target_label(
+                [t0, t1],
+                frame.hero_snapshot_hp,
+                frame.partner_snapshot_hp.unwrap_or(0),
+                has_partner,
+                c.foe_last_target,
+            );
+            format!("\u{2192} {label}")
+        }
+    };
+    for mut text in &mut aggro {
+        if text.sections[0].value != arrow_s {
+            text.sections[0].value = arrow_s.clone();
+        }
+    }
+}
+
+fn sync_playback_theater_slot_visibility(
+    playback: Res<ActiveRunPlayback>,
+    mut ally: Query<
+        &mut Visibility,
+        (
+            With<PlaybackAllyPortraitBlock>,
+            Without<PlaybackEnemyPortraitBlock>,
+        ),
+    >,
+    mut enemy: Query<
+        &mut Visibility,
+        (
+            With<PlaybackEnemyPortraitBlock>,
+            Without<PlaybackAllyPortraitBlock>,
+        ),
+    >,
+) {
+    if playback.frames.is_empty() {
+        return;
+    }
+    let idx = playback.display_index.min(playback.frames.len() - 1);
+    let frame = &playback.frames[idx];
+    let show_ally = frame.partner_snapshot_max_hp.is_some();
+    let show_enemy = matches!(frame.kind, RunPlaybackFrameKind::Combat(_));
+    for mut v in &mut ally {
+        *v = if show_ally {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
+    for mut v in &mut enemy {
+        *v = if show_enemy {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
+}
+
+fn sync_playback_aggro_arrow_line(
+    playback: Res<ActiveRunPlayback>,
+    mut q: Query<(&mut Style, &mut Visibility), With<PlaybackAggroArrowLine>>,
+) {
+    if playback.frames.is_empty() {
+        return;
+    }
+    let idx = playback.display_index.min(playback.frames.len() - 1);
+    let frame = &playback.frames[idx];
+    let Ok((mut style, mut vis)) = q.get_single_mut() else {
+        return;
+    };
+    match &frame.kind {
+        RunPlaybackFrameKind::Narration { .. } => {
+            *vis = Visibility::Hidden;
+        }
+        RunPlaybackFrameKind::Combat(c) => {
+            let has_partner = frame.partner_snapshot_max_hp.is_some();
+            let t0 = c.threat_slot0.unwrap_or(0);
+            let t1 = c.threat_slot1.unwrap_or(0);
+            let slot = crate::domain::combat::pick_party_enemy_target(
+                0,
+                [t0, t1],
+                frame.hero_snapshot_hp,
+                frame.partner_snapshot_hp.unwrap_or(0),
+                has_partner,
+                c.foe_last_target,
+            );
+            let top = if slot == 0 { 30.0 } else { 58.0 };
+            *vis = Visibility::Visible;
+            style.position_type = PositionType::Absolute;
+            style.top = Val::Percent(top);
+            style.right = Val::Percent(14.0);
+            style.width = Val::Percent(44.0);
+            style.height = Val::Px(4.0);
+            style.left = Val::Auto;
+            style.bottom = Val::Auto;
+        }
+    }
+}
+
+fn sync_playback_damage_meters(
+    playback: Res<ActiveRunPlayback>,
+    mut partner_row: Query<&mut Visibility, With<PlaybackDmgMeterPartnerRow>>,
+    mut fills: ParamSet<(
+        Query<&mut Style, With<PlaybackDmgMeterLeadFill>>,
+        Query<&mut Style, With<PlaybackDmgMeterPartnerFill>>,
+        Query<&mut Style, With<PlaybackDmgMeterEnemyFill>>,
+    )>,
+    mut vals: ParamSet<(
+        Query<&mut Text, With<PlaybackDmgMeterLeadValue>>,
+        Query<&mut Text, With<PlaybackDmgMeterPartnerValue>>,
+        Query<&mut Text, With<PlaybackDmgMeterEnemyValue>>,
+    )>,
+) {
+    if playback.frames.is_empty() {
+        return;
+    }
+    let idx = playback.display_index.min(playback.frames.len() - 1);
+    let frame = &playback.frames[idx];
+    let has_partner = frame.partner_snapshot_max_hp.is_some();
+    let (p0, p1, fe) = match &frame.kind {
+        RunPlaybackFrameKind::Combat(c) => (
+            c.damage_meter_party_0,
+            c.damage_meter_party_1,
+            c.damage_meter_foe,
+        ),
+        _ => (0u32, 0u32, 0u32),
+    };
+    let max = p0.max(p1).max(fe).max(1) as f32;
+    let w0 = (p0 as f32 / max * 100.0).clamp(0.0, 100.0);
+    let w1 = (p1 as f32 / max * 100.0).clamp(0.0, 100.0);
+    let wf = (fe as f32 / max * 100.0).clamp(0.0, 100.0);
+    for mut s in fills.p0().iter_mut() {
+        s.width = Val::Percent(w0);
+    }
+    for mut s in fills.p1().iter_mut() {
+        s.width = Val::Percent(w1);
+    }
+    for mut s in fills.p2().iter_mut() {
+        s.width = Val::Percent(wf);
+    }
+    let s0 = p0.to_string();
+    let s1 = p1.to_string();
+    let sf = fe.to_string();
+    for mut t in vals.p0().iter_mut() {
+        if t.sections[0].value != s0 {
+            t.sections[0].value = s0.clone();
+        }
+    }
+    for mut t in vals.p1().iter_mut() {
+        if t.sections[0].value != s1 {
+            t.sections[0].value = s1.clone();
+        }
+    }
+    for mut t in vals.p2().iter_mut() {
+        if t.sections[0].value != sf {
+            t.sections[0].value = sf.clone();
+        }
+    }
+    for mut v in &mut partner_row {
+        *v = if has_partner {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
+}
+
+fn handle_toggle_combat_log_button(
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    buttons: Query<(Entity, &Interaction), With<ToggleCombatLogButton>>,
+    mut vis: ResMut<PlaybackCombatLogVisible>,
+) {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction) in &buttons {
+        if entity == target && ui_click_release_confirms(*interaction) {
+            vis.0 = !vis.0;
+            break;
+        }
+    }
+}
+
+fn sync_playback_combat_log_panel_visibility(
+    vis: Res<PlaybackCombatLogVisible>,
+    mut panel: Query<&mut Visibility, With<PlaybackCombatLogPanel>>,
+) {
+    let v = if vis.0 {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+    for mut pv in &mut panel {
+        *pv = v;
+    }
+}
+
+fn sync_combat_log_toggle_label(
+    vis: Res<PlaybackCombatLogVisible>,
+    mut labels: Query<&mut Text, With<PlaybackCombatLogToggleLabel>>,
+) {
+    let s = if vis.0 {
+        "Hide log"
+    } else {
+        "Show log"
+    };
+    for mut text in &mut labels {
+        if text.sections[0].value != s {
+            text.sections[0].value = s.to_string();
+        }
+    }
+}
+
+fn spawn_playback_floating_combat_text(
+    playback: Res<ActiveRunPlayback>,
+    mut last_idx: Local<Option<usize>>,
+    float_layer: Query<Entity, With<PlaybackTheaterFloatLayer>>,
+    mut commands: Commands,
+) {
+    if playback.frames.is_empty() {
+        return;
+    }
+    let idx = playback.display_index.min(playback.frames.len() - 1);
+    if *last_idx == Some(idx) {
+        return;
+    }
+    *last_idx = Some(idx);
+
+    let frame = &playback.frames[idx];
+    let (caption, anchor) = match &frame.kind {
+        RunPlaybackFrameKind::Combat(c) => (c.caption.clone(), c.sfx_anchor),
+        _ => return,
+    };
+    if matches!(anchor, crate::domain::combat::CombatSfxAnchor::Neutral) {
+        return;
+    }
+    let Ok(parent) = float_layer.get_single() else {
+        return;
+    };
+    let color = crate::ui::theme::playback_float_text_color(&caption);
+    let font_size = UiTheme::FONT_COMPACT;
+    let mut pos = NodeBundle {
+        style: Style {
+            position_type: PositionType::Absolute,
+            max_width: Val::Px(200.0),
+            padding: UiRect::axes(Val::Px(6.0), Val::Px(2.0)),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        },
+        ..default()
+    };
+    match anchor {
+        crate::domain::combat::CombatSfxAnchor::Lead => {
+            pos.style.left = Val::Percent(4.0);
+            pos.style.right = Val::Auto;
+            pos.style.top = Val::Percent(10.0);
+        }
+        crate::domain::combat::CombatSfxAnchor::Ally => {
+            pos.style.left = Val::Percent(4.0);
+            pos.style.right = Val::Auto;
+            pos.style.top = Val::Percent(52.0);
+        }
+        crate::domain::combat::CombatSfxAnchor::Enemy => {
+            pos.style.right = Val::Percent(4.0);
+            pos.style.left = Val::Auto;
+            pos.style.top = Val::Percent(28.0);
+        }
+        crate::domain::combat::CombatSfxAnchor::Neutral => return,
+    }
+
+    commands.entity(parent).with_children(|layer| {
+        layer
+            .spawn((pos, FloatingCombatPopup { ttl: 0.95 }))
+            .with_children(|pop| {
+                pop.spawn(TextBundle::from_section(
+                    caption,
+                    TextStyle {
+                        font_size,
+                        color,
+                        ..default()
+                    },
+                ));
+            });
+    });
+}
+
+fn tick_floating_combat_popups(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut q: Query<(Entity, &mut FloatingCombatPopup)>,
+) {
+    let dt = time.delta_seconds();
+    for (entity, mut pop) in &mut q {
+        pop.ttl -= dt;
+        if pop.ttl <= 0.0 {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
+}
+
 fn sync_run_playback_debuff_slots(
     playback: Res<ActiveRunPlayback>,
     mut hero: Query<
@@ -1388,9 +1849,8 @@ fn handle_skill_slot_buttons(
     mut events: EventWriter<OpenSkillBook>,
     state: Res<State<GameState>>,
 ) {
-    match state.get() {
-        GameState::Build | GameState::Upgrades => {}
-        _ => return,
+    if *state.get() != GameState::Build {
+        return;
     }
     if !mouse.just_released(MouseButton::Left) {
         return;
@@ -1400,8 +1860,151 @@ fn handle_skill_slot_buttons(
     };
     for (entity, interaction, btn) in &buttons {
         if entity == target && ui_click_release_confirms(*interaction) {
-            events.send(OpenSkillBook { slot: btn.slot });
+            events.send(OpenSkillBook {
+                slot: btn.slot,
+                kind: btn.kind,
+            });
             break;
+        }
+    }
+}
+
+fn hero_display_name_for_slot(profile: &crate::save::SaveProfile, slot: u8) -> String {
+    match slot {
+        0 => profile.hero.name.clone(),
+        1 => profile
+            .party_partner
+            .as_ref()
+            .map(|p| p.name.clone())
+            .unwrap_or_default(),
+        _ => String::new(),
+    }
+}
+
+fn handle_hero_name_edit_button(
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    buttons: Query<(Entity, &Interaction, &HeroNameEditButton)>,
+    mut edit: ResMut<HeroNameEditState>,
+    profile: Res<ProfileState>,
+    state: Res<State<GameState>>,
+) {
+    if *state.get() != GameState::Build {
+        return;
+    }
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction, btn) in &buttons {
+        if entity != target || !ui_click_release_confirms(*interaction) {
+            continue;
+        }
+        if btn.slot == 1 && profile.profile.party_partner.is_none() {
+            return;
+        }
+        edit.active_slot = Some(btn.slot);
+        edit.buffer = hero_display_name_for_slot(&profile.profile, btn.slot);
+        break;
+    }
+}
+
+fn sync_hero_name_labels(
+    profile: Res<ProfileState>,
+    edit: Res<HeroNameEditState>,
+    mut q: Query<(&HeroNameDisplayText, &mut Text)>,
+) {
+    for (tag, mut text) in &mut q {
+        let display = if edit.active_slot == Some(tag.slot) {
+            format!("{}▏", edit.buffer)
+        } else {
+            hero_display_name_for_slot(&profile.profile, tag.slot)
+        };
+        if text.sections[0].value != display {
+            text.sections[0].value = display;
+        }
+    }
+}
+
+#[allow(deprecated)]
+fn hero_rename_keyboard(
+    mut edit: ResMut<HeroNameEditState>,
+    mut profile: ResMut<ProfileState>,
+    save_path: Res<ProfileSavePath>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut char_ev: EventReader<ReceivedCharacter>,
+    state: Res<State<GameState>>,
+    settings_modal: Query<(), With<SettingsModalRoot>>,
+    skill_book: Query<(), With<SkillBookRoot>>,
+) {
+    if edit.active_slot.is_none() {
+        for _ in char_ev.read() {}
+        return;
+    }
+    if *state.get() != GameState::Build {
+        *edit = HeroNameEditState::default();
+        for _ in char_ev.read() {}
+        return;
+    }
+    if !settings_modal.is_empty() || !skill_book.is_empty() {
+        for _ in char_ev.read() {}
+        return;
+    }
+
+    if keys.just_pressed(KeyCode::Escape) {
+        *edit = HeroNameEditState::default();
+        for _ in char_ev.read() {}
+        return;
+    }
+
+    if keys.just_pressed(KeyCode::Enter) {
+        let Some(slot) = edit.active_slot else {
+            return;
+        };
+        let trimmed = edit.buffer.trim();
+        let name: String = if trimmed.is_empty() {
+            crate::domain::hero::DEFAULT_HERO_NAME.to_string()
+        } else {
+            trimmed
+                .chars()
+                .take(crate::domain::hero::MAX_HERO_NAME_LEN)
+                .collect()
+        };
+        match slot {
+            0 => profile.profile.hero.name = name,
+            1 => {
+                if let Some(p) = profile.profile.party_partner.as_mut() {
+                    p.name = name;
+                }
+            }
+            _ => {}
+        }
+        if let Err(e) = crate::save::save_profile(&save_path.0, &profile.profile) {
+            warn!("failed to save after rename: {e}");
+        }
+        *edit = HeroNameEditState::default();
+        for _ in char_ev.read() {}
+        return;
+    }
+
+    if keys.just_pressed(KeyCode::Backspace) {
+        edit.buffer.pop();
+    }
+
+    for ev in char_ev.read() {
+        for c in ev.char.chars() {
+            if c == '\r' || c == '\n' {
+                continue;
+            }
+            if c.is_control() {
+                continue;
+            }
+            if edit.buffer.chars().count() >= crate::domain::hero::MAX_HERO_NAME_LEN {
+                continue;
+            }
+            edit.buffer.push(c);
         }
     }
 }
@@ -1428,50 +2031,9 @@ fn handle_salvage_buttons(
     }
 }
 
-fn handle_buy_upgrade_buttons(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    buttons: Query<(Entity, &Interaction, &BuyUpgradeButton)>,
-    mut events: EventWriter<BuyUpgrade>,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    for (entity, interaction, button) in &buttons {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            events.send(BuyUpgrade {
-                upgrade: button.upgrade,
-            });
-            break;
-        }
-    }
-}
-
-fn handle_return_to_build_button(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    buttons: Query<(Entity, &Interaction), With<ReturnToBuildButton>>,
-    mut events: EventWriter<ReturnToBuild>,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    for (entity, interaction) in &buttons {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            events.send(ReturnToBuild);
-            break;
-        }
-    }
-}
-
 fn pin_playback_combat_log_scroll(
     playback: Res<ActiveRunPlayback>,
+    vis: Res<PlaybackCombatLogVisible>,
     mut prev_log: Local<String>,
     mut regions: Query<(Entity, &mut UiScrollState, &Node), With<PlaybackLogScrollRegion>>,
     children: Query<&Children>,
@@ -1480,6 +2042,9 @@ fn pin_playback_combat_log_scroll(
         Query<&mut Style, With<UiScrollContent>>,
     )>,
 ) {
+    if !vis.0 {
+        return;
+    }
     let body = playback.log_lines.join("\n");
     if body == *prev_log {
         return;
@@ -1566,19 +2131,22 @@ fn cleanup_ui(mut commands: Commands, roots: Query<Entity, With<UiRoot>>) {
 mod tests {
     use super::*;
     use crate::app::{
-        AcceptRunRewards, GameState, IdleDungeonsPlugin, LatestRunSummary, ProfileSavePath,
-        ProfileState, SkipRunPlayback, StartRun,
+        AcceptRunRewards, GameState, IdleDungeonsPlugin, LatestRunSummary, OpenGearHub,
+        SkipRunPlayback, StartRun,
     };
-    use crate::domain::items::{GearSlot, ItemInstance};
-    use crate::domain::progression::UpgradeId;
-    use crate::ui::mockup_layout::{RightPanelTab, RightTabButton};
     use bevy::input::mouse::MouseButtonInput;
     use bevy::input::ButtonState;
     use bevy::state::app::StatesPlugin;
-    use tempfile::tempdir;
+
+    fn enter_build_from_title(app: &mut App) {
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::Build);
+        app.update();
+    }
 
     #[test]
-    fn ui_plugin_spawns_build_screen_with_start_button() {
+    fn ui_plugin_starts_on_title_then_camp_has_start_button() {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
         app.add_plugins(StatesPlugin);
@@ -1588,7 +2156,13 @@ mod tests {
         app.update();
 
         assert_eq!(entity_count::<MainCamera>(app.world_mut()), 1);
+        assert_eq!(entity_count::<TitleScreen>(app.world_mut()), 1);
+        assert_eq!(entity_count::<StartRunButton>(app.world_mut()), 0);
+
+        enter_build_from_title(&mut app);
+
         assert_eq!(entity_count::<StartRunButton>(app.world_mut()), 1);
+        assert_eq!(entity_count::<BuildScreen>(app.world_mut()), 1);
     }
 
     fn simulate_primary_click(app: &mut App, button: Entity) {
@@ -1623,6 +2197,7 @@ mod tests {
         app.add_plugins(IdleDungeonsPlugin);
         app.add_plugins(UiPlugin);
         app.update();
+        enter_build_from_title(&mut app);
 
         let button = single_entity::<StartRunButton>(app.world_mut());
         simulate_primary_click(&mut app, button);
@@ -1690,123 +2265,18 @@ mod tests {
     }
 
     #[test]
-    fn upgrades_screen_has_inventory_and_upgrade_buttons() {
+    fn gear_hub_open_event_spawns_gear_hub_modal() {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
         app.add_plugins(StatesPlugin);
         app.add_plugins(IdleDungeonsPlugin);
         app.add_plugins(UiPlugin);
-        app.world_mut()
-            .resource_mut::<ProfileState>()
-            .profile
-            .inventory
-            .push(ItemInstance::basic(1, "Iron Sword", GearSlot::Weapon));
-        app.world_mut()
-            .resource_mut::<NextState<GameState>>()
-            .set(GameState::Upgrades);
-
-        app.update();
         app.update();
 
-        assert_eq!(entity_count::<UpgradeScreen>(app.world_mut()), 1);
-        assert!(entity_count::<EquipItemButton>(app.world_mut()) >= 1);
-        assert!(entity_count::<SalvageItemButton>(app.world_mut()) >= 1);
-        press_right_panel_tab(&mut app, RightPanelTab::Upgrades);
-        assert!(entity_count::<BuyUpgradeButton>(app.world_mut()) >= 1);
-        assert_eq!(entity_count::<ReturnToBuildButton>(app.world_mut()), 1);
-    }
-
-    #[test]
-    fn pressing_upgrade_button_updates_profile_and_refreshes_screen_text() {
-        let dir = tempdir().unwrap();
-        let mut app = App::new();
-        app.add_plugins(MinimalPlugins);
-        app.add_plugins(StatesPlugin);
-        app.insert_resource(ProfileSavePath(dir.path().join("profile.json")));
-        app.add_plugins(IdleDungeonsPlugin);
-        app.add_plugins(UiPlugin);
+        app.world_mut().send_event(OpenGearHub);
         app.update();
 
-        app.world_mut()
-            .resource_mut::<ProfileState>()
-            .profile
-            .meta
-            .gold = 100;
-        app.world_mut()
-            .resource_mut::<NextState<GameState>>()
-            .set(GameState::Upgrades);
-        app.update();
-        app.update();
-
-        press_right_panel_tab(&mut app, RightPanelTab::Upgrades);
-
-        let button = app
-            .world_mut()
-            .query_filtered::<(Entity, &BuyUpgradeButton), ()>()
-            .iter(app.world())
-            .find_map(|(entity, button)| {
-                (button.upgrade == UpgradeId::BaseDamage).then_some(entity)
-            })
-            .unwrap();
-        simulate_primary_click(&mut app, button);
-        app.update();
-
-        let profile = app.world().resource::<ProfileState>();
-        assert_eq!(profile.profile.meta.gold, 90);
-        assert_eq!(profile.profile.meta.upgrade_level(UpgradeId::BaseDamage), 1);
-
-        let dumped = all_ui_text(app.world_mut());
-        assert!(
-            dumped.contains("90"),
-            "expected refreshed gold value in UI, got: {dumped}"
-        );
-        assert!(
-            dumped.contains("BaseDamage L1"),
-            "expected refreshed upgrade label in UI, got: {dumped}"
-        );
-    }
-
-    #[test]
-    fn pressing_upgrade_button_sends_buy_upgrade_event() {
-        let mut app = App::new();
-        app.add_plugins(MinimalPlugins);
-        app.add_plugins(StatesPlugin);
-        app.add_plugins(IdleDungeonsPlugin);
-        app.add_plugins(UiPlugin);
-        app.world_mut()
-            .resource_mut::<NextState<GameState>>()
-            .set(GameState::Upgrades);
-        app.update();
-        app.update();
-
-        press_right_panel_tab(&mut app, RightPanelTab::Upgrades);
-
-        let button = app
-            .world_mut()
-            .query_filtered::<(Entity, &BuyUpgradeButton), ()>()
-            .iter(app.world())
-            .find_map(|(entity, button)| {
-                (button.upgrade == UpgradeId::BaseDamage).then_some(entity)
-            })
-            .unwrap();
-        simulate_primary_click(&mut app, button);
-
-        assert_eq!(
-            app.world()
-                .resource::<Events<crate::app::BuyUpgrade>>()
-                .len(),
-            1
-        );
-    }
-
-    fn press_right_panel_tab(app: &mut App, tab: RightPanelTab) {
-        let entity = app
-            .world_mut()
-            .query::<(Entity, &RightTabButton)>()
-            .iter(app.world())
-            .find_map(|(e, b)| (b.0 == tab).then_some(e))
-            .expect("tab header button");
-        simulate_primary_click(app, entity);
+        assert_eq!(entity_count::<GearHubRoot>(app.world_mut()), 1);
     }
 
     fn entity_count<T: Component>(world: &mut World) -> usize {
@@ -1817,14 +2287,5 @@ mod tests {
     fn single_entity<T: Component>(world: &mut World) -> Entity {
         let mut query = world.query_filtered::<Entity, With<T>>();
         query.single(world)
-    }
-
-    fn all_ui_text(world: &mut World) -> String {
-        world
-            .query::<&Text>()
-            .iter(world)
-            .flat_map(|text| text.sections.iter().map(|s| s.value.as_str()))
-            .collect::<Vec<_>>()
-            .join(" | ")
     }
 }

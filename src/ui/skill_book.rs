@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 use bevy::ui::{FocusPolicy, RelativeCursorPosition};
 
+use crate::domain::party::PartyHeroKind;
 use crate::domain::skills::{
     format_skill_tags, skill_book_pick_order, skill_definition, SkillId, SkillKind,
 };
@@ -16,6 +17,7 @@ use crate::ui::theme::{caption_text, headline_text, section_title, UiTheme};
 pub fn spawn_skill_book_modal(
     parent: &mut ChildBuilder,
     target_slot: usize,
+    sheet: PartyHeroKind,
     ph: &UiPlaceholderImages,
 ) {
     parent
@@ -87,8 +89,12 @@ pub fn spawn_skill_book_modal(
                     ..default()
                 })
                 .with_children(|dialog| {
+                    let who = match sheet {
+                        PartyHeroKind::Lead => "Lead",
+                        PartyHeroKind::Partner => "Ally",
+                    };
                     dialog.spawn(headline_text(format!(
-                        "Skill book — slot {}",
+                        "Skill book — {who} — slot {}",
                         target_slot + 1
                     )));
                     dialog.spawn(caption_text(
@@ -141,6 +147,7 @@ pub fn spawn_skill_book_modal(
                                         inner,
                                         ph,
                                         target_slot,
+                                        sheet,
                                         None,
                                         "(Clear slot)",
                                         "Remove the skill from this slot.",
@@ -165,7 +172,7 @@ pub fn spawn_skill_book_modal(
                                             d.synergy_hint
                                         );
                                         spawn_pick_row(
-                                            inner, ph, target_slot, Some(id), &label, &tip,
+                                            inner, ph, target_slot, sheet, Some(id), &label, &tip,
                                         );
                                     }
                                 });
@@ -218,6 +225,7 @@ fn spawn_pick_row(
     inner: &mut ChildBuilder,
     ph: &UiPlaceholderImages,
     target_slot: usize,
+    sheet: PartyHeroKind,
     skill: Option<SkillId>,
     label: &str,
     tip: &str,
@@ -242,6 +250,7 @@ fn spawn_pick_row(
             SkillBookPickButton {
                 slot: target_slot,
                 skill,
+                kind: sheet,
             },
             p,
             UiTooltip::txt(tip.to_string()),

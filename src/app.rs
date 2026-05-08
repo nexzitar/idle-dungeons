@@ -1,7 +1,7 @@
 use crate::domain::hero::HeroProfile;
+use crate::domain::party::PartyHeroKind;
 use crate::domain::items::ItemInstance;
 use crate::domain::loot::salvage_value;
-use crate::domain::progression::UpgradeId;
 use crate::domain::run::{
     simulate_run_with_playback, RunConfig, RunSimulation, RunSummary, DEFAULT_RUN_MAX_DEPTH,
 };
@@ -14,21 +14,26 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, States)]
 pub enum GameState {
     #[default]
+    Title,
     Build,
     Running,
     Summary,
-    Upgrades,
 }
 
 #[derive(Debug, Clone, Copy, Event)]
 pub struct OpenSkillBook {
     pub slot: usize,
+    pub kind: PartyHeroKind,
 }
+
+#[derive(Event)]
+pub struct OpenGearHub;
 
 #[derive(Debug, Clone, Copy, Event)]
 pub struct AssignHeroSkill {
     pub slot: usize,
     pub skill: Option<crate::domain::skills::SkillId>,
+    pub kind: PartyHeroKind,
 }
 
 #[derive(Debug, Clone, Copy, Event)]
@@ -54,14 +59,6 @@ pub struct EquipInventoryItem {
 pub struct SalvageInventoryItem {
     pub item_id: u64,
 }
-
-#[derive(Debug, Clone, Copy, Event)]
-pub struct BuyUpgrade {
-    pub upgrade: UpgradeId,
-}
-
-#[derive(Debug, Clone, Copy, Event)]
-pub struct ReturnToBuild;
 
 #[derive(Debug, Clone, Event)]
 pub struct SkipRunPlayback;
@@ -118,9 +115,16 @@ impl FromWorld for ProfileState {
 impl ProfileState {
     pub fn effective_hero(&self) -> HeroProfile {
         let mut hero = self.profile.hero.clone();
-        hero.base_stats = hero.base_stats + self.profile.meta.stat_bonus();
         hero.unlock_skill_slots(self.profile.meta.unlocked_skill_slots);
         hero
+    }
+
+    /// Same bonus skill slots as [`Self::effective_hero`], for the ally sheet.
+    pub fn effective_party_partner(&self) -> Option<HeroProfile> {
+        let p = self.profile.active_party_partner()?;
+        let mut hero = p.clone();
+        hero.unlock_skill_slots(self.profile.meta.unlocked_skill_slots);
+        Some(hero)
     }
 }
 
@@ -140,11 +144,10 @@ impl Plugin for IdleDungeonsPlugin {
             .add_event::<AcceptRunRewards>()
             .add_event::<EquipInventoryItem>()
             .add_event::<SalvageInventoryItem>()
-            .add_event::<BuyUpgrade>()
-            .add_event::<ReturnToBuild>()
             .add_event::<SkipRunPlayback>()
             .add_event::<ResetProgress>()
             .add_event::<OpenSkillBook>()
+            .add_event::<OpenGearHub>()
             .add_event::<AssignHeroSkill>()
             .add_systems(
                 Update,
@@ -155,8 +158,6 @@ impl Plugin for IdleDungeonsPlugin {
                     tick_run_playback.run_if(in_state(GameState::Running)),
                     equip_inventory_item,
                     salvage_inventory_item,
-                    buy_upgrade,
-                    return_to_build,
                 ),
             )
             .add_systems(PostUpdate, assign_hero_skill_from_event);
@@ -171,14 +172,13 @@ fn start_run(
 ) {
     for event in events.read() {
         let hero = profile.effective_hero();
-        let gold_gain_mult =
-            1.0 + 0.1 * profile.profile.meta.upgrade_level(UpgradeId::GoldGain) as f32;
         let RunSimulation { summary, playback } = simulate_run_with_playback(
             &hero,
+            profile.effective_party_partner().as_ref(),
             RunConfig {
                 seed: event.seed,
                 max_depth: DEFAULT_RUN_MAX_DEPTH,
-                gold_gain_multiplier: gold_gain_mult,
+                gold_gain_multiplier: 1.0,
             },
         );
         commands.insert_resource(LatestRunSummary {
@@ -266,7 +266,7 @@ fn accept_run_rewards(
         apply_run_rewards(&mut profile.profile, &latest_summary.summary);
         latest_summary.rewards_accepted = true;
         save_current_profile(&save_path, &profile);
-        next_state.set(GameState::Upgrades);
+        next_state.set(GameState::Build);
     }
 }
 
@@ -299,31 +299,17 @@ fn salvage_inventory_item(
     }
 }
 
-fn buy_upgrade(
-    mut events: EventReader<BuyUpgrade>,
-    mut profile: ResMut<ProfileState>,
-    save_path: Res<ProfileSavePath>,
-) {
-    for event in events.read() {
-        if profile.profile.meta.buy_upgrade(event.upgrade).is_ok() {
-            save_current_profile(&save_path, &profile);
-        }
-    }
-}
-
-fn return_to_build(
-    mut events: EventReader<ReturnToBuild>,
-    mut next_state: ResMut<NextState<GameState>>,
-) {
-    for _ in events.read() {
-        next_state.set(GameState::Build);
-    }
-}
-
 fn apply_run_rewards(profile: &mut SaveProfile, summary: &RunSummary) {
     profile.meta.gold += summary.gold_earned;
     profile.meta.salvage += summary.salvage_earned;
     profile.meta.add_skill_slot_progress(summary.deepest_depth);
+    profile.meta.deepest_floor_reached = profile
+        .meta
+        .deepest_floor_reached
+        .max(summary.deepest_depth);
+    if profile.meta.party_slots_unlocked() >= 2 && profile.party_partner.is_none() {
+        profile.party_partner = Some(crate::domain::party::default_party_partner_hero());
+    }
     profile.inventory.extend(summary.loot.iter().cloned());
     profile.sync_skill_slot_unlocks();
 }
@@ -338,12 +324,20 @@ fn assign_hero_skill_from_event(
         if ev.slot >= profile.profile.meta.unlocked_skill_slots {
             continue;
         }
-        if profile
-            .profile
-            .hero
-            .assign_skill_to_slot(ev.slot, ev.skill)
-            .is_ok()
-        {
+        let ok = match ev.kind {
+            PartyHeroKind::Lead => profile
+                .profile
+                .hero
+                .assign_skill_to_slot(ev.slot, ev.skill)
+                .is_ok(),
+            PartyHeroKind::Partner => {
+                let Some(partner) = profile.profile.party_partner.as_mut() else {
+                    continue;
+                };
+                partner.assign_skill_to_slot(ev.slot, ev.skill).is_ok()
+            }
+        };
+        if ok {
             save_current_profile(&save_path, &profile);
         }
     }
@@ -366,7 +360,7 @@ pub fn run() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                title: "Idle Dungeons".to_string(),
+                title: "Delvers".to_string(),
                 ..default()
             }),
             ..default()
@@ -508,33 +502,6 @@ mod tests {
     }
 
     #[test]
-    fn buy_upgrade_spends_gold_and_saves() {
-        let dir = tempfile::tempdir().unwrap();
-        let save_path = dir.path().join("profile.json");
-        let mut app = App::new();
-        app.add_plugins(MinimalPlugins);
-        app.insert_resource(ProfileSavePath(save_path.clone()));
-        app.add_plugins(IdleDungeonsPlugin);
-        app.world_mut()
-            .resource_mut::<ProfileState>()
-            .profile
-            .meta
-            .gold = 100;
-
-        app.world_mut().send_event(BuyUpgrade {
-            upgrade: UpgradeId::BaseDamage,
-        });
-        app.update();
-
-        let profile = app.world().resource::<ProfileState>();
-        assert_eq!(profile.profile.meta.gold, 90);
-        assert_eq!(profile.profile.meta.upgrade_level(UpgradeId::BaseDamage), 1);
-
-        let saved = crate::save::load_profile(&save_path).unwrap();
-        assert_eq!(saved.meta.upgrade_level(UpgradeId::BaseDamage), 1);
-    }
-
-    #[test]
     fn assign_hero_skill_from_event_writes_save() {
         let dir = tempfile::tempdir().unwrap();
         let save_path = dir.path().join("profile.json");
@@ -547,6 +514,7 @@ mod tests {
         app.world_mut().send_event(AssignHeroSkill {
             slot: 0,
             skill: Some(crate::domain::skills::SkillId::Guard),
+            kind: PartyHeroKind::Lead,
         });
         app.update();
 

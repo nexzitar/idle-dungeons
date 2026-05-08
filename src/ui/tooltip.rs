@@ -92,25 +92,6 @@ pub fn hide_tooltip_layer_before_pointer_focus(
     }
 }
 
-pub fn upgrade_tooltip(id: crate::domain::progression::UpgradeId) -> &'static str {
-    use crate::domain::progression::UpgradeId;
-    match id {
-        UpgradeId::MaxHealth => {
-            "Increases your hero's max health for future runs. Each level adds +10 max HP."
-        }
-        UpgradeId::BaseDamage => {
-            "Increases attack damage for future runs. Each level adds +2 damage."
-        }
-        UpgradeId::Armor => "Reduces damage taken. Each level adds +1 armor.",
-        UpgradeId::HealingPower => {
-            "Improves heals and poison scaling from skills. Each level adds +1 healing power."
-        }
-        UpgradeId::GoldGain => {
-            "Increases gold earned from runs (applied when rewards are accepted)."
-        }
-    }
-}
-
 fn tooltip_interaction_ok(i: Interaction) -> bool {
     matches!(i, Interaction::Hovered | Interaction::Pressed)
 }

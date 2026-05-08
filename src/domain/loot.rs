@@ -119,7 +119,7 @@ fn roll_affixes(rng: &mut ChaCha8Rng, slot: GearSlot, rarity: ItemRarity) -> Vec
     out
 }
 
-fn affix_keyword(a: ItemAffix) -> &'static str {
+fn affix_prefix_word(a: ItemAffix) -> &'static str {
     match a {
         ItemAffix::Vampiric => "Sanguine",
         ItemAffix::Heavy => "Weighted",
@@ -134,6 +134,22 @@ fn affix_keyword(a: ItemAffix) -> &'static str {
     }
 }
 
+/// Short suffix after "of …" for a second affix (flavor, e.g. Spiked → Thorns).
+fn affix_of_suffix(a: ItemAffix) -> &'static str {
+    match a {
+        ItemAffix::Vampiric => "Blood",
+        ItemAffix::Heavy => "Weight",
+        ItemAffix::Cursed => "Hexes",
+        ItemAffix::Spiked => "Thorns",
+        ItemAffix::Relentless => "Pursuit",
+        ItemAffix::Shattering => "Shattering",
+        ItemAffix::Virulent => "Venom",
+        ItemAffix::Bastion => "Warding",
+        ItemAffix::Devourer => "Feasting",
+        ItemAffix::TitansFury => "Titans",
+    }
+}
+
 fn gear_kind(slot: GearSlot) -> &'static str {
     match slot {
         GearSlot::Weapon => "Blade",
@@ -144,12 +160,22 @@ fn gear_kind(slot: GearSlot) -> &'static str {
 
 fn loot_display_name(rarity: ItemRarity, slot: GearSlot, affixes: &[ItemAffix]) -> String {
     let kind = gear_kind(slot);
-    let tag = affixes
-        .first()
-        .copied()
-        .map(affix_keyword)
-        .unwrap_or("Plain");
-    format!("{rarity:?} {tag} {kind}")
+    match affixes.len() {
+        0 => format!("{rarity:?} Plain {kind}"),
+        1 => {
+            let a = affixes[0];
+            format!("{rarity:?} {} {kind}", affix_prefix_word(a))
+        }
+        _ => {
+            let a0 = affixes[0];
+            let a1 = affixes[1];
+            format!(
+                "{rarity:?} {} {kind} of {}",
+                affix_prefix_word(a0),
+                affix_of_suffix(a1)
+            )
+        }
+    }
 }
 
 pub fn roll_loot(depth: u32, seed: u64) -> ItemInstance {
