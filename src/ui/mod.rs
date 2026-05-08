@@ -35,7 +35,10 @@ use crate::ui::components::{
 };
 use crate::ui::mockup_layout::RightPanelTab;
 use crate::ui::placeholder_graphics::UiPlaceholderImages;
-use crate::ui::theme::{body_text, caption_text, format_item_stat_summary, rarity_color, UiTheme};
+use crate::ui::theme::{
+    body_text, caption_text, format_item_affix_lines, format_item_stat_summary, rarity_color,
+    UiTheme,
+};
 use crate::ui::widgets::spawn_atmosphere;
 use bevy::app::MainScheduleOrder;
 use bevy::asset::AssetPlugin;
@@ -771,6 +774,10 @@ pub(crate) fn spawn_item_card(
                     ));
                     txt.spawn(caption_text(format!("{:?} · {:?}", item.rarity, item.slot)));
                     txt.spawn(body_text(format_item_stat_summary(item)));
+                    let aff = format_item_affix_lines(item);
+                    if !aff.is_empty() {
+                        txt.spawn(caption_text(aff));
+                    }
                 });
             });
             card.spawn(NodeBundle {

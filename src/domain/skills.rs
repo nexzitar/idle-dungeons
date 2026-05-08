@@ -132,7 +132,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             trigger: SkillTrigger::OnHitTaken,
             tags: &[SkillTag::Defense, SkillTag::Reactive, SkillTag::Melee],
             description: "Reduces incoming damage. Strength scales with healing power.",
-            synergy_hint: "Stack armor and healing power; later threat systems reward dedicated tanks.",
+            synergy_hint: "Bastion gear adds flat block when this skill is equipped; armor and healing power still scale the kit.",
         },
         SkillId::HeavyStrike => SkillDefinition {
             id,
@@ -150,7 +150,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             trigger: SkillTrigger::OnAttack,
             tags: &[SkillTag::Attack, SkillTag::Melee, SkillTag::Poison],
             description: "Attacks stack poison; it ticks each moment for more damage at higher stacks (capped).",
-            synergy_hint: "Toxic Mastery and poison-scaling gear multiply DoT pressure.",
+            synergy_hint: "Toxic Mastery and Virulent gear deepen stacks faster for stronger poison ticks.",
         },
         SkillId::ThornSkin => SkillDefinition {
             id,

@@ -22,8 +22,8 @@ use crate::ui::components::{
 };
 use crate::ui::placeholder_graphics::UiPlaceholderImages;
 use crate::ui::theme::{
-    body_text, caption_text, format_item_stat_summary, headline_text, log_line_present,
-    playback_debuff_text_bundle, rarity_color, section_title, UiTheme,
+    body_text, caption_text, format_item_affix_lines, format_item_stat_summary, headline_text,
+    log_line_present, playback_debuff_text_bundle, rarity_color, section_title, UiTheme,
 };
 use crate::ui::widgets::spawn_scrollable_log;
 
@@ -880,12 +880,23 @@ pub fn mockup_gear_cards(
     ] {
         let item = profile.profile.hero.equipped_item(slot);
         let tip = if let Some(item) = item {
-            format!(
-                "{}\n{:?}\n{}",
-                item.name,
-                item.rarity,
-                format_item_stat_summary(item)
-            )
+            let aff = format_item_affix_lines(item);
+            if aff.is_empty() {
+                format!(
+                    "{}\n{:?}\n{}",
+                    item.name,
+                    item.rarity,
+                    format_item_stat_summary(item)
+                )
+            } else {
+                format!(
+                    "{}\n{:?}\n{}\n{}",
+                    item.name,
+                    item.rarity,
+                    format_item_stat_summary(item),
+                    aff
+                )
+            }
         } else {
             format!(
                 "No {label} equipped yet. Loot gear on runs and equip it from the Inventory tab."
@@ -965,6 +976,10 @@ pub fn mockup_gear_cards(
                             },
                         ));
                         txt.spawn(caption_text(format_item_stat_summary(item)));
+                        let aff = format_item_affix_lines(item);
+                        if !aff.is_empty() {
+                            txt.spawn(caption_text(aff));
+                        }
                     } else {
                         txt.spawn(body_text("Empty slot"));
                     }

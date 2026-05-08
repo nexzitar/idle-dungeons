@@ -10,6 +10,8 @@ fn rarity_rank(r: ItemRarity) -> u8 {
         ItemRarity::Common => 0,
         ItemRarity::Uncommon => 1,
         ItemRarity::Rare => 2,
+        ItemRarity::Epic => 3,
+        ItemRarity::Legendary => 4,
     }
 }
 

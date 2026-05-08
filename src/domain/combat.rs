@@ -111,6 +111,9 @@ pub fn simulate_combat(
     let affix_vamp = hero.has_affix(ItemAffix::Vampiric);
     let affix_spiked = hero.has_affix(ItemAffix::Spiked);
     let affix_cursed = hero.has_affix(ItemAffix::Cursed);
+    let affix_shattering = hero.has_affix(ItemAffix::Shattering);
+    let affix_virulent = hero.has_affix(ItemAffix::Virulent);
+    let affix_titans = hero.has_affix(ItemAffix::TitansFury);
 
     let mut barrier = if has_barrier {
         let mut b = (10 + stats.healing_power.saturating_mul(2)).clamp(4, max_h / 2);
@@ -125,7 +128,10 @@ pub fn simulate_combat(
     let poison_tick = (3 + stats.healing_power.max(0) / 2).clamp(1, 25);
 
     // Guard: flat reduction on each foe hit; scales with healing_power (baseline 3 when HP stat is 0).
-    let guard_flat = (3 + stats.healing_power.max(0) / 2).clamp(3, 25);
+    let mut guard_flat = (3 + stats.healing_power.max(0) / 2).clamp(3, 25);
+    if has_guard && hero.has_affix(ItemAffix::Bastion) {
+        guard_flat += 2;
+    }
 
     let mut hero_as = stats.attack_speed.max(0.12);
     // Heavy Strike / Cleave: slower pacing; penalty after gear is summed into attack_speed.
@@ -191,12 +197,20 @@ pub fn simulate_combat(
                 break;
             }
 
-            let mut hero_damage = (stats.damage - enemy.armor).max(1);
+            let effective_armor = if affix_shattering {
+                (enemy.armor - 4).max(0)
+            } else {
+                enemy.armor
+            };
+            let mut hero_damage = (stats.damage - effective_armor).max(1);
             if has_heavy {
                 hero_damage += hero_damage / 2;
             }
             if has_heavy && affix_heavy {
                 hero_damage += hero_damage / 5;
+            }
+            if affix_titans && hero_health * 2 <= max_h {
+                hero_damage = ((hero_damage as i64 * 5 / 4).max(1)) as i32;
             }
 
             enemy_health -= hero_damage;
@@ -217,11 +231,13 @@ pub fn simulate_combat(
             }
 
             if has_poison {
-                poison_stacks = (poison_stacks + 2).min(40);
+                let inc = if affix_virulent { 3 } else { 2 };
+                poison_stacks = (poison_stacks + inc).min(40);
             }
 
             if enemy_health <= 0 {
                 events.push(CombatEvent::EnemyDefeated);
+                maybe_devourer_heal_on_kill(hero, &mut hero_health, max_h, &mut events);
                 hero_win!();
             }
         }
@@ -252,6 +268,7 @@ pub fn simulate_combat(
                 events.push(CombatEvent::ThornsReflect { damage: reflect });
                 if enemy_health <= 0 {
                     events.push(CombatEvent::EnemyDefeated);
+                    maybe_devourer_heal_on_kill(hero, &mut hero_health, max_h, &mut events);
                     hero_win!();
                 }
             }
@@ -281,6 +298,7 @@ pub fn simulate_combat(
             enemy_health -= d;
             if enemy_health <= 0 {
                 events.push(CombatEvent::EnemyDefeated);
+                maybe_devourer_heal_on_kill(hero, &mut hero_health, max_h, &mut events);
                 hero_win!();
             }
         }
@@ -299,6 +317,23 @@ pub fn simulate_combat(
         hero_health,
         enemy_health,
         events,
+    }
+}
+
+/// Heal after the foe is marked defeated (quest / UI ordering: defeat line, then sustain).
+fn maybe_devourer_heal_on_kill(
+    hero: &HeroProfile,
+    hero_health: &mut i32,
+    max_h: i32,
+    events: &mut Vec<CombatEvent>,
+) {
+    if !hero.has_affix(ItemAffix::Devourer) {
+        return;
+    }
+    let h = (max_h / 12).max(2).min(14);
+    if h > 0 && *hero_health < max_h {
+        *hero_health = (*hero_health + h).min(max_h);
+        events.push(CombatEvent::HeroHealed { amount: h });
     }
 }
 
@@ -1103,6 +1138,215 @@ mod tests {
             hp_pure > hp_cursed,
             "cursed gear should shrink the barrier bundle"
         );
+    }
+
+    #[test]
+    fn shattering_affix_pierces_enemy_armor() {
+        let mut plain = HeroProfile::new(Stats {
+            max_health: 100,
+            damage: 16,
+            armor: 0,
+            attack_speed: 1.0,
+            healing_power: 0,
+        });
+        plain.unlock_skill_slots(0);
+
+        let mut pierce = HeroProfile::new(Stats {
+            max_health: 100,
+            damage: 14,
+            armor: 0,
+            attack_speed: 1.0,
+            healing_power: 0,
+        });
+        pierce.unlock_skill_slots(0);
+        let mut mace = ItemInstance::basic(9, "Ram", GearSlot::Weapon);
+        mace.affixes.push(ItemAffix::Shattering);
+        pierce.equip_item(mace).unwrap();
+
+        assert_eq!(plain.derived_stats().damage, pierce.derived_stats().damage);
+
+        let enemy = Enemy {
+            name: "Plate".into(),
+            max_health: 999,
+            damage: 0,
+            armor: 8,
+            attack_speed: 0.01,
+        };
+
+        let d_plain = first_hero_damage(&simulate_combat(&plain, &enemy, 2, 100));
+        let d_pierce = first_hero_damage(&simulate_combat(&pierce, &enemy, 2, 100));
+        assert_eq!(d_plain, 8);
+        assert_eq!(d_pierce, 12);
+    }
+
+    #[test]
+    fn virulent_affix_strengthens_poison_opening_tick() {
+        let mut base = HeroProfile::default();
+        base.unlock_skill_slots(1);
+        base.equip_skill(0, SkillId::PoisonEdge).unwrap();
+
+        let mut v = HeroProfile::default();
+        v.unlock_skill_slots(1);
+        v.equip_skill(0, SkillId::PoisonEdge).unwrap();
+        let mut orb = ItemInstance::basic(10, "Ichor", GearSlot::Trinket);
+        orb.affixes.push(ItemAffix::Virulent);
+        v.equip_item(orb).unwrap();
+
+        let enemy = Enemy {
+            name: "Sponge".into(),
+            max_health: 999,
+            damage: 0,
+            armor: 0,
+            attack_speed: 0.05,
+        };
+
+        let r_base = simulate_combat(&base, &enemy, 4, 100);
+        let r_v = simulate_combat(&v, &enemy, 4, 100);
+
+        let tick_base = r_base
+            .events
+            .iter()
+            .find_map(|e| {
+                if let CombatEvent::PoisonTick { damage, .. } = e {
+                    Some(*damage)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        let tick_v = r_v
+            .events
+            .iter()
+            .find_map(|e| {
+                if let CombatEvent::PoisonTick { damage, .. } = e {
+                    Some(*damage)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        assert!(tick_v > tick_base);
+    }
+
+    #[test]
+    fn bastion_affix_boosts_guard_with_skill() {
+        let mut plain = HeroProfile::default();
+        plain.unlock_skill_slots(1);
+        plain.equip_skill(0, SkillId::Guard).unwrap();
+
+        let mut wall = HeroProfile::default();
+        wall.unlock_skill_slots(1);
+        wall.equip_skill(0, SkillId::Guard).unwrap();
+        let mut shield = ItemInstance::basic(11, "Bulwark", GearSlot::Armor);
+        shield.affixes.push(ItemAffix::Bastion);
+        wall.equip_item(shield).unwrap();
+
+        let enemy = Enemy {
+            name: "Bruiser".into(),
+            max_health: 999,
+            damage: 20,
+            armor: 0,
+            attack_speed: 1.0,
+        };
+
+        let loss_plain = first_enemy_hit_damage(&simulate_combat(&plain, &enemy, 1, 100));
+        let loss_wall = first_enemy_hit_damage(&simulate_combat(&wall, &enemy, 1, 100));
+        assert!(loss_wall < loss_plain);
+    }
+
+    #[test]
+    fn titans_fury_boosts_weapon_damage_when_wounded() {
+        let mut plain = HeroProfile::new(Stats {
+            max_health: 100,
+            damage: 24,
+            armor: 0,
+            attack_speed: 2.0,
+            healing_power: 0,
+        });
+        plain.unlock_skill_slots(0);
+
+        let mut fury = HeroProfile::new(Stats {
+            max_health: 100,
+            damage: 21,
+            armor: 0,
+            attack_speed: 2.0,
+            healing_power: 0,
+        });
+        fury.unlock_skill_slots(0);
+        let mut axe = ItemInstance::basic(55, "Titan maul", GearSlot::Weapon);
+        axe.affixes.push(ItemAffix::TitansFury);
+        fury.equip_item(axe).unwrap();
+
+        assert_eq!(plain.derived_stats().damage, fury.derived_stats().damage);
+
+        let enemy = Enemy {
+            name: "Dummy".into(),
+            max_health: 999,
+            damage: 0,
+            armor: 0,
+            attack_speed: 0.01,
+        };
+
+        let d_plain = first_hero_damage(&simulate_combat(&plain, &enemy, 2, 60));
+        let d_fury = first_hero_damage(&simulate_combat(&fury, &enemy, 2, 50));
+        assert_eq!(d_plain, 24);
+        assert_eq!(d_fury, 30);
+    }
+
+    #[test]
+    fn devourer_affix_heals_after_enemy_defeat() {
+        let mut hero = HeroProfile::new(Stats {
+            max_health: 120,
+            damage: 80,
+            armor: 0,
+            attack_speed: 1.0,
+            healing_power: 0,
+        });
+        hero.unlock_skill_slots(0);
+        let mut glaive = ItemInstance::basic(56, "Maw", GearSlot::Weapon);
+        glaive.affixes.push(ItemAffix::Devourer);
+        hero.equip_item(glaive).unwrap();
+
+        let enemy = Enemy {
+            name: "Wisp".into(),
+            max_health: 40,
+            damage: 0,
+            armor: 0,
+            attack_speed: 0.01,
+        };
+
+        let r = simulate_combat(&hero, &enemy, 5, 100);
+        assert_eq!(r.outcome, CombatOutcome::HeroWon);
+
+        let mut saw_defeat = false;
+        let mut heal_after_defeat = false;
+        for e in &r.events {
+            if matches!(e, CombatEvent::EnemyDefeated) {
+                saw_defeat = true;
+                continue;
+            }
+            if saw_defeat {
+                if let CombatEvent::HeroHealed { amount } = e {
+                    assert!(*amount > 0);
+                    heal_after_defeat = true;
+                    break;
+                }
+            }
+        }
+        assert!(heal_after_defeat, "expected Devourer heal after kill");
+    }
+
+    fn first_enemy_hit_damage(r: &CombatResult) -> i32 {
+        r.events
+            .iter()
+            .find_map(|e| {
+                if let CombatEvent::EnemyAttacked { damage } = e {
+                    Some(*damage)
+                } else {
+                    None
+                }
+            })
+            .unwrap()
     }
 
     fn dummy_enemy() -> Enemy {
