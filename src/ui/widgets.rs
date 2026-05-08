@@ -2,18 +2,18 @@
 
 use bevy::prelude::*;
 use bevy::ui::{FocusPolicy, RelativeCursorPosition};
+use bevy::text::{TextColor, TextFont};
 
 use crate::ui::components::{
     SettingsButton, TopBarField, UiButtonPalette, UiScrollContent, UiScrollRegion, UiScrollState,
 };
 use crate::ui::theme::UiTheme;
 
-/// Full-viewport background stack: subtle stone bands + soft torch tint.
-/// All layers use [`FocusPolicy::Pass`] so controls above receive pointer input.
-pub fn spawn_atmosphere(parent: &mut ChildBuilder) {
+pub fn spawn_atmosphere(parent: &mut ChildSpawnerCommands<'_>) {
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 position_type: PositionType::Absolute,
                 left: Val::Px(0.0),
                 right: Val::Px(0.0),
@@ -22,44 +22,44 @@ pub fn spawn_atmosphere(parent: &mut ChildBuilder) {
                 flex_direction: FlexDirection::Column,
                 ..default()
             },
-            focus_policy: FocusPolicy::Pass,
-            ..default()
-        })
+            FocusPolicy::Pass,
+        ))
         .with_children(|layer| {
-            layer.spawn(NodeBundle {
-                style: Style {
+            layer.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
                     width: Val::Percent(100.0),
                     height: Val::Percent(38.0),
                     ..default()
                 },
-                background_color: UiTheme::stone_highlight().into(),
-                focus_policy: FocusPolicy::Pass,
-                ..default()
-            });
-            layer.spawn(NodeBundle {
-                style: Style {
+                BackgroundColor(UiTheme::stone_highlight()),
+                FocusPolicy::Pass,
+            ));
+            layer.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
                     width: Val::Percent(100.0),
                     flex_grow: 1.0,
                     ..default()
                 },
-                background_color: UiTheme::stone_mid().into(),
-                focus_policy: FocusPolicy::Pass,
-                ..default()
-            });
-            layer.spawn(NodeBundle {
-                style: Style {
+                BackgroundColor(UiTheme::stone_mid()),
+                FocusPolicy::Pass,
+            ));
+            layer.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
                     width: Val::Percent(100.0),
                     height: Val::Percent(28.0),
                     ..default()
                 },
-                background_color: UiTheme::stone_deep().into(),
-                focus_policy: FocusPolicy::Pass,
-                ..default()
-            });
+                BackgroundColor(UiTheme::stone_deep()),
+                FocusPolicy::Pass,
+            ));
         });
 
-    parent.spawn(NodeBundle {
-        style: Style {
+    parent.spawn((
+        Node {
+            box_sizing: BoxSizing::BorderBox,
             position_type: PositionType::Absolute,
             left: Val::Px(0.0),
             right: Val::Px(0.0),
@@ -67,13 +67,13 @@ pub fn spawn_atmosphere(parent: &mut ChildBuilder) {
             bottom: Val::Px(0.0),
             ..default()
         },
-        background_color: UiTheme::torch_glow().into(),
-        focus_policy: FocusPolicy::Pass,
-        ..default()
-    });
+        BackgroundColor(UiTheme::torch_glow()),
+        FocusPolicy::Pass,
+    ));
 
-    parent.spawn(NodeBundle {
-        style: Style {
+    parent.spawn((
+        Node {
+            box_sizing: BoxSizing::BorderBox,
             position_type: PositionType::Absolute,
             left: Val::Px(0.0),
             right: Val::Px(0.0),
@@ -82,14 +82,13 @@ pub fn spawn_atmosphere(parent: &mut ChildBuilder) {
             border: UiRect::all(Val::Px(56.0)),
             ..default()
         },
-        background_color: Color::srgba(0.0, 0.0, 0.0, 0.55).into(),
-        focus_policy: FocusPolicy::Pass,
-        ..default()
-    });
+        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.55)),
+        FocusPolicy::Pass,
+    ));
 }
 
 pub fn spawn_top_resource_bar(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands<'_>,
     gold: u32,
     salvage: u32,
     skill_slots: usize,
@@ -97,8 +96,9 @@ pub fn spawn_top_resource_bar(
     speed_mult: f32,
 ) {
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 min_height: Val::Px(52.0),
                 flex_shrink: 0.0,
@@ -110,22 +110,19 @@ pub fn spawn_top_resource_bar(
                 border: UiRect::bottom(Val::Px(2.0)),
                 ..default()
             },
-            background_color: UiTheme::panel_bg_deep().into(),
-            border_color: BorderColor(UiTheme::panel_border()),
-            ..default()
-        })
+            BackgroundColor(UiTheme::panel_bg_deep()),
+            BorderColor::from(UiTheme::panel_border()),
+        ))
         .with_children(|row| {
-            row.spawn(TextBundle::from_section(
-                "Delvers",
-                TextStyle {
-                    font_size: UiTheme::FONT_TITLE,
-                    color: UiTheme::muted_gold(),
-                    ..default()
-                },
+            row.spawn((
+                Text::new("Delvers"),
+                TextFont::from_font_size(UiTheme::FONT_TITLE),
+                TextColor(UiTheme::muted_gold()),
             ));
 
-            row.spawn(NodeBundle {
-                style: Style {
+            row.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
                     flex_grow: 1.0,
                     flex_direction: FlexDirection::Row,
                     justify_content: JustifyContent::FlexEnd,
@@ -135,8 +132,7 @@ pub fn spawn_top_resource_bar(
                     row_gap: Val::Px(6.0),
                     ..default()
                 },
-                ..default()
-            })
+            ))
             .with_children(|metrics| {
                 metric_chip(metrics, TopBarField::Gold, format!("Gold: {gold}"));
                 metric_chip(metrics, TopBarField::Salvage, format!("Salvage: {salvage}"));
@@ -153,49 +149,38 @@ pub fn spawn_top_resource_bar(
                 );
             });
 
-            {
-                let p = UiButtonPalette::panel_outlined();
-                row.spawn((
-                    ButtonBundle {
-                        style: Style {
-                            width: Val::Px(96.0),
-                            height: Val::Px(34.0),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            border: UiRect::all(Val::Px(1.0)),
-                            ..default()
-                        },
-                        background_color: p.idle_bg.into(),
-                        border_color: BorderColor(p.idle_border),
-                        ..default()
-                    },
-                    SettingsButton,
-                    p,
-                ))
-                .with_children(|btn| {
-                    btn.spawn(TextBundle::from_section(
-                        "Settings",
-                        TextStyle {
-                            font_size: UiTheme::FONT_COMPACT,
-                            color: Color::WHITE,
-                            ..default()
-                        },
-                    ));
-                });
-            }
+            let p = UiButtonPalette::panel_outlined();
+            row.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    width: Val::Px(96.0),
+                    height: Val::Px(34.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                Button,
+                BackgroundColor(p.idle_bg),
+                BorderColor::from(p.idle_border),
+                SettingsButton,
+                p,
+            ))
+            .with_children(|btn| {
+                btn.spawn((
+                    Text::new("Settings"),
+                    TextFont::from_font_size(UiTheme::FONT_COMPACT),
+                    TextColor(Color::WHITE),
+                ));
+            });
         });
 }
 
-fn metric_chip(parent: &mut ChildBuilder, field: TopBarField, label: String) {
+fn metric_chip(parent: &mut ChildSpawnerCommands<'_>, field: TopBarField, label: String) {
     parent.spawn((
-        TextBundle::from_section(
-            label,
-            TextStyle {
-                font_size: UiTheme::FONT_COMPACT,
-                color: UiTheme::body(),
-                ..default()
-            },
-        ),
+        Text::new(label),
+        TextFont::from_font_size(UiTheme::FONT_COMPACT),
+        TextColor(UiTheme::body()),
         field,
     ));
 }
@@ -210,24 +195,21 @@ fn fmt_speed(mult: f32) -> String {
     }
 }
 
-/// Clipped column that scrolls with the mouse wheel (Bevy 0.14 has no overflow-scroll).
-fn spawn_panel_scroll_viewport(parent: &mut ChildBuilder, content: impl FnOnce(&mut ChildBuilder)) {
+fn spawn_panel_scroll_viewport(parent: &mut ChildSpawnerCommands<'_>, content: impl FnOnce(&mut ChildSpawnerCommands<'_>)) {
     parent
         .spawn((
-            NodeBundle {
-                style: Style {
-                    width: Val::Percent(100.0),
-                    flex_grow: 1.0,
-                    flex_shrink: 1.0,
-                    min_height: Val::Px(0.0),
-                    position_type: PositionType::Relative,
-                    flex_direction: FlexDirection::Column,
-                    overflow: Overflow::clip_y(),
-                    ..default()
-                },
-                focus_policy: FocusPolicy::Pass,
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
+                flex_grow: 1.0,
+                flex_shrink: 1.0,
+                min_height: Val::Px(0.0),
+                position_type: PositionType::Relative,
+                flex_direction: FlexDirection::Column,
+                overflow: Overflow::clip_y(),
                 ..default()
             },
+            FocusPolicy::Pass,
             RelativeCursorPosition::default(),
             UiScrollState::default(),
             UiScrollRegion,
@@ -235,17 +217,15 @@ fn spawn_panel_scroll_viewport(parent: &mut ChildBuilder, content: impl FnOnce(&
         .with_children(|viewport| {
             viewport
                 .spawn((
-                    NodeBundle {
-                        style: Style {
-                            position_type: PositionType::Absolute,
-                            left: Val::Px(0.0),
-                            right: Val::Px(0.0),
-                            top: Val::Px(0.0),
-                            flex_direction: FlexDirection::Column,
-                            align_items: AlignItems::FlexStart,
-                            row_gap: Val::Px(10.0),
-                            ..default()
-                        },
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(0.0),
+                        right: Val::Px(0.0),
+                        top: Val::Px(0.0),
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::FlexStart,
+                        row_gap: Val::Px(10.0),
                         ..default()
                     },
                     UiScrollContent,
@@ -255,13 +235,14 @@ fn spawn_panel_scroll_viewport(parent: &mut ChildBuilder, content: impl FnOnce(&
 }
 
 pub fn spawn_framed_panel(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands<'_>,
     flex: f32,
-    content: impl FnOnce(&mut ChildBuilder),
+    content: impl FnOnce(&mut ChildSpawnerCommands<'_>),
 ) {
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 flex_grow: flex,
                 flex_basis: Val::Px(0.0),
                 flex_shrink: 1.0,
@@ -275,20 +256,19 @@ pub fn spawn_framed_panel(
                 overflow: Overflow::clip_y(),
                 ..default()
             },
-            background_color: UiTheme::panel_bg().into(),
-            border_color: BorderColor(UiTheme::panel_border()),
-            ..default()
-        })
+            BackgroundColor(UiTheme::panel_bg()),
+            BorderColor::from(UiTheme::panel_border()),
+        ))
         .with_children(|panel| {
             spawn_panel_scroll_viewport(panel, content);
         });
 }
 
-/// Bottom band: natural height only; does not steal vertical space from the main split.
-pub fn spawn_bottom_strip(parent: &mut ChildBuilder, content: impl FnOnce(&mut ChildBuilder)) {
+pub fn spawn_bottom_strip(parent: &mut ChildSpawnerCommands<'_>, content: impl FnOnce(&mut ChildSpawnerCommands<'_>)) {
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 flex_grow: 0.0,
                 flex_shrink: 0.0,
@@ -302,10 +282,9 @@ pub fn spawn_bottom_strip(parent: &mut ChildBuilder, content: impl FnOnce(&mut C
                 overflow: Overflow::clip_y(),
                 ..default()
             },
-            background_color: UiTheme::panel_bg().into(),
-            border_color: BorderColor(UiTheme::panel_border()),
-            ..default()
-        })
+            BackgroundColor(UiTheme::panel_bg()),
+            BorderColor::from(UiTheme::panel_border()),
+        ))
         .with_children(|strip| {
             spawn_panel_scroll_viewport(strip, content);
         });
@@ -313,29 +292,27 @@ pub fn spawn_bottom_strip(parent: &mut ChildBuilder, content: impl FnOnce(&mut C
 
 /// Log list with fixed viewport height and wheel scrolling.
 pub fn spawn_scrollable_log(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands<'_>,
     max_height_px: f32,
-    lines: Vec<(String, TextStyle)>,
+    lines: Vec<(String, f32, Color)>,
 ) {
     parent
         .spawn((
-            NodeBundle {
-                style: Style {
-                    width: Val::Percent(100.0),
-                    height: Val::Px(max_height_px),
-                    flex_shrink: 0.0,
-                    padding: UiRect::all(Val::Px(UiTheme::PAD_TOOLTIP)),
-                    position_type: PositionType::Relative,
-                    flex_direction: FlexDirection::Column,
-                    overflow: Overflow::clip_y(),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                background_color: UiTheme::panel_bg_deep().into(),
-                border_color: BorderColor(UiTheme::panel_border_inner()),
-                focus_policy: FocusPolicy::Pass,
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
+                height: Val::Px(max_height_px),
+                flex_shrink: 0.0,
+                padding: UiRect::all(Val::Px(UiTheme::PAD_TOOLTIP)),
+                position_type: PositionType::Relative,
+                flex_direction: FlexDirection::Column,
+                overflow: Overflow::clip_y(),
+                border: UiRect::all(Val::Px(1.0)),
                 ..default()
             },
+            BackgroundColor(UiTheme::panel_bg_deep()),
+            BorderColor::from(UiTheme::panel_border_inner()),
+            FocusPolicy::Pass,
             RelativeCursorPosition::default(),
             UiScrollState::default(),
             UiScrollRegion,
@@ -343,24 +320,26 @@ pub fn spawn_scrollable_log(
         .with_children(|viewport| {
             viewport
                 .spawn((
-                    NodeBundle {
-                        style: Style {
-                            position_type: PositionType::Absolute,
-                            left: Val::Px(0.0),
-                            right: Val::Px(0.0),
-                            top: Val::Px(0.0),
-                            flex_direction: FlexDirection::Column,
-                            align_items: AlignItems::FlexStart,
-                            row_gap: Val::Px(4.0),
-                            ..default()
-                        },
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(0.0),
+                        right: Val::Px(0.0),
+                        top: Val::Px(0.0),
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::FlexStart,
+                        row_gap: Val::Px(4.0),
                         ..default()
                     },
                     UiScrollContent,
                 ))
                 .with_children(|inner| {
-                    for (text, style) in lines {
-                        inner.spawn(TextBundle::from_section(text, style));
+                    for (text, font_size, color) in lines {
+                        inner.spawn((
+                            Text::new(text),
+                            TextFont::from_font_size(font_size),
+                            TextColor(color),
+                        ));
                     }
                 });
         });

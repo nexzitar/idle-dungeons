@@ -1,37 +1,15 @@
 //! Muted dark-fantasy palette and typography for readable, grounded UI.
 //!
+//! Typography and spacing constants are unchanged from Bevy 0.14 layout; spawning uses Bevy 0.18 UI
+//! components (`Node`, `Text`, `TextFont`, `TextColor`).
+//!
 //! ## Typography scale (px)
 //!
-//! | Constant | px | Typical use |
-//! |----------|-----|-------------|
-//! | `FONT_DISPLAY_HERO` | 38 | Running playback clock |
-//! | `FONT_DISPLAY_SUB` | 34 | Alternate large numerics |
-//! | `FONT_HEADLINE` | 26 | Screen titles |
-//! | `FONT_TITLE` | 22 | Brand / top bar title |
-//! | `FONT_STRONG` | 20 | High-emphasis labels (log boss, purchase) |
-//! | `FONT_SECTION` | 17 | Section headers |
-//! | `FONT_SKILL_ACTIVE` | 18 | Unlocked skill slot label |
-//! | `FONT_SKILL_DIM` | 16 | Locked skill slot / secondary buttons |
-//! | `FONT_BODY` | 15 | Default reading text |
-//! | `FONT_SUBLINE` | 16 | Log lines, treasure/shrine emphasis |
-//! | `FONT_COMPACT` | 14 | Dense lists, chips |
-//! | `FONT_CAPTION` | 13 | Captions, tooltips |
-//! | `FONT_LABEL` | 12 | Table/sort hints |
-//! | `FONT_MICRO` | 11 | Fine print |
-//!
-//! ## Spacing (px, suggested)
-//!
-//! | Constant | Value | Typical use |
-//! |----------|-------|-------------|
-//! | `PAD_ROOT` | 20 | Outer mockup inset, top bar horizontal |
-//! | `PAD_BAR_Y` | 10 | Top bar vertical padding |
-//! | `PANEL_INSET_LG` | 14–16 | Primary panel body padding |
-//! | `PANEL_INSET` | 12 | Cards, scroll regions |
-//! | `PANEL_INSET_SM` | 8 | Tight stacks, chips |
-//! | `PAD_TOOLTIP` | 10 | Tooltip panel padding |
+//! See module docs in git history for the reference table (`FONT_*`, `PAD_*`).
 //!
 
 use bevy::prelude::*;
+use bevy::text::{TextColor, TextFont};
 
 pub struct UiTheme;
 
@@ -61,7 +39,6 @@ impl UiTheme {
         Color::srgb(0.04, 0.035, 0.042)
     }
 
-    /// Base stone wash for full-screen backdrops.
     pub fn stone_deep() -> Color {
         Color::srgb(0.1, 0.09, 0.1)
     }
@@ -74,7 +51,6 @@ impl UiTheme {
         Color::srgb(0.16, 0.14, 0.13)
     }
 
-    /// Ember / torch tint (very subtle overlays).
     pub fn torch_glow() -> Color {
         Color::srgba(0.35, 0.18, 0.08, 0.12)
     }
@@ -99,7 +75,6 @@ impl UiTheme {
         Color::srgb(0.78, 0.64, 0.38)
     }
 
-    /// Ornamental bronze / gold for mockup-style panel frames.
     pub fn ornate_gold() -> Color {
         Color::srgb(0.62, 0.48, 0.22)
     }
@@ -113,7 +88,6 @@ impl UiTheme {
     }
 
     pub fn body_dim() -> Color {
-        // Slightly lifted vs older stone grays so captions stay legible on `panel_bg_deep`.
         Color::srgb(0.56, 0.54, 0.51)
     }
 
@@ -133,7 +107,6 @@ impl UiTheme {
         Color::srgb(0.45, 0.62, 0.48)
     }
 
-    /// Toxic / debuff accent (poison chips, poison lines in the log). Distinct from [`Self::healing`].
     pub fn status_poison() -> Color {
         Color::srgb(0.52, 0.64, 0.38)
     }
@@ -158,7 +131,6 @@ pub fn rarity_color(rarity: crate::domain::items::ItemRarity) -> Color {
     }
 }
 
-/// Visual + typographic emphasis for run log / summary lines.
 pub fn log_line_present(line: &str) -> (Color, f32) {
     let lower = line.to_lowercase();
     if line.contains("Warden") || line.contains("Gate Warden") {
@@ -185,127 +157,77 @@ pub fn log_line_present(line: &str) -> (Color, f32) {
     (UiTheme::body_dim(), UiTheme::FONT_COMPACT)
 }
 
-/// Separator between status chips on playback hero/enemy debuff lines (must match domain/UI join).
 pub const PLAYBACK_DEBUFF_SLOT_SEP: &str = "  ·  ";
 
-/// Rich caption for a single debuff line: poison chips use [`UiTheme::status_poison`], empty `—` slots stay dim.
-pub fn playback_debuff_status_text(line: &str) -> Text {
-    let style_dim = TextStyle {
-        font_size: UiTheme::FONT_CAPTION,
-        color: UiTheme::body_dim(),
-        ..default()
-    };
-    let style_poison = TextStyle {
-        font_size: UiTheme::FONT_CAPTION,
-        color: UiTheme::status_poison(),
-        ..default()
-    };
-    let parts: Vec<&str> = line.split(PLAYBACK_DEBUFF_SLOT_SEP).collect();
-    let mut sections = Vec::with_capacity(parts.len().max(1));
-    for (i, part) in parts.iter().enumerate() {
-        let prefix: &str = if i == 0 { "" } else { PLAYBACK_DEBUFF_SLOT_SEP };
-        let style = if part.trim_start().starts_with("Poison") {
-            style_poison.clone()
-        } else {
-            style_dim.clone()
-        };
-        sections.push(TextSection::new(format!("{prefix}{part}"), style));
-    }
-    if sections.is_empty() {
-        Text::from_section("", style_dim)
+fn debuff_plain_line(line: &str) -> String {
+    line.split(PLAYBACK_DEBUFF_SLOT_SEP)
+        .map(|part| {
+            let part = part.trim_start();
+            if part.starts_with("Poison") {
+                format!("[Poison] {}", part.strip_prefix("Poison").unwrap_or("").trim())
+            } else {
+                part.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(PLAYBACK_DEBUFF_SLOT_SEP)
+}
+
+pub fn playback_debuff_line_string(line: &str) -> String {
+    debuff_plain_line(line)
+}
+
+/// Combat log plain body (colors from multi-span text dropped; use [`log_line_present`] offline if needed).
+pub fn playback_log_plain(lines: &[String]) -> String {
+    lines.join("\n")
+}
+
+pub fn headline_text(text: impl Into<String>) -> impl Bundle {
+    (
+        Text::new(text.into()),
+        TextFont::from_font_size(UiTheme::FONT_HEADLINE),
+        TextColor(UiTheme::muted_gold()),
+    )
+}
+
+pub fn section_title(text: impl Into<String>) -> impl Bundle {
+    (
+        Text::new(text.into()),
+        TextFont::from_font_size(UiTheme::FONT_SECTION),
+        TextColor(UiTheme::muted_cream()),
+    )
+}
+
+pub fn body_text(text: impl Into<String>) -> impl Bundle {
+    (
+        Text::new(text.into()),
+        TextFont::from_font_size(UiTheme::FONT_BODY),
+        TextColor(UiTheme::body()),
+    )
+}
+
+pub fn caption_text(text: impl Into<String>) -> impl Bundle {
+    (
+        Text::new(text.into()),
+        TextFont::from_font_size(UiTheme::FONT_CAPTION),
+        TextColor(UiTheme::body_dim()),
+    )
+}
+
+pub fn playback_debuff_line_bundle(line: &str) -> impl Bundle {
+    let s = debuff_plain_line(line);
+    let color = if line.contains("Poison") {
+        UiTheme::status_poison()
     } else {
-        Text::from_sections(sections)
-    }
-}
-
-pub fn playback_debuff_text_bundle(line: &str) -> TextBundle {
-    TextBundle {
-        text: playback_debuff_status_text(line),
-        ..default()
-    }
-}
-
-/// Combat log body for playback: one styled section per line (newlines between), using [`log_line_present`].
-pub fn playback_log_rich_text(lines: &[String]) -> Text {
-    if lines.is_empty() {
-        return Text::from_section(
-            "",
-            TextStyle {
-                font_size: UiTheme::FONT_COMPACT,
-                color: UiTheme::body_dim(),
-                ..default()
-            },
-        );
-    }
-    let mut sections = Vec::with_capacity(lines.len());
-    for (i, line) in lines.iter().enumerate() {
-        let (color, size) = log_line_present(line);
-        let mut value = line.clone();
-        if i + 1 < lines.len() {
-            value.push('\n');
-        }
-        sections.push(TextSection::new(
-            value,
-            TextStyle {
-                font_size: size,
-                color,
-                ..default()
-            },
-        ));
-    }
-    Text::from_sections(sections)
-}
-
-/// Flatten multi-section [`Text`] for comparing against a joined log string.
-pub fn text_flatten(text: &Text) -> String {
-    text.sections.iter().map(|s| s.value.as_str()).collect()
-}
-
-pub fn headline_text(text: impl Into<String>) -> TextBundle {
-    TextBundle::from_section(
-        text,
-        TextStyle {
-            font_size: UiTheme::FONT_HEADLINE,
-            color: UiTheme::muted_gold(),
-            ..default()
-        },
+        UiTheme::body_dim()
+    };
+    (
+        Text::new(s),
+        TextFont::from_font_size(UiTheme::FONT_CAPTION),
+        TextColor(color),
     )
 }
 
-pub fn section_title(text: impl Into<String>) -> TextBundle {
-    TextBundle::from_section(
-        text,
-        TextStyle {
-            font_size: UiTheme::FONT_SECTION,
-            color: UiTheme::muted_cream(),
-            ..default()
-        },
-    )
-}
-
-pub fn body_text(text: impl Into<String>) -> TextBundle {
-    TextBundle::from_section(
-        text,
-        TextStyle {
-            font_size: UiTheme::FONT_BODY,
-            color: UiTheme::body(),
-            ..default()
-        },
-    )
-}
-
-pub fn caption_text(text: impl Into<String>) -> TextBundle {
-    TextBundle::from_section(
-        text,
-        TextStyle {
-            font_size: UiTheme::FONT_CAPTION,
-            color: UiTheme::body_dim(),
-            ..default()
-        },
-    )
-}
-
-/// Combined stat total from base item + [`crate::domain::items::ItemInstance::affix_stats`].
 pub fn format_item_stat_summary(item: &crate::domain::items::ItemInstance) -> String {
     let s = item.stats + item.affix_stats();
     let mut parts = Vec::new();
@@ -331,7 +253,6 @@ pub fn format_item_stat_summary(item: &crate::domain::items::ItemInstance) -> St
     }
 }
 
-/// One bullet per affix with gameplay wording (see [`ItemAffix::effect_description`]).
 pub fn format_item_affix_lines(item: &crate::domain::items::ItemInstance) -> String {
     if item.affixes.is_empty() {
         return String::new();
@@ -343,7 +264,6 @@ pub fn format_item_affix_lines(item: &crate::domain::items::ItemInstance) -> Str
         .join("\n")
 }
 
-/// Tint for floating combat text from a short caption.
 pub fn playback_float_text_color(caption: &str) -> Color {
     let lower = caption.to_ascii_lowercase();
     if lower.contains("recover") {

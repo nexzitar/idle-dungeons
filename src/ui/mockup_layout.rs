@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 use bevy::ui::{FocusPolicy, RelativeCursorPosition};
+use bevy::text::{Justify, TextColor, TextFont, TextLayout};
 
 use crate::domain::dungeon::RoomKind;
 use crate::domain::party::PartyHeroKind;
@@ -31,16 +32,17 @@ use crate::ui::components::{
 use crate::ui::placeholder_graphics::UiPlaceholderImages;
 use crate::ui::theme::{
     body_text, caption_text, format_item_affix_lines, format_item_stat_summary, headline_text,
-    log_line_present, playback_debuff_text_bundle, rarity_color, section_title, UiTheme,
+    log_line_present, rarity_color, section_title, UiTheme,
 };
 use crate::ui::widgets::spawn_scrollable_log;
 
-fn ornate_shell(content: impl FnOnce(&mut ChildBuilder)) -> impl FnOnce(&mut ChildBuilder) {
-    move |parent: &mut ChildBuilder| {
+fn ornate_shell(content: impl FnOnce(&mut ChildSpawnerCommands<'_>)) -> impl FnOnce(&mut ChildSpawnerCommands<'_>) {
+    move |parent: &mut ChildSpawnerCommands<'_>| {
         parent
-            .spawn(NodeBundle {
-                style: Style {
-                    width: Val::Percent(100.0),
+            .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                     height: Val::Percent(100.0),
                     min_height: Val::Px(0.0),
                     min_width: Val::Px(0.0),
@@ -49,17 +51,17 @@ fn ornate_shell(content: impl FnOnce(&mut ChildBuilder)) -> impl FnOnce(&mut Chi
                     border: UiRect::all(Val::Px(2.0)),
                     overflow: Overflow::clip_y(),
                     ..default()
-                },
-                background_color: UiTheme::panel_bg_deep().into(),
-                border_color: BorderColor(UiTheme::ornate_gold()),
-                ..default()
-            })
+            },
+            BackgroundColor(UiTheme::panel_bg_deep().into()),
+            BorderColor::from(UiTheme::ornate_gold())
+        ))
             .insert(FocusPolicy::Pass)
             .with_children(|ornate| {
                 ornate
-                    .spawn(NodeBundle {
-                        style: Style {
-                            width: Val::Percent(100.0),
+                    .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                             flex_grow: 1.0,
                             flex_shrink: 1.0,
                             min_height: Val::Px(0.0),
@@ -70,42 +72,39 @@ fn ornate_shell(content: impl FnOnce(&mut ChildBuilder)) -> impl FnOnce(&mut Chi
                             align_items: AlignItems::Stretch,
                             overflow: Overflow::clip_y(),
                             ..default()
-                        },
-                        background_color: UiTheme::panel_bg().into(),
-                        border_color: BorderColor(UiTheme::panel_border_inner()),
-                        ..default()
-                    })
+            },
+            BackgroundColor(UiTheme::panel_bg().into()),
+            BorderColor::from(UiTheme::panel_border_inner())
+        ))
                     .with_children(content);
             });
     }
 }
 
 /// Fills remaining column height; scrolls when content exceeds the panel.
-fn spawn_column_flex_scroll(parent: &mut ChildBuilder, content: impl FnOnce(&mut ChildBuilder)) {
+fn spawn_column_flex_scroll(parent: &mut ChildSpawnerCommands<'_>, content: impl FnOnce(&mut ChildSpawnerCommands<'_>)) {
     parent
         .spawn((
-            NodeBundle {
-                style: Style {
-                    width: Val::Percent(100.0),
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                     flex_grow: 1.0,
                     flex_shrink: 1.0,
                     min_height: Val::Px(0.0),
                     position_type: PositionType::Relative,
                     overflow: Overflow::clip_y(),
                     ..default()
-                },
-                focus_policy: FocusPolicy::Pass,
-                ..default()
             },
+            FocusPolicy::Pass,
             RelativeCursorPosition::default(),
             UiScrollState::default(),
             UiScrollRegion,
         ))
         .with_children(|vp| {
             vp.spawn((
-                NodeBundle {
-                    style: Style {
-                        position_type: PositionType::Absolute,
+                Node {
+                box_sizing: BoxSizing::BorderBox,
+                position_type: PositionType::Absolute,
                         left: Val::Px(0.0),
                         right: Val::Px(0.0),
                         top: Val::Px(0.0),
@@ -113,9 +112,7 @@ fn spawn_column_flex_scroll(parent: &mut ChildBuilder, content: impl FnOnce(&mut
                         row_gap: Val::Px(8.0),
                         align_items: AlignItems::Stretch,
                         ..default()
-                    },
-                    ..default()
-                },
+            },
                 UiScrollContent,
             ))
             .with_children(content);
@@ -124,24 +121,22 @@ fn spawn_column_flex_scroll(parent: &mut ChildBuilder, content: impl FnOnce(&mut
 
 /// Combat log during playback — pins scroll to the latest line when content grows.
 fn spawn_playback_combat_log_scroll(
-    parent: &mut ChildBuilder,
-    content: impl FnOnce(&mut ChildBuilder),
+    parent: &mut ChildSpawnerCommands<'_>,
+    content: impl FnOnce(&mut ChildSpawnerCommands<'_>),
 ) {
     parent
         .spawn((
-            NodeBundle {
-                style: Style {
-                    width: Val::Percent(100.0),
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                     flex_grow: 1.0,
                     flex_shrink: 1.0,
                     min_height: Val::Px(0.0),
                     position_type: PositionType::Relative,
                     overflow: Overflow::clip_y(),
                     ..default()
-                },
-                focus_policy: FocusPolicy::Pass,
-                ..default()
             },
+            FocusPolicy::Pass,
             RelativeCursorPosition::default(),
             UiScrollState::default(),
             UiScrollRegion,
@@ -149,9 +144,9 @@ fn spawn_playback_combat_log_scroll(
         ))
         .with_children(|vp| {
             vp.spawn((
-                NodeBundle {
-                    style: Style {
-                        position_type: PositionType::Absolute,
+                Node {
+                box_sizing: BoxSizing::BorderBox,
+                position_type: PositionType::Absolute,
                         left: Val::Px(0.0),
                         right: Val::Px(0.0),
                         top: Val::Px(0.0),
@@ -159,9 +154,7 @@ fn spawn_playback_combat_log_scroll(
                         row_gap: Val::Px(8.0),
                         align_items: AlignItems::Stretch,
                         ..default()
-                    },
-                    ..default()
-                },
+            },
                 UiScrollContent,
             ))
             .with_children(content);
@@ -169,20 +162,18 @@ fn spawn_playback_combat_log_scroll(
 }
 
 /// Full-screen centered settings dialog (speed + reset). Spawn as a child of [`UiRoot`].
-pub fn spawn_settings_modal(parent: &mut ChildBuilder, speed_mult: f32) {
+pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>, speed_mult: f32) {
     let speed_label = fmt_speed_label(speed_mult);
     parent
         .spawn((
-            NodeBundle {
-                style: Style {
-                    width: Val::Percent(100.0),
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                     height: Val::Percent(100.0),
                     position_type: PositionType::Absolute,
                     left: Val::Px(0.0),
                     top: Val::Px(0.0),
                     ..default()
-                },
-                ..default()
             },
             SettingsModalRoot,
         ))
@@ -197,27 +188,27 @@ pub fn spawn_settings_modal(parent: &mut ChildBuilder, speed_mult: f32) {
                 pressed_border: Color::NONE,
             };
             layer.spawn((
-                ButtonBundle {
-                    style: Style {
-                        position_type: PositionType::Absolute,
+                Node {
+                box_sizing: BoxSizing::BorderBox,
+                position_type: PositionType::Absolute,
                         width: Val::Percent(100.0),
                         height: Val::Percent(100.0),
                         left: Val::Px(0.0),
                         top: Val::Px(0.0),
                         ..default()
-                    },
-                    background_color: backdrop_pal.idle_bg.into(),
-                    border_color: BorderColor(backdrop_pal.idle_border),
-                    ..default()
-                },
+            },
+            Button,
+            BackgroundColor(backdrop_pal.idle_bg.into()),
+            BorderColor::from(backdrop_pal.idle_border),
                 SettingsModalBackdrop,
                 backdrop_pal,
                 UiTooltip::txt("Click the dimmed backdrop to close settings (same as Close)."),
             ));
             layer
-                .spawn(NodeBundle {
-                    style: Style {
-                        position_type: PositionType::Absolute,
+                .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                position_type: PositionType::Absolute,
                         left: Val::Percent(50.0),
                         top: Val::Percent(50.0),
                         margin: UiRect {
@@ -233,30 +224,28 @@ pub fn spawn_settings_modal(parent: &mut ChildBuilder, speed_mult: f32) {
                         row_gap: Val::Px(UiTheme::PANEL_INSET),
                         border: UiRect::all(Val::Px(2.0)),
                         ..default()
-                    },
-                    background_color: UiTheme::panel_bg_deep().into(),
-                    border_color: BorderColor(UiTheme::ornate_gold()),
-                    ..default()
-                })
+            },
+            BackgroundColor(UiTheme::panel_bg_deep().into()),
+            BorderColor::from(UiTheme::ornate_gold())
+        ))
                 .with_children(|dialog| {
                     dialog.spawn(headline_text("Settings"));
                     dialog.spawn(section_title("Run playback"));
                     let speed_btn_pal = UiButtonPalette::panel_outlined();
                     dialog
                         .spawn((
-                            ButtonBundle {
-                                style: Style {
-                                    width: Val::Percent(100.0),
+                            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                                     min_height: Val::Px(44.0),
                                     justify_content: JustifyContent::Center,
                                     align_items: AlignItems::Center,
                                     border: UiRect::all(Val::Px(1.0)),
                                     ..default()
-                                },
-                                background_color: speed_btn_pal.idle_bg.into(),
-                                border_color: BorderColor(speed_btn_pal.idle_border),
-                                ..default()
-                            },
+            },
+            Button,
+            BackgroundColor(speed_btn_pal.idle_bg.into()),
+            BorderColor::from(speed_btn_pal.idle_border),
                             SettingsModalSpeedButton,
                             speed_btn_pal,
                             UiTooltip::txt(
@@ -265,14 +254,11 @@ pub fn spawn_settings_modal(parent: &mut ChildBuilder, speed_mult: f32) {
                         ))
                         .with_children(|b| {
                             b.spawn((
-                                TextBundle::from_section(
-                                    format!("Speed: {speed_label} (click to toggle)"),
-                                    TextStyle {
-                                        font_size: UiTheme::FONT_BODY,
-                                        color: UiTheme::muted_cream(),
-                                        ..default()
-                                    },
-                                ),
+                                (
+                Text::new(format!("Speed: {speed_label} (click to toggle)")),
+                TextFont::from_font_size(UiTheme::FONT_BODY),
+                TextColor(UiTheme::muted_cream()),
+            ),
                                 SettingsModalSpeedLabel,
                             ));
                         });
@@ -280,19 +266,18 @@ pub fn spawn_settings_modal(parent: &mut ChildBuilder, speed_mult: f32) {
                     let reset_pal = UiButtonPalette::salvage();
                     dialog
                         .spawn((
-                            ButtonBundle {
-                                style: Style {
-                                    width: Val::Percent(100.0),
+                            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                                     min_height: Val::Px(44.0),
                                     justify_content: JustifyContent::Center,
                                     align_items: AlignItems::Center,
                                     border: UiRect::all(Val::Px(1.0)),
                                     ..default()
-                                },
-                                background_color: reset_pal.idle_bg.into(),
-                                border_color: BorderColor(reset_pal.idle_border),
-                                ..default()
-                            },
+            },
+            Button,
+            BackgroundColor(reset_pal.idle_bg.into()),
+            BorderColor::from(reset_pal.idle_border),
                             ResetProgressButton,
                             reset_pal,
                             UiTooltip::txt(
@@ -300,51 +285,44 @@ pub fn spawn_settings_modal(parent: &mut ChildBuilder, speed_mult: f32) {
                             ),
                         ))
                         .with_children(|b| {
-                            b.spawn(TextBundle::from_section(
-                                "Reset all progress",
-                                TextStyle {
-                                    font_size: UiTheme::FONT_BODY,
-                                    color: UiTheme::body(),
-                                    ..default()
-                                },
-                            ));
+                            b.spawn((
+                Text::new("Reset all progress"),
+                TextFont::from_font_size(UiTheme::FONT_BODY),
+                TextColor(UiTheme::body()),
+            ));
                         });
                     let close_pal = UiButtonPalette::panel_secondary();
                     dialog
                         .spawn((
-                            ButtonBundle {
-                                style: Style {
-                                    width: Val::Percent(100.0),
+                            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                                     min_height: Val::Px(40.0),
                                     justify_content: JustifyContent::Center,
                                     align_items: AlignItems::Center,
                                     border: UiRect::all(Val::Px(1.0)),
                                     ..default()
-                                },
-                                background_color: close_pal.idle_bg.into(),
-                                border_color: BorderColor(close_pal.idle_border),
-                                ..default()
-                            },
+            },
+            Button,
+            BackgroundColor(close_pal.idle_bg.into()),
+            BorderColor::from(close_pal.idle_border),
                             SettingsModalCloseButton,
                             close_pal,
                             UiTooltip::txt("Close the settings dialog without applying other changes."),
                         ))
                         .with_children(|b| {
-                            b.spawn(TextBundle::from_section(
-                                "Close",
-                                TextStyle {
-                                    font_size: UiTheme::FONT_BODY,
-                                    color: UiTheme::muted_cream(),
-                                    ..default()
-                                },
-                            ));
+                            b.spawn((
+                Text::new("Close"),
+                TextFont::from_font_size(UiTheme::FONT_BODY),
+                TextColor(UiTheme::muted_cream()),
+            ));
                         });
                 });
         });
 }
 
 pub fn spawn_mockup_header(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands<'_>,
     ph: &UiPlaceholderImages,
     gold: u32,
     salvage: u32,
@@ -354,8 +332,9 @@ pub fn spawn_mockup_header(
     speed_mult: f32,
 ) {
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 min_height: Val::Px(68.0),
                 flex_shrink: 0.0,
@@ -366,22 +345,19 @@ pub fn spawn_mockup_header(
                 border: UiRect::bottom(Val::Px(2.0)),
                 ..default()
             },
-            background_color: UiTheme::panel_bg_deep().into(),
-            border_color: BorderColor(UiTheme::ornate_gold()),
-            ..default()
-        })
+            BackgroundColor(UiTheme::panel_bg_deep().into()),
+            BorderColor::from(UiTheme::ornate_gold())
+        ))
         .with_children(|row| {
-            row.spawn(TextBundle::from_section(
-                "Delvers",
-                TextStyle {
-                    font_size: UiTheme::FONT_HEADLINE,
-                    color: UiTheme::muted_gold(),
-                    ..default()
-                },
+            row.spawn((
+                Text::new("Delvers"),
+                TextFont::from_font_size(UiTheme::FONT_HEADLINE),
+                TextColor(UiTheme::muted_gold()),
             ));
-            row.spawn(NodeBundle {
-                style: Style {
-                    flex_grow: 1.0,
+            row.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_grow: 1.0,
                     flex_direction: FlexDirection::Row,
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
@@ -389,9 +365,8 @@ pub fn spawn_mockup_header(
                     column_gap: Val::Px(24.0),
                     row_gap: Val::Px(4.0),
                     ..default()
-                },
-                ..default()
-            })
+            }
+        ))
             .with_children(|center| {
                 resource_chip(
                     center,
@@ -439,32 +414,31 @@ pub fn spawn_mockup_header(
                     "How fast delve playback runs. Also applies to some future real-time combat.",
                 );
             });
-            row.spawn(NodeBundle {
-                style: Style {
-                    flex_direction: FlexDirection::Row,
+            row.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
                     column_gap: Val::Px(8.0),
                     ..default()
-                },
-                ..default()
-            })
+            }
+        ))
             .with_children(|btn_row| {
                 let p = UiButtonPalette::panel_outlined();
                 btn_row
                     .spawn((
-                        ButtonBundle {
-                            style: Style {
-                                min_width: Val::Px(100.0),
+                        Node {
+                box_sizing: BoxSizing::BorderBox,
+                min_width: Val::Px(100.0),
                                 height: Val::Px(38.0),
                                 justify_content: JustifyContent::Center,
                                 align_items: AlignItems::Center,
                                 border: UiRect::all(Val::Px(1.0)),
                                 ..default()
-                            },
-                            background_color: p.idle_bg.into(),
-                            border_color: BorderColor(p.idle_border),
-                            ..default()
-                        },
+            },
+            Button,
+            BackgroundColor(p.idle_bg.into()),
+            BorderColor::from(p.idle_border),
                         SettingsButton,
                         p,
                         UiTooltip::txt(
@@ -472,37 +446,33 @@ pub fn spawn_mockup_header(
                         ),
                     ))
                     .with_children(|btn| {
-                        btn.spawn(TextBundle::from_section(
-                            "\u{2699} Settings",
-                            TextStyle {
-                                font_size: UiTheme::FONT_COMPACT,
-                                color: UiTheme::muted_cream(),
-                                ..default()
-                            },
-                        ));
+                        btn.spawn((
+                Text::new("\u{2699} Settings"),
+                TextFont::from_font_size(UiTheme::FONT_COMPACT),
+                TextColor(UiTheme::muted_cream()),
+            ));
                     });
             });
         });
 }
 
 /// Left-column settings control for the title screen (same behavior as header [`SettingsButton`]).
-pub fn title_settings_menu_button(parent: &mut ChildBuilder) {
+pub fn title_settings_menu_button(parent: &mut ChildSpawnerCommands<'_>) {
     let p = UiButtonPalette::panel_outlined();
     parent
         .spawn((
-            ButtonBundle {
-                style: Style {
-                    width: Val::Percent(100.0),
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                     min_height: Val::Px(40.0),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
                     border: UiRect::all(Val::Px(1.0)),
                     ..default()
-                },
-                background_color: p.idle_bg.into(),
-                border_color: BorderColor(p.idle_border),
-                ..default()
             },
+            Button,
+            BackgroundColor(p.idle_bg.into()),
+            BorderColor::from(p.idle_border),
             SettingsButton,
             p,
             UiTooltip::txt(
@@ -510,13 +480,10 @@ pub fn title_settings_menu_button(parent: &mut ChildBuilder) {
             ),
         ))
         .with_children(|b| {
-            b.spawn(TextBundle::from_section(
-                "Settings",
-                TextStyle {
-                    font_size: UiTheme::FONT_BODY,
-                    color: Color::WHITE,
-                    ..default()
-                },
+            b.spawn((
+                Text::new("Settings"),
+                TextFont::from_font_size(UiTheme::FONT_BODY),
+                TextColor(Color::WHITE),
             ));
         });
 }
@@ -532,7 +499,7 @@ pub(crate) fn fmt_speed_label(mult: f32) -> String {
 }
 
 fn resource_chip(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands<'_>,
     icon_tex: Option<Handle<Image>>,
     icon_fallback: &'static str,
     label: &'static str,
@@ -542,79 +509,70 @@ fn resource_chip(
 ) {
     parent
         .spawn((
-            NodeBundle {
-                style: Style {
-                    flex_direction: FlexDirection::Column,
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Column,
                     align_items: AlignItems::Center,
                     min_width: Val::Px(68.0),
                     ..default()
-                },
-                ..default()
             },
             Interaction::default(),
             UiTooltip::txt(tooltip),
         ))
         .with_children(|col| {
-            col.spawn(NodeBundle {
-                style: Style {
-                    flex_direction: FlexDirection::Row,
+            col.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::Center,
                     column_gap: Val::Px(5.0),
                     ..default()
-                },
-                ..default()
-            })
+            }
+        ))
             .with_children(|hdr| {
                 if let Some(h) = icon_tex {
-                    hdr.spawn(ImageBundle {
-                        style: Style {
+                    hdr.spawn((
+                        Node {
+                            box_sizing: BoxSizing::BorderBox,
                             width: Val::Px(18.0),
                             height: Val::Px(18.0),
                             flex_shrink: 0.0,
                             ..default()
                         },
-                        image: UiImage::new(h),
-                        background_color: Color::NONE.into(),
-                        ..default()
-                    });
-                } else {
-                    hdr.spawn(TextBundle::from_section(
-                        icon_fallback,
-                        TextStyle {
-                            font_size: UiTheme::FONT_MICRO,
-                            color: UiTheme::body_dim(),
+                        ImageNode {
+                            image: h,
+                            color: Color::WHITE,
                             ..default()
                         },
                     ));
+                } else {
+                    hdr.spawn((
+                Text::new(icon_fallback),
+                TextFont::from_font_size(UiTheme::FONT_MICRO),
+                TextColor(UiTheme::body_dim()),
+            ));
                 }
-                hdr.spawn(TextBundle::from_section(
-                    label,
-                    TextStyle {
-                        font_size: UiTheme::FONT_MICRO,
-                        color: UiTheme::body_dim(),
-                        ..default()
-                    },
-                ));
+                hdr.spawn((
+                Text::new(label),
+                TextFont::from_font_size(UiTheme::FONT_MICRO),
+                TextColor(UiTheme::body_dim()),
+            ));
             });
             col.spawn((
-                TextBundle::from_section(
-                    value,
-                    TextStyle {
-                        font_size: UiTheme::FONT_BODY,
-                        color: UiTheme::body(),
-                        ..default()
-                    },
-                ),
+                Text::new(value),
+                TextFont::from_font_size(UiTheme::FONT_BODY),
+                TextColor(UiTheme::body()),
                 field,
             ));
         });
 }
 
-pub fn spawn_three_column_row(parent: &mut ChildBuilder, f: impl FnOnce(&mut ChildBuilder)) {
+pub fn spawn_three_column_row(parent: &mut ChildSpawnerCommands<'_>, f: impl FnOnce(&mut ChildSpawnerCommands<'_>)) {
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 flex_grow: 1.0,
                 flex_basis: Val::Px(0.0),
@@ -623,20 +581,20 @@ pub fn spawn_three_column_row(parent: &mut ChildBuilder, f: impl FnOnce(&mut Chi
                 column_gap: Val::Px(10.0),
                 align_items: AlignItems::Stretch,
                 ..default()
-            },
-            ..default()
-        })
+            }
+        ))
         .with_children(f);
 }
 
 pub fn spawn_ornate_column(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands<'_>,
     flex: f32,
-    inner: impl FnOnce(&mut ChildBuilder),
+    inner: impl FnOnce(&mut ChildSpawnerCommands<'_>),
 ) {
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 flex_grow: flex,
                 flex_basis: Val::Px(0.0),
                 min_width: Val::Px(200.0),
@@ -644,28 +602,25 @@ pub fn spawn_ornate_column(
                 flex_direction: FlexDirection::Column,
                 overflow: Overflow::clip_y(),
                 ..default()
-            },
-            ..default()
-        })
+            }
+        ))
         .with_children(ornate_shell(inner));
 }
 
-fn panel_title_centered(text: impl Into<String>) -> TextBundle {
-    TextBundle::from_section(
-        text,
-        TextStyle {
-            font_size: UiTheme::FONT_SECTION,
-            color: UiTheme::muted_cream(),
-            ..default()
-        },
+fn panel_title_centered(text: impl Into<String>) -> impl Bundle {
+    (
+        Text::new(text.into()),
+        TextLayout::new_with_justify(Justify::Center),
+        TextFont::from_font_size(UiTheme::FONT_SECTION),
+        TextColor(UiTheme::muted_cream()),
     )
-    .with_text_justify(JustifyText::Center)
 }
 
-fn spawn_hero_name_row(parent: &mut ChildBuilder, slot: u8, allow_rename: bool) {
+fn spawn_hero_name_row(parent: &mut ChildSpawnerCommands<'_>, slot: u8, allow_rename: bool) {
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Center,
@@ -673,38 +628,31 @@ fn spawn_hero_name_row(parent: &mut ChildBuilder, slot: u8, allow_rename: bool) 
                 column_gap: Val::Px(8.0),
                 padding: UiRect::vertical(Val::Px(2.0)),
                 ..default()
-            },
-            ..default()
-        })
+            }
+        ))
         .with_children(|r| {
             r.spawn((
-                TextBundle::from_section(
-                    "",
-                    TextStyle {
-                        font_size: UiTheme::FONT_BODY,
-                        color: UiTheme::muted_cream(),
-                        ..default()
-                    },
-                ),
+                Text::new(""),
+                TextFont::from_font_size(UiTheme::FONT_BODY),
+                TextColor(UiTheme::muted_cream()),
                 HeroNameDisplayText { slot },
             ));
             if allow_rename {
                 let p = UiButtonPalette::panel_outlined();
                 r.spawn((
-                    ButtonBundle {
-                        style: Style {
-                            min_width: Val::Px(72.0),
+                    Node {
+                box_sizing: BoxSizing::BorderBox,
+                min_width: Val::Px(72.0),
                             min_height: Val::Px(30.0),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
                             padding: UiRect::horizontal(Val::Px(6.0)),
                             border: UiRect::all(Val::Px(1.0)),
                             ..default()
-                        },
-                        background_color: p.idle_bg.into(),
-                        border_color: BorderColor(p.idle_border),
-                        ..default()
-                    },
+            },
+            Button,
+            BackgroundColor(p.idle_bg.into()),
+            BorderColor::from(p.idle_border),
                     HeroNameEditButton { slot },
                     p,
                     UiTooltip::txt(
@@ -712,21 +660,18 @@ fn spawn_hero_name_row(parent: &mut ChildBuilder, slot: u8, allow_rename: bool) 
                     ),
                 ))
                 .with_children(|b| {
-                    b.spawn(TextBundle::from_section(
-                        "Rename",
-                        TextStyle {
-                            font_size: UiTheme::FONT_LABEL,
-                            color: UiTheme::body(),
-                            ..default()
-                        },
-                    ));
+                    b.spawn((
+                Text::new("Rename"),
+                TextFont::from_font_size(UiTheme::FONT_LABEL),
+                TextColor(UiTheme::body()),
+            ));
                 });
             }
         });
 }
 
 pub fn spawn_hero_column_mockup(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands<'_>,
     ph: &UiPlaceholderImages,
     lead: &crate::domain::hero::HeroProfile,
     partner: Option<&crate::domain::hero::HeroProfile>,
@@ -735,7 +680,7 @@ pub fn spawn_hero_column_mockup(
     skill_slots_interactive: bool,
     allow_rename: bool,
 ) {
-    let inner = move |p: &mut ChildBuilder| {
+    let inner = move |p: &mut ChildSpawnerCommands<'_>| {
         p.spawn(panel_title_centered("PARTY"));
         spawn_column_flex_scroll(p, move |body| {
             body.spawn(section_title("Lead"));
@@ -803,35 +748,29 @@ pub fn spawn_hero_column_mockup(
     inner(parent);
 }
 
-fn stat_line_row(parent: &mut ChildBuilder, label: &str, value: impl std::fmt::Display) {
+fn stat_line_row(parent: &mut ChildSpawnerCommands<'_>, label: &str, value: impl std::fmt::Display) {
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 flex_direction: FlexDirection::Row,
                 justify_content: JustifyContent::SpaceBetween,
                 align_items: AlignItems::Center,
                 padding: UiRect::vertical(Val::Px(2.0)),
                 ..default()
-            },
-            ..default()
-        })
+            }
+        ))
         .with_children(|r| {
-            r.spawn(TextBundle::from_section(
-                format!("\u{25C8} {label}"),
-                TextStyle {
-                    font_size: UiTheme::FONT_COMPACT,
-                    color: UiTheme::body_dim(),
-                    ..default()
-                },
+            r.spawn((
+                Text::new(format!("\u{25C8} {label}")),
+                TextFont::from_font_size(UiTheme::FONT_COMPACT),
+                TextColor(UiTheme::body_dim()),
             ));
-            r.spawn(TextBundle::from_section(
-                format!("{value}"),
-                TextStyle {
-                    font_size: UiTheme::FONT_BODY,
-                    color: UiTheme::muted_cream(),
-                    ..default()
-                },
+            r.spawn((
+                Text::new(format!("{value}")),
+                TextFont::from_font_size(UiTheme::FONT_BODY),
+                TextColor(UiTheme::muted_cream()),
             ));
         });
 }
@@ -858,22 +797,22 @@ fn skill_slot_placeholder_handle(
 }
 
 fn skill_slot_row(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands<'_>,
     ph: &UiPlaceholderImages,
     hero: &crate::domain::hero::HeroProfile,
     skill_slots_interactive: bool,
     sheet: PartyHeroKind,
 ) {
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                 column_gap: Val::Px(8.0),
                 flex_wrap: FlexWrap::Wrap,
                 ..default()
-            },
-            ..default()
-        })
+            }
+        ))
         .with_children(|row| {
             let cap = hero.equipped_skills.len().max(6);
             for i in 0..cap {
@@ -900,56 +839,55 @@ fn skill_slot_row(
                     let p = UiButtonPalette::skill_slot_chip();
                     let icon = skill_slot_placeholder_handle(hero, i, true, ph);
                     row.spawn((
-                        ButtonBundle {
-                            style: Style {
-                                min_width: Val::Px(118.0),
+                        Node {
+                box_sizing: BoxSizing::BorderBox,
+                min_width: Val::Px(118.0),
                                 min_height: Val::Px(48.0),
                                 justify_content: JustifyContent::Center,
                                 align_items: AlignItems::Center,
                                 padding: UiRect::horizontal(Val::Px(4.0)),
                                 border: UiRect::all(Val::Px(1.0)),
                                 ..default()
-                            },
-                            background_color: p.idle_bg.into(),
-                            border_color: BorderColor(p.idle_border),
-                            ..default()
-                        },
+            },
+            Button,
+            BackgroundColor(p.idle_bg.into()),
+            BorderColor::from(p.idle_border),
                         SkillSlotButton { slot: i, kind: sheet },
                         p,
                         UiTooltip::txt(tip),
                     ))
                     .with_children(|s| {
-                        s.spawn(NodeBundle {
-                            style: Style {
-                                width: Val::Percent(100.0),
+                        s.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                                 height: Val::Px(44.0),
                                 flex_direction: FlexDirection::Row,
                                 align_items: AlignItems::Center,
                                 column_gap: Val::Px(6.0),
                                 ..default()
-                            },
-                            ..default()
-                        })
+            }
+        ))
                         .with_children(|inner| {
-                            inner.spawn(ImageBundle {
-                                style: Style {
+                            inner.spawn((
+                                Node {
+                                    box_sizing: BoxSizing::BorderBox,
                                     width: Val::Px(22.0),
                                     height: Val::Px(22.0),
                                     flex_shrink: 0.0,
                                     ..default()
                                 },
-                                image: UiImage::new(icon),
-                                background_color: Color::NONE.into(),
-                                ..default()
-                            });
-                            inner.spawn(TextBundle::from_section(
-                                label,
-                                TextStyle {
-                                    font_size: UiTheme::FONT_LABEL,
-                                    color: UiTheme::body(),
+                                ImageNode {
+                                    image: icon,
+                                    color: Color::WHITE,
                                     ..default()
                                 },
                             ));
+                            inner.spawn((
+                Text::new(label),
+                TextFont::from_font_size(UiTheme::FONT_LABEL),
+                TextColor(UiTheme::body()),
+            ));
                         });
                     });
                     continue;
@@ -970,49 +908,50 @@ fn skill_slot_row(
                 };
                 let icon = skill_slot_placeholder_handle(hero, i, unlocked, ph);
                 row.spawn((
-                    NodeBundle {
-                        style: Style {
-                            width: Val::Px(52.0),
+                    Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Px(52.0),
                             height: Val::Px(52.0),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
                             border: UiRect::all(Val::Px(1.0)),
                             ..default()
-                        },
-                        background_color: if unlocked {
+            },
+            BackgroundColor(if unlocked {
                             UiTheme::panel_bg_deep().into()
                         } else {
                             Color::srgba(0.06, 0.06, 0.07, 1.0).into()
-                        },
-                        border_color: BorderColor(if unlocked {
+                        }),
+            BorderColor::from(if unlocked {
                             UiTheme::ornate_gold()
                         } else {
                             UiTheme::panel_border()
                         }),
-                        ..default()
-                    },
                     Interaction::default(),
                     UiTooltip::txt(idle_tip),
                 ))
                 .with_children(|s| {
-                    s.spawn(ImageBundle {
-                        style: Style {
+                    s.spawn((
+                        Node {
+                            box_sizing: BoxSizing::BorderBox,
                             width: Val::Px(36.0),
                             height: Val::Px(36.0),
                             flex_shrink: 0.0,
                             ..default()
                         },
-                        image: UiImage::new(icon),
-                        background_color: Color::NONE.into(),
-                        ..default()
-                    });
+                        ImageNode {
+                            image: icon,
+                            color: Color::WHITE,
+                            ..default()
+                        },
+                    ));
                 });
             }
         });
 }
 
 pub fn mockup_gear_cards(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands<'_>,
     profile: &crate::app::ProfileState,
     ph: &UiPlaceholderImages,
 ) {
@@ -1047,77 +986,75 @@ pub fn mockup_gear_cards(
         };
         parent
             .spawn((
-                NodeBundle {
-                    style: Style {
-                        width: Val::Percent(100.0),
+                Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                         flex_direction: FlexDirection::Row,
                         column_gap: Val::Px(10.0),
                         padding: UiRect::all(Val::Px(8.0)),
                         border: UiRect::all(Val::Px(1.0)),
                         margin: UiRect::bottom(Val::Px(8.0)),
                         ..default()
-                    },
-                    background_color: UiTheme::panel_bg_deep().into(),
-                    border_color: BorderColor(UiTheme::ornate_gold()),
-                    ..default()
-                },
+            },
+            BackgroundColor(UiTheme::panel_bg_deep().into()),
+            BorderColor::from(UiTheme::ornate_gold()),
                 Interaction::default(),
                 UiTooltip::txt(tip),
             ))
             .with_children(|card| {
-                card.spawn(NodeBundle {
-                    style: Style {
-                        width: Val::Px(56.0),
+                card.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Px(56.0),
                         height: Val::Px(56.0),
                         flex_shrink: 0.0,
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
                         border: UiRect::all(Val::Px(1.0)),
                         ..default()
-                    },
-                    background_color: Color::srgb(0.18, 0.16, 0.2).into(),
-                    border_color: BorderColor(UiTheme::panel_border_inner()),
-                    ..default()
-                })
+            },
+            BackgroundColor(Color::srgb(0.18, 0.16, 0.2).into()),
+            BorderColor::from(UiTheme::panel_border_inner())
+        ))
                 .with_children(|icon_cell| {
                     let tint = match slot {
                         GearSlot::Weapon => Color::srgb(1.0, 0.72, 0.45),
                         GearSlot::Armor => Color::srgb(0.72, 0.82, 0.95),
                         GearSlot::Trinket => Color::srgb(0.85, 0.68, 1.0),
                     };
-                    icon_cell.spawn(ImageBundle {
-                        style: Style {
+                    icon_cell.spawn((
+                        Node {
+                            box_sizing: BoxSizing::BorderBox,
                             width: Val::Px(44.0),
                             height: Val::Px(44.0),
                             flex_shrink: 0.0,
                             ..default()
                         },
-                        image: UiImage::new(ph.item_generic.clone()).with_color(tint),
-                        background_color: Color::NONE.into(),
-                        ..default()
-                    });
+                        ImageNode {
+                            image: ph.item_generic.clone(),
+                            color: tint,
+                            ..default()
+                        },
+                    ));
                 });
-                card.spawn(NodeBundle {
-                    style: Style {
-                        flex_direction: FlexDirection::Column,
+                card.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Column,
                         flex_grow: 1.0,
                         align_items: AlignItems::FlexStart,
                         row_gap: Val::Px(2.0),
                         ..default()
-                    },
-                    ..default()
-                })
+            }
+        ))
                 .with_children(|txt| {
                     txt.spawn(caption_text(label.to_string()));
                     if let Some(item) = item {
-                        txt.spawn(TextBundle::from_section(
-                            item.name.clone(),
-                            TextStyle {
-                                font_size: UiTheme::FONT_BODY,
-                                color: rarity_color(item.rarity),
-                                ..default()
-                            },
-                        ));
+                        txt.spawn((
+                Text::new(item.name.clone()),
+                TextFont::from_font_size(UiTheme::FONT_BODY),
+                TextColor(rarity_color(item.rarity)),
+            ));
                         txt.spawn(caption_text(format_item_stat_summary(item)));
                         let aff = format_item_affix_lines(item);
                         if !aff.is_empty() {
@@ -1141,225 +1078,204 @@ pub fn room_kind_label(kind: RoomKind) -> &'static str {
     }
 }
 
-fn playback_hero_bar(parent: &mut ChildBuilder, fill_pct: f32) {
+fn playback_hero_bar(parent: &mut ChildSpawnerCommands<'_>, fill_pct: f32) {
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 height: Val::Px(14.0),
                 border: UiRect::all(Val::Px(1.0)),
                 ..default()
             },
-            background_color: UiTheme::void_black().into(),
-            border_color: BorderColor(UiTheme::panel_border()),
-            ..default()
-        })
+            BackgroundColor(UiTheme::void_black().into()),
+            BorderColor::from(UiTheme::panel_border())
+        ))
         .with_children(|bar| {
             bar.spawn((
-                NodeBundle {
-                    style: Style {
-                        width: Val::Percent((fill_pct * 100.0).clamp(0.0, 100.0)),
+                Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent((fill_pct * 100.0).clamp(0.0, 100.0)),
                         height: Val::Percent(100.0),
                         ..default()
-                    },
-                    background_color: UiTheme::healing().into(),
-                    ..default()
-                },
+            },
+            BackgroundColor(UiTheme::healing().into()),
                 PlaybackHeroBarFill,
             ));
         });
 }
 
-fn playback_ally_bar(parent: &mut ChildBuilder, fill_pct: f32) {
+fn playback_ally_bar(parent: &mut ChildSpawnerCommands<'_>, fill_pct: f32) {
     let tone = Color::srgb(0.38, 0.72, 0.92);
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 height: Val::Px(14.0),
                 border: UiRect::all(Val::Px(1.0)),
                 ..default()
             },
-            background_color: UiTheme::void_black().into(),
-            border_color: BorderColor(UiTheme::panel_border()),
-            ..default()
-        })
+            BackgroundColor(UiTheme::void_black().into()),
+            BorderColor::from(UiTheme::panel_border())
+        ))
         .with_children(|bar| {
             bar.spawn((
-                NodeBundle {
-                    style: Style {
-                        width: Val::Percent((fill_pct * 100.0).clamp(0.0, 100.0)),
+                Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent((fill_pct * 100.0).clamp(0.0, 100.0)),
                         height: Val::Percent(100.0),
                         ..default()
-                    },
-                    background_color: tone.into(),
-                    ..default()
-                },
+            },
+            BackgroundColor(tone.into()),
                 PlaybackAllyBarFill,
             ));
         });
 }
 
-fn playback_enemy_bar(parent: &mut ChildBuilder, fill_pct: f32) {
+fn playback_enemy_bar(parent: &mut ChildSpawnerCommands<'_>, fill_pct: f32) {
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 height: Val::Px(14.0),
                 border: UiRect::all(Val::Px(1.0)),
                 ..default()
             },
-            background_color: UiTheme::void_black().into(),
-            border_color: BorderColor(UiTheme::panel_border()),
-            ..default()
-        })
+            BackgroundColor(UiTheme::void_black().into()),
+            BorderColor::from(UiTheme::panel_border())
+        ))
         .with_children(|bar| {
             bar.spawn((
-                NodeBundle {
-                    style: Style {
-                        width: Val::Percent((fill_pct * 100.0).clamp(0.0, 100.0)),
+                Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent((fill_pct * 100.0).clamp(0.0, 100.0)),
                         height: Val::Percent(100.0),
                         ..default()
-                    },
-                    background_color: UiTheme::danger().into(),
-                    ..default()
-                },
+            },
+            BackgroundColor(UiTheme::danger().into()),
                 PlaybackEnemyBarFill,
             ));
         });
 }
 
-fn spawn_playback_hero_plate_lead(parent: &mut ChildBuilder) {
+fn spawn_playback_hero_plate_lead(parent: &mut ChildSpawnerCommands<'_>) {
     parent
         .spawn((
-            NodeBundle {
-                style: Style {
-                    flex_direction: FlexDirection::Column,
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Column,
                     row_gap: Val::Px(4.0),
                     align_items: AlignItems::FlexStart,
                     ..default()
-                },
-                ..default()
             },
             PlaybackLeadPortraitBlock,
         ))
         .with_children(|plate| {
             plate
-                .spawn(NodeBundle {
-                    style: Style {
-                        width: Val::Px(76.0),
+                .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Px(76.0),
                         height: Val::Px(76.0),
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
                         border: UiRect::all(Val::Px(2.0)),
                         ..default()
-                    },
-                    background_color: UiTheme::panel_bg_deep().into(),
-                    border_color: BorderColor(UiTheme::ornate_gold()),
-                    ..default()
-                })
+            },
+            BackgroundColor(UiTheme::panel_bg_deep().into()),
+            BorderColor::from(UiTheme::ornate_gold())
+        ))
                 .with_children(|port| {
-                    port.spawn(TextBundle::from_section(
-                        "\u{2694}",
-                        TextStyle {
-                            font_size: UiTheme::FONT_DISPLAY_SUB,
-                            color: UiTheme::elite(),
-                            ..default()
-                        },
-                    ));
+                    port.spawn((
+                Text::new("\u{2694}"),
+                TextFont::from_font_size(UiTheme::FONT_DISPLAY_SUB),
+                TextColor(UiTheme::elite()),
+            ));
                 });
             plate.spawn(caption_text("You"));
             playback_hero_bar(plate, 1.0);
             plate.spawn((
-                playback_debuff_text_bundle("—  ·  —  ·  —  ·  —"),
+                crate::ui::theme::playback_debuff_line_bundle("—  ·  —  ·  —  ·  —"),
                 PlaybackHeroDebuffLine,
             ));
         });
 }
 
-fn spawn_playback_hero_plate_ally(parent: &mut ChildBuilder) {
+fn spawn_playback_hero_plate_ally(parent: &mut ChildSpawnerCommands<'_>) {
     let tone = Color::srgb(0.38, 0.72, 0.92);
     parent
         .spawn((
-            NodeBundle {
-                style: Style {
-                    flex_direction: FlexDirection::Column,
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Column,
                     row_gap: Val::Px(4.0),
                     align_items: AlignItems::FlexStart,
                     ..default()
-                },
-                ..default()
             },
             PlaybackAllyPortraitBlock,
         ))
         .with_children(|plate| {
             plate
-                .spawn(NodeBundle {
-                    style: Style {
-                        width: Val::Px(76.0),
+                .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Px(76.0),
                         height: Val::Px(76.0),
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
                         border: UiRect::all(Val::Px(2.0)),
                         ..default()
-                    },
-                    background_color: UiTheme::panel_bg_deep().into(),
-                    border_color: BorderColor(UiTheme::ornate_gold()),
-                    ..default()
-                })
+            },
+            BackgroundColor(UiTheme::panel_bg_deep().into()),
+            BorderColor::from(UiTheme::ornate_gold())
+        ))
                 .with_children(|port| {
-                    port.spawn(TextBundle::from_section(
-                        "\u{1F9D1}",
-                        TextStyle {
-                            font_size: UiTheme::FONT_DISPLAY_SUB,
-                            color: tone,
-                            ..default()
-                        },
-                    ));
+                    port.spawn((
+                Text::new("\u{1F9D1}"),
+                TextFont::from_font_size(UiTheme::FONT_DISPLAY_SUB),
+                TextColor(tone),
+            ));
                 });
             plate.spawn(caption_text("Ally"));
             playback_ally_bar(plate, 1.0);
         });
 }
 
-fn spawn_playback_enemy_plate(parent: &mut ChildBuilder) {
+fn spawn_playback_enemy_plate(parent: &mut ChildSpawnerCommands<'_>) {
     parent
         .spawn((
-            NodeBundle {
-                style: Style {
-                    flex_direction: FlexDirection::Column,
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Column,
                     row_gap: Val::Px(4.0),
                     align_items: AlignItems::FlexEnd,
                     ..default()
-                },
-                ..default()
             },
             PlaybackEnemyPortraitBlock,
         ))
         .with_children(|plate| {
             plate
-                .spawn(NodeBundle {
-                    style: Style {
-                        width: Val::Px(76.0),
+                .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Px(76.0),
                         height: Val::Px(76.0),
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
                         border: UiRect::all(Val::Px(2.0)),
                         ..default()
-                    },
-                    background_color: UiTheme::panel_bg_deep().into(),
-                    border_color: BorderColor(UiTheme::panel_border()),
-                    ..default()
-                })
+            },
+            BackgroundColor(UiTheme::panel_bg_deep().into()),
+            BorderColor::from(UiTheme::panel_border())
+        ))
                 .with_children(|port| {
-                    port.spawn(TextBundle::from_section(
-                        "\u{1F480}",
-                        TextStyle {
-                            font_size: UiTheme::FONT_DISPLAY_SUB,
-                            color: UiTheme::body_dim(),
-                            ..default()
-                        },
-                    ));
+                    port.spawn((
+                Text::new("\u{1F480}"),
+                TextFont::from_font_size(UiTheme::FONT_DISPLAY_SUB),
+                TextColor(UiTheme::body_dim()),
+            ));
                 });
             plate.spawn((headline_text("—"), PlaybackEnemyNameText));
             plate.spawn((
@@ -1368,201 +1284,184 @@ fn spawn_playback_enemy_plate(parent: &mut ChildBuilder) {
             ));
             playback_enemy_bar(plate, 1.0);
             plate.spawn((
-                playback_debuff_text_bundle("—  ·  —  ·  —  ·  —"),
+                crate::ui::theme::playback_debuff_line_bundle("—  ·  —  ·  —  ·  —"),
                 PlaybackEnemyDebuffLine,
             ));
         });
 }
 
-fn spawn_playback_damage_meters_block(parent: &mut ChildBuilder) {
+fn spawn_playback_damage_meters_block(parent: &mut ChildSpawnerCommands<'_>) {
     parent.spawn(section_title("DAMAGE (THIS ENCOUNTER)"));
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(3.0),
                 margin: UiRect::bottom(Val::Px(10.0)),
                 ..default()
-            },
-            ..default()
-        })
+            }
+        ))
         .with_children(|col| {
-            col.spawn(NodeBundle {
-                style: Style {
-                    width: Val::Percent(100.0),
+            col.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                     flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
                     column_gap: Val::Px(10.0),
                     margin: UiRect::bottom(Val::Px(2.0)),
                     ..default()
-                },
-                ..default()
-            })
+            }
+        ))
             .with_children(|r| {
-                r.spawn(NodeBundle {
-                    style: Style {
-                        min_width: Val::Px(56.0),
+                r.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                min_width: Val::Px(56.0),
                         ..default()
-                    },
-                    ..default()
-                })
+            }
+        ))
                 .with_children(|n| {
                     n.spawn(caption_text("Hero"));
                 });
-                r.spawn(NodeBundle {
-                    style: Style {
-                        flex_grow: 1.0,
+                r.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_grow: 1.0,
                         min_width: Val::Px(48.0),
                         height: Val::Px(12.0),
                         ..default()
-                    },
-                    background_color: Color::srgba(0.06, 0.06, 0.09, 1.0).into(),
-                    ..default()
-                })
+            },
+            BackgroundColor(Color::srgba(0.06, 0.06, 0.09, 1.0).into())
+        ))
                 .with_children(|track| {
                     track.spawn((
-                        NodeBundle {
-                            style: Style {
-                                width: Val::Percent(0.0),
+                        Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(0.0),
                                 height: Val::Percent(100.0),
                                 ..default()
-                            },
-                            background_color: Color::srgb(0.92, 0.55, 0.22).into(),
-                            ..default()
-                        },
+            },
+            BackgroundColor(Color::srgb(0.92, 0.55, 0.22).into()),
                         PlaybackDmgMeterLeadFill,
                     ));
                 });
                 r.spawn((
-                    TextBundle::from_section(
-                        "0",
-                        TextStyle {
-                            font_size: UiTheme::FONT_COMPACT,
-                            color: UiTheme::body_dim(),
-                            ..default()
-                        },
-                    ),
+                    (
+                Text::new("0"),
+                TextFont::from_font_size(UiTheme::FONT_COMPACT),
+                TextColor(UiTheme::body_dim()),
+            ),
                     PlaybackDmgMeterLeadValue,
                 ));
             });
 
             col.spawn((
-                NodeBundle {
-                    style: Style {
-                        width: Val::Percent(100.0),
+                Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                         flex_direction: FlexDirection::Row,
                         align_items: AlignItems::Center,
                         column_gap: Val::Px(10.0),
                         margin: UiRect::bottom(Val::Px(2.0)),
                         ..default()
-                    },
-                    ..default()
-                },
+            },
                 PlaybackDmgMeterPartnerRow,
             ))
             .with_children(|r| {
-                r.spawn(NodeBundle {
-                    style: Style {
-                        min_width: Val::Px(56.0),
+                r.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                min_width: Val::Px(56.0),
                         ..default()
-                    },
-                    ..default()
-                })
+            }
+        ))
                 .with_children(|n| {
                     n.spawn(caption_text("Ally"));
                 });
-                r.spawn(NodeBundle {
-                    style: Style {
-                        flex_grow: 1.0,
+                r.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_grow: 1.0,
                         min_width: Val::Px(48.0),
                         height: Val::Px(12.0),
                         ..default()
-                    },
-                    background_color: Color::srgba(0.06, 0.06, 0.09, 1.0).into(),
-                    ..default()
-                })
+            },
+            BackgroundColor(Color::srgba(0.06, 0.06, 0.09, 1.0).into())
+        ))
                 .with_children(|track| {
                     track.spawn((
-                        NodeBundle {
-                            style: Style {
-                                width: Val::Percent(0.0),
+                        Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(0.0),
                                 height: Val::Percent(100.0),
                                 ..default()
-                            },
-                            background_color: Color::srgb(0.38, 0.72, 0.95).into(),
-                            ..default()
-                        },
+            },
+            BackgroundColor(Color::srgb(0.38, 0.72, 0.95).into()),
                         PlaybackDmgMeterPartnerFill,
                     ));
                 });
                 r.spawn((
-                    TextBundle::from_section(
-                        "0",
-                        TextStyle {
-                            font_size: UiTheme::FONT_COMPACT,
-                            color: UiTheme::body_dim(),
-                            ..default()
-                        },
-                    ),
+                    (
+                Text::new("0"),
+                TextFont::from_font_size(UiTheme::FONT_COMPACT),
+                TextColor(UiTheme::body_dim()),
+            ),
                     PlaybackDmgMeterPartnerValue,
                 ));
             });
 
-            col.spawn(NodeBundle {
-                style: Style {
-                    width: Val::Percent(100.0),
+            col.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                     flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
                     column_gap: Val::Px(10.0),
                     ..default()
-                },
-                ..default()
-            })
+            }
+        ))
             .with_children(|r| {
-                r.spawn(NodeBundle {
-                    style: Style {
-                        min_width: Val::Px(56.0),
+                r.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                min_width: Val::Px(56.0),
                         ..default()
-                    },
-                    ..default()
-                })
+            }
+        ))
                 .with_children(|n| {
                     n.spawn(caption_text("Foe"));
                 });
-                r.spawn(NodeBundle {
-                    style: Style {
-                        flex_grow: 1.0,
+                r.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_grow: 1.0,
                         min_width: Val::Px(48.0),
                         height: Val::Px(12.0),
                         ..default()
-                    },
-                    background_color: Color::srgba(0.06, 0.06, 0.09, 1.0).into(),
-                    ..default()
-                })
+            },
+            BackgroundColor(Color::srgba(0.06, 0.06, 0.09, 1.0).into())
+        ))
                 .with_children(|track| {
                     track.spawn((
-                        NodeBundle {
-                            style: Style {
-                                width: Val::Percent(0.0),
+                        Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(0.0),
                                 height: Val::Percent(100.0),
                                 ..default()
-                            },
-                            background_color: Color::srgb(0.55, 0.38, 0.42).into(),
-                            ..default()
-                        },
+            },
+            BackgroundColor(Color::srgb(0.55, 0.38, 0.42).into()),
                         PlaybackDmgMeterEnemyFill,
                     ));
                 });
                 r.spawn((
-                    TextBundle::from_section(
-                        "0",
-                        TextStyle {
-                            font_size: UiTheme::FONT_COMPACT,
-                            color: UiTheme::body_dim(),
-                            ..default()
-                        },
-                    ),
+                    (
+                Text::new("0"),
+                TextFont::from_font_size(UiTheme::FONT_COMPACT),
+                TextColor(UiTheme::body_dim()),
+            ),
                     PlaybackDmgMeterEnemyValue,
                 ));
             });
@@ -1570,12 +1469,13 @@ fn spawn_playback_damage_meters_block(parent: &mut ChildBuilder) {
 }
 
 /// Middle column during [`crate::app::GameState::Running`] — synced from [`crate::app::ActiveRunPlayback`].
-pub fn spawn_run_playback_middle_column(parent: &mut ChildBuilder, ph: &UiPlaceholderImages) {
+pub fn spawn_run_playback_middle_column(parent: &mut ChildSpawnerCommands<'_>, ph: &UiPlaceholderImages) {
     let ph = ph.clone();
-    let inner = move |p: &mut ChildBuilder| {
+    let inner = move |p: &mut ChildSpawnerCommands<'_>| {
         p.spawn(panel_title_centered("LIVE DELVE"));
-        p.spawn(NodeBundle {
-            style: Style {
+        p.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                 justify_content: JustifyContent::SpaceBetween,
                 align_items: AlignItems::Center,
@@ -1583,60 +1483,56 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildBuilder, ph: &UiPlaceh
                 flex_wrap: FlexWrap::Wrap,
                 column_gap: Val::Px(8.0),
                 ..default()
-            },
-            ..default()
-        })
+            }
+        ))
         .with_children(|r| {
-            r.spawn(NodeBundle {
-                style: Style {
-                    flex_direction: FlexDirection::Row,
+            r.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Row,
                     column_gap: Val::Px(12.0),
                     flex_wrap: FlexWrap::Wrap,
                     align_items: AlignItems::Center,
                     ..default()
-                },
-                ..default()
-            })
+            }
+        ))
             .with_children(|meta| {
                 meta.spawn((caption_text("Depth: —"), PlaybackDepthText));
                 meta.spawn((caption_text("Type: —"), PlaybackRoomKindText));
             });
             let log_pal = UiButtonPalette::panel_secondary();
             r.spawn((
-                ButtonBundle {
-                    style: Style {
-                        min_height: Val::Px(32.0),
+                Node {
+                box_sizing: BoxSizing::BorderBox,
+                min_height: Val::Px(32.0),
                         padding: UiRect::axes(Val::Px(12.0), Val::Px(7.0)),
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
                         border: UiRect::all(Val::Px(1.0)),
                         ..default()
-                    },
-                    background_color: log_pal.idle_bg.into(),
-                    border_color: BorderColor(log_pal.idle_border),
-                    ..default()
-                },
+            },
+            Button,
+            BackgroundColor(log_pal.idle_bg.into()),
+            BorderColor::from(log_pal.idle_border),
                 ToggleCombatLogButton,
                 log_pal,
                 UiTooltip::txt("Show or hide the text combat log."),
             ))
             .with_children(|b| {
                 b.spawn((
-                    TextBundle::from_section(
-                        "Show log",
-                        TextStyle {
-                            font_size: UiTheme::FONT_COMPACT,
-                            color: UiTheme::muted_cream(),
-                            ..default()
-                        },
-                    ),
+                    (
+                Text::new("Show log"),
+                TextFont::from_font_size(UiTheme::FONT_COMPACT),
+                TextColor(UiTheme::muted_cream()),
+            ),
                     PlaybackCombatLogToggleLabel,
                 ));
             });
         });
 
-        p.spawn(NodeBundle {
-            style: Style {
+        p.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 min_height: Val::Px(240.0),
                 flex_grow: 1.0,
@@ -1644,12 +1540,12 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildBuilder, ph: &UiPlaceh
                 position_type: PositionType::Relative,
                 margin: UiRect::vertical(Val::Px(8.0)),
                 ..default()
-            },
-            ..default()
-        })
+            }
+        ))
         .with_children(|theater| {
-            theater.spawn(ImageBundle {
-                style: Style {
+            theater.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
                     position_type: PositionType::Absolute,
                     left: Val::Px(0.0),
                     top: Val::Px(0.0),
@@ -1657,14 +1553,17 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildBuilder, ph: &UiPlaceh
                     bottom: Val::Px(0.0),
                     ..default()
                 },
-                image: UiImage::new(ph.dungeon_theater.clone())
-                    .with_color(Color::srgba(0.72, 0.7, 0.78, 0.52)),
-                ..default()
-            });
+                ImageNode {
+                    image: ph.dungeon_theater.clone(),
+                    color: Color::srgba(0.72, 0.7, 0.78, 0.52),
+                    ..default()
+                },
+            ));
             theater
-                .spawn(NodeBundle {
-                    style: Style {
-                        position_type: PositionType::Absolute,
+                .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                position_type: PositionType::Absolute,
                         left: Val::Px(0.0),
                         top: Val::Px(0.0),
                         right: Val::Px(0.0),
@@ -1675,97 +1574,90 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildBuilder, ph: &UiPlaceh
                         column_gap: Val::Px(10.0),
                         padding: UiRect::axes(Val::Px(6.0), Val::Px(4.0)),
                         ..default()
-                    },
-                    ..default()
-                })
+            }
+        ))
                 .with_children(|row| {
-                    row.spawn(NodeBundle {
-                        style: Style {
-                            flex_direction: FlexDirection::Column,
+                    row.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Column,
                             row_gap: Val::Px(12.0),
                             align_items: AlignItems::FlexStart,
                             flex_shrink: 0.0,
                             ..default()
-                        },
-                        ..default()
-                    })
+            }
+        ))
                     .with_children(|left| {
                         spawn_playback_hero_plate_lead(left);
                         spawn_playback_hero_plate_ally(left);
                     });
-                    row.spawn(NodeBundle {
-                        style: Style {
-                            flex_direction: FlexDirection::Column,
+                    row.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Column,
                             flex_grow: 1.0,
                             min_width: Val::Px(72.0),
                             align_items: AlignItems::Center,
                             row_gap: Val::Px(6.0),
                             padding: UiRect::all(Val::Px(4.0)),
                             ..default()
-                        },
-                        ..default()
-                    })
+            }
+        ))
                     .with_children(|mid| {
                         mid.spawn(section_title("NOW"));
                         mid.spawn((body_text("…"), PlaybackCaptionText));
                     });
-                    row.spawn(NodeBundle {
-                        style: Style {
-                            flex_direction: FlexDirection::Column,
+                    row.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Column,
                             flex_shrink: 0.0,
                             ..default()
-                        },
-                        ..default()
-                    })
+            }
+        ))
                     .with_children(|right| {
                         spawn_playback_enemy_plate(right);
                     });
                 });
             theater.spawn((
-                NodeBundle {
-                    style: Style {
-                        position_type: PositionType::Absolute,
+                Node {
+                box_sizing: BoxSizing::BorderBox,
+                position_type: PositionType::Absolute,
                         height: Val::Px(4.0),
                         width: Val::Percent(44.0),
                         right: Val::Percent(14.0),
                         top: Val::Percent(30.0),
                         ..default()
-                    },
-                    background_color: Color::srgb(0.92, 0.28, 0.2).into(),
-                    visibility: Visibility::Hidden,
-                    ..default()
-                },
+            },
+            BackgroundColor(Color::srgb(0.92, 0.28, 0.2).into()),
+            Visibility::Hidden,
                 PlaybackAggroArrowLine,
             ));
             theater.spawn((
-                NodeBundle {
-                    style: Style {
-                        position_type: PositionType::Absolute,
+                Node {
+                box_sizing: BoxSizing::BorderBox,
+                position_type: PositionType::Absolute,
                         left: Val::Px(0.0),
                         top: Val::Px(0.0),
                         right: Val::Px(0.0),
                         bottom: Val::Px(0.0),
                         ..default()
-                    },
-                    ..default()
-                },
+            },
                 PlaybackTheaterFloatLayer,
             ));
         });
 
         p.spawn((
-            NodeBundle {
-                style: Style {
-                    flex_direction: FlexDirection::Column,
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Column,
                     width: Val::Percent(100.0),
                     max_height: Val::Px(200.0),
                     flex_shrink: 0.0,
                     overflow: Overflow::clip_y(),
                     ..default()
-                },
-                visibility: Visibility::Hidden,
-                ..default()
             },
+            Visibility::Hidden,
             PlaybackCombatLogPanel,
         ))
         .with_children(|wrap| {
@@ -1784,69 +1676,66 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildBuilder, ph: &UiPlaceh
 }
 
 pub fn spawn_dungeon_briefing_column(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands<'_>,
     stash_count: usize,
     meta: &MetaProgression,
 ) {
-    let inner = move |p: &mut ChildBuilder| {
+    let inner = move |p: &mut ChildSpawnerCommands<'_>| {
         p.spawn(panel_title_centered("DUNGEON RUN"));
-        p.spawn(NodeBundle {
-            style: Style {
+        p.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                 justify_content: JustifyContent::SpaceBetween,
                 width: Val::Percent(100.0),
                 ..default()
-            },
-            ..default()
-        })
+            }
+        ))
         .with_children(|r| {
             r.spawn(caption_text(format!(
                 "Target depth: {DEFAULT_RUN_MAX_DEPTH}"
             )));
             r.spawn(caption_text("Phase: briefing"));
         });
-        p.spawn(NodeBundle {
-            style: Style {
+        p.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                 column_gap: Val::Px(12.0),
                 align_items: AlignItems::Center,
                 ..default()
-            },
-            ..default()
-        })
+            }
+        ))
         .with_children(|row| {
-            row.spawn(NodeBundle {
-                style: Style {
-                    width: Val::Px(96.0),
+            row.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Px(96.0),
                     height: Val::Px(96.0),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
                     border: UiRect::all(Val::Px(2.0)),
                     ..default()
-                },
-                background_color: UiTheme::panel_bg_deep().into(),
-                border_color: BorderColor(UiTheme::ornate_gold()),
-                ..default()
-            })
+            },
+            BackgroundColor(UiTheme::panel_bg_deep().into()),
+            BorderColor::from(UiTheme::ornate_gold())
+        ))
             .with_children(|port| {
-                port.spawn(TextBundle::from_section(
-                    "\u{1F480}",
-                    TextStyle {
-                        font_size: UiTheme::FONT_DISPLAY_HERO,
-                        color: UiTheme::body_dim(),
-                        ..default()
-                    },
-                ));
+                port.spawn((
+                Text::new("\u{1F480}"),
+                TextFont::from_font_size(UiTheme::FONT_DISPLAY_HERO),
+                TextColor(UiTheme::body_dim()),
+            ));
             });
-            row.spawn(NodeBundle {
-                style: Style {
-                    flex_direction: FlexDirection::Column,
+            row.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Column,
                     flex_grow: 1.0,
                     row_gap: Val::Px(6.0),
                     ..default()
-                },
-                ..default()
-            })
+            }
+        ))
             .with_children(|col| {
                 col.spawn(headline_text("Awaiting delve"));
                 col.spawn(caption_text(format!(
@@ -1877,18 +1766,18 @@ pub fn spawn_dungeon_briefing_column(
     inner(parent);
 }
 
-pub fn spawn_dungeon_camp_column(parent: &mut ChildBuilder) {
-    let inner = move |p: &mut ChildBuilder| {
+pub fn spawn_dungeon_camp_column(parent: &mut ChildSpawnerCommands<'_>) {
+    let inner = move |p: &mut ChildSpawnerCommands<'_>| {
         p.spawn(panel_title_centered("DUNGEON RUN"));
-        p.spawn(NodeBundle {
-            style: Style {
+        p.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                 justify_content: JustifyContent::SpaceBetween,
                 width: Val::Percent(100.0),
                 ..default()
-            },
-            ..default()
-        })
+            }
+        ))
         .with_children(|r| {
             r.spawn(caption_text("Depth: —"));
             r.spawn(caption_text("Type: Camp"));
@@ -1903,8 +1792,8 @@ pub fn spawn_dungeon_camp_column(parent: &mut ChildBuilder) {
     inner(parent);
 }
 
-pub fn spawn_dungeon_summary_column(parent: &mut ChildBuilder, summary: &RunSummary) {
-    let inner = move |p: &mut ChildBuilder| {
+pub fn spawn_dungeon_summary_column(parent: &mut ChildSpawnerCommands<'_>, summary: &RunSummary) {
+    let inner = move |p: &mut ChildSpawnerCommands<'_>| {
         p.spawn(panel_title_centered("DUNGEON RUN"));
         let depth = summary.deepest_depth;
         let is_death = summary.outcome == RunOutcome::HeroDied;
@@ -1914,24 +1803,21 @@ pub fn spawn_dungeon_summary_column(parent: &mut ChildBuilder, summary: &RunSumm
             UiTheme::muted_gold()
         };
         let type_label = if is_death { "Defeat" } else { "Boss" };
-        p.spawn(NodeBundle {
-            style: Style {
+        p.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                 justify_content: JustifyContent::SpaceBetween,
                 width: Val::Percent(100.0),
                 ..default()
-            },
-            ..default()
-        })
+            }
+        ))
         .with_children(|r| {
             r.spawn(caption_text(format!("Depth: {depth}")));
-            r.spawn(TextBundle::from_section(
-                format!("Type: {type_label}"),
-                TextStyle {
-                    font_size: UiTheme::FONT_COMPACT,
-                    color: type_color,
-                    ..default()
-                },
+            r.spawn((
+                Text::new(format!("Type: {type_label}")),
+                TextFont::from_font_size(UiTheme::FONT_COMPACT),
+                TextColor(type_color),
             ));
         });
         if !summary.peak_risk_note.is_empty() {
@@ -1941,57 +1827,51 @@ pub fn spawn_dungeon_summary_column(parent: &mut ChildBuilder, summary: &RunSumm
             .death_reason
             .clone()
             .unwrap_or_else(|| "Victory".to_string());
-        p.spawn(NodeBundle {
-            style: Style {
+        p.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                 column_gap: Val::Px(12.0),
                 align_items: AlignItems::Center,
                 ..default()
-            },
-            ..default()
-        })
+            }
+        ))
         .with_children(|row| {
-            row.spawn(NodeBundle {
-                style: Style {
-                    width: Val::Px(96.0),
+            row.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Px(96.0),
                     height: Val::Px(96.0),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
                     border: UiRect::all(Val::Px(2.0)),
                     ..default()
-                },
-                background_color: UiTheme::panel_bg_deep().into(),
-                border_color: BorderColor(UiTheme::ornate_gold()),
-                ..default()
-            })
+            },
+            BackgroundColor(UiTheme::panel_bg_deep().into()),
+            BorderColor::from(UiTheme::ornate_gold())
+        ))
             .with_children(|port| {
-                port.spawn(TextBundle::from_section(
-                    if is_death { "\u{2620}" } else { "\u{1F3F9}" },
-                    TextStyle {
-                        font_size: UiTheme::FONT_DISPLAY_SUB,
-                        color: type_color,
-                        ..default()
-                    },
-                ));
+                port.spawn((
+                Text::new(if is_death { "\u{2620}" } else { "\u{1F3F9}" }),
+                TextFont::from_font_size(UiTheme::FONT_DISPLAY_SUB),
+                TextColor(type_color),
+            ));
             });
-            row.spawn(NodeBundle {
-                style: Style {
-                    flex_direction: FlexDirection::Column,
+            row.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Column,
                     flex_grow: 1.0,
                     row_gap: Val::Px(6.0),
                     ..default()
-                },
-                ..default()
-            })
+            }
+        ))
             .with_children(|col| {
-                col.spawn(TextBundle::from_section(
-                    foe.clone(),
-                    TextStyle {
-                        font_size: UiTheme::FONT_SECTION,
-                        color: type_color,
-                        ..default()
-                    },
-                ));
+                col.spawn((
+                Text::new(foe.clone()),
+                TextFont::from_font_size(UiTheme::FONT_SECTION),
+                TextColor(type_color),
+            ));
                 let frac = if is_death { 0.35 } else { 1.0 };
                 health_bar(col, frac, type_color);
             });
@@ -2003,14 +1883,7 @@ pub fn spawn_dungeon_summary_column(parent: &mut ChildBuilder, summary: &RunSumm
             .iter()
             .map(|line| {
                 let (color, size) = log_line_present(line);
-                (
-                    line.clone(),
-                    TextStyle {
-                        font_size: size,
-                        color,
-                        ..default()
-                    },
-                )
+                (line.clone(), size, color)
             })
             .collect();
         spawn_scrollable_log(p, 200.0, log_lines);
@@ -2021,98 +1894,97 @@ pub fn spawn_dungeon_summary_column(parent: &mut ChildBuilder, summary: &RunSumm
     inner(parent);
 }
 
-fn spawn_playback_delve_progress_section(parent: &mut ChildBuilder) {
+fn spawn_playback_delve_progress_section(parent: &mut ChildSpawnerCommands<'_>) {
     parent.spawn((
         caption_text(format!("Floors cleared: 0 / {}", DEFAULT_RUN_MAX_DEPTH)),
         PlaybackProgressLabel,
     ));
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 height: Val::Px(16.0),
                 border: UiRect::all(Val::Px(1.0)),
                 ..default()
             },
-            background_color: UiTheme::void_black().into(),
-            border_color: BorderColor(UiTheme::panel_border()),
-            ..default()
-        })
+            BackgroundColor(UiTheme::void_black().into()),
+            BorderColor::from(UiTheme::panel_border())
+        ))
         .with_children(|bar| {
             bar.spawn((
-                NodeBundle {
-                    style: Style {
-                        width: Val::Percent(0.0),
+                Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(0.0),
                         height: Val::Percent(100.0),
                         ..default()
-                    },
-                    background_color: UiTheme::muted_gold().into(),
-                    ..default()
-                },
+            },
+            BackgroundColor(UiTheme::muted_gold().into()),
                 PlaybackProgressBarFill,
             ));
         });
 }
 
-fn spawn_static_delve_progress_section(parent: &mut ChildBuilder, cleared: u32, cap: u32) {
+fn spawn_static_delve_progress_section(parent: &mut ChildSpawnerCommands<'_>, cleared: u32, cap: u32) {
     let cap_n = cap.max(1);
     let frac = cleared as f32 / cap_n as f32;
     parent.spawn(caption_text(format!("Floors cleared: {cleared} / {cap_n}")));
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 height: Val::Px(16.0),
                 border: UiRect::all(Val::Px(1.0)),
                 ..default()
             },
-            background_color: UiTheme::void_black().into(),
-            border_color: BorderColor(UiTheme::panel_border()),
-            ..default()
-        })
+            BackgroundColor(UiTheme::void_black().into()),
+            BorderColor::from(UiTheme::panel_border())
+        ))
         .with_children(|bar| {
-            bar.spawn(NodeBundle {
-                style: Style {
-                    width: Val::Percent((frac * 100.0).clamp(0.0, 100.0)),
+            bar.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent((frac * 100.0).clamp(0.0, 100.0)),
                     height: Val::Percent(100.0),
                     ..default()
-                },
-                background_color: UiTheme::muted_gold().into(),
-                ..default()
-            });
+            },
+            BackgroundColor(UiTheme::muted_gold().into())
+        ));
         });
 }
 
-fn health_bar(parent: &mut ChildBuilder, frac: f32, fill: Color) {
+fn health_bar(parent: &mut ChildSpawnerCommands<'_>, frac: f32, fill: Color) {
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 height: Val::Px(14.0),
                 border: UiRect::all(Val::Px(1.0)),
                 ..default()
             },
-            background_color: UiTheme::void_black().into(),
-            border_color: BorderColor(UiTheme::panel_border()),
-            ..default()
-        })
+            BackgroundColor(UiTheme::void_black().into()),
+            BorderColor::from(UiTheme::panel_border())
+        ))
         .with_children(|bar| {
-            bar.spawn(NodeBundle {
-                style: Style {
-                    width: Val::Percent((frac * 100.0).clamp(0.0, 100.0)),
+            bar.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent((frac * 100.0).clamp(0.0, 100.0)),
                     height: Val::Percent(100.0),
                     ..default()
-                },
-                background_color: fill.into(),
-                ..default()
-            });
+            },
+            BackgroundColor(fill.into())
+        ));
         });
 }
 
-pub fn spawn_stash_filters_and_sort_row(parent: &mut ChildBuilder, stash_sort: StashSortOrder) {
+pub fn spawn_stash_filters_and_sort_row(parent: &mut ChildSpawnerCommands<'_>, stash_sort: StashSortOrder) {
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Center,
                 column_gap: Val::Px(10.0),
@@ -2120,27 +1992,25 @@ pub fn spawn_stash_filters_and_sort_row(parent: &mut ChildBuilder, stash_sort: S
                 flex_wrap: FlexWrap::Wrap,
                 margin: UiRect::bottom(Val::Px(2.0)),
                 ..default()
-            },
-            ..default()
-        })
+            }
+        ))
         .with_children(|row| {
             row.spawn(caption_text("Stash filters: —"));
             let p = UiButtonPalette::panel_secondary();
             row.spawn((
-                ButtonBundle {
-                    style: Style {
-                        min_width: Val::Px(168.0),
+                Node {
+                box_sizing: BoxSizing::BorderBox,
+                min_width: Val::Px(168.0),
                         height: Val::Px(28.0),
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
                         padding: UiRect::horizontal(Val::Px(8.0)),
                         border: UiRect::all(Val::Px(1.0)),
                         ..default()
-                    },
-                    background_color: p.idle_bg.into(),
-                    border_color: BorderColor(p.idle_border),
-                    ..default()
-                },
+            },
+            Button,
+            BackgroundColor(p.idle_bg.into()),
+            BorderColor::from(p.idle_border),
                 StashSortCycleButton,
                 p,
                 UiTooltip::txt(
@@ -2148,30 +2018,27 @@ pub fn spawn_stash_filters_and_sort_row(parent: &mut ChildBuilder, stash_sort: S
                 ),
             ))
             .with_children(|b| {
-                b.spawn(TextBundle::from_section(
-                    stash_sort.button_label(),
-                    TextStyle {
-                        font_size: UiTheme::FONT_LABEL,
-                        color: UiTheme::body_dim(),
-                        ..default()
-                    },
-                ));
+                b.spawn((
+                Text::new(stash_sort.button_label()),
+                TextFont::from_font_size(UiTheme::FONT_LABEL),
+                TextColor(UiTheme::body_dim()),
+            ));
             });
         });
 }
 
 /// Post-run rewards modal: loot list + accept (non-dismissible dimmer).
 pub fn spawn_summary_rewards_modal(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands<'_>,
     summary: &RunSummary,
     stash_sort: StashSortOrder,
 ) {
     use crate::ui::components::{AcceptRewardsButton, SummaryRewardsModalRoot};
     parent
         .spawn((
-            NodeBundle {
-                style: Style {
-                    width: Val::Percent(100.0),
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                     height: Val::Percent(100.0),
                     position_type: PositionType::Absolute,
                     left: Val::Px(0.0),
@@ -2179,29 +2046,28 @@ pub fn spawn_summary_rewards_modal(
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::Center,
                     ..default()
-                },
-                ..default()
             },
             SummaryRewardsModalRoot,
         ))
         .with_children(|layer| {
-            layer.spawn(NodeBundle {
-                style: Style {
-                    position_type: PositionType::Absolute,
+            layer.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                position_type: PositionType::Absolute,
                     width: Val::Percent(100.0),
                     height: Val::Percent(100.0),
                     left: Val::Px(0.0),
                     top: Val::Px(0.0),
                     ..default()
-                },
-                background_color: Color::srgba(0.02, 0.02, 0.04, 0.72).into(),
-                focus_policy: FocusPolicy::Pass,
-                ..default()
-            });
+            },
+            BackgroundColor(Color::srgba(0.02, 0.02, 0.04, 0.72).into()),
+            FocusPolicy::Pass
+        ));
             layer
-                .spawn(NodeBundle {
-                    style: Style {
-                        min_width: Val::Px(420.0),
+                .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                min_width: Val::Px(420.0),
                         max_width: Val::Px(560.0),
                         max_height: Val::Percent(85.0),
                         padding: UiRect::all(Val::Px(UiTheme::PAD_ROOT)),
@@ -2210,11 +2076,10 @@ pub fn spawn_summary_rewards_modal(
                         row_gap: Val::Px(10.0),
                         border: UiRect::all(Val::Px(2.0)),
                         ..default()
-                    },
-                    background_color: UiTheme::panel_bg_deep().into(),
-                    border_color: BorderColor(UiTheme::ornate_gold()),
-                    ..default()
-                })
+            },
+            BackgroundColor(UiTheme::panel_bg_deep().into()),
+            BorderColor::from(UiTheme::ornate_gold())
+        ))
                 .with_children(|dialog| {
                     dialog.spawn(headline_text("Run rewards"));
                     dialog.spawn(caption_text(format!(
@@ -2243,20 +2108,19 @@ pub fn spawn_summary_rewards_modal(
                     let p = UiButtonPalette::primary_cta();
                     dialog
                         .spawn((
-                            ButtonBundle {
-                                style: Style {
-                                    width: Val::Percent(100.0),
+                            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                                     min_height: Val::Px(48.0),
                                     justify_content: JustifyContent::Center,
                                     align_items: AlignItems::Center,
                                     border: UiRect::all(Val::Px(2.0)),
                                     margin: UiRect::top(Val::Px(8.0)),
                                     ..default()
-                                },
-                                background_color: p.idle_bg.into(),
-                                border_color: BorderColor(p.idle_border),
-                                ..default()
-                            },
+            },
+            Button,
+            BackgroundColor(p.idle_bg.into()),
+            BorderColor::from(p.idle_border),
                             AcceptRewardsButton,
                             p,
                             UiTooltip::txt(
@@ -2264,14 +2128,11 @@ pub fn spawn_summary_rewards_modal(
                             ),
                         ))
                         .with_children(|b| {
-                            b.spawn(TextBundle::from_section(
-                                "\u{2713} Accept rewards",
-                                TextStyle {
-                                    font_size: UiTheme::FONT_SKILL_ACTIVE,
-                                    color: Color::WHITE,
-                                    ..default()
-                                },
-                            ));
+                            b.spawn((
+                Text::new("\u{2713} Accept rewards"),
+                TextFont::from_font_size(UiTheme::FONT_SKILL_ACTIVE),
+                TextColor(Color::WHITE),
+            ));
                         });
                 });
         });
@@ -2284,10 +2145,11 @@ pub enum FooterMode {
     DelvePlayback,
 }
 
-pub fn spawn_mockup_footer(parent: &mut ChildBuilder, mode: FooterMode) {
+pub fn spawn_mockup_footer(parent: &mut ChildSpawnerCommands<'_>, mode: FooterMode) {
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 flex_shrink: 0.0,
                 min_height: Val::Px(64.0),
@@ -2300,21 +2162,20 @@ pub fn spawn_mockup_footer(parent: &mut ChildBuilder, mode: FooterMode) {
                 border: UiRect::top(Val::Px(2.0)),
                 ..default()
             },
-            background_color: UiTheme::panel_bg_deep().into(),
-            border_color: BorderColor(UiTheme::ornate_gold()),
-            ..default()
-        })
+            BackgroundColor(UiTheme::panel_bg_deep().into()),
+            BorderColor::from(UiTheme::ornate_gold())
+        ))
         .with_children(|row| {
-            row.spawn(NodeBundle {
-                style: Style {
-                    flex_direction: FlexDirection::Row,
+            row.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
                     column_gap: Val::Px(8.0),
                     flex_wrap: FlexWrap::Wrap,
                     ..default()
-                },
-                ..default()
-            })
+            }
+        ))
             .with_children(|nav| {
                 footer_pill(
                     nav,
@@ -2324,36 +2185,35 @@ pub fn spawn_mockup_footer(parent: &mut ChildBuilder, mode: FooterMode) {
                 footer_pill(nav, "HERO", false);
                 footer_pill(nav, "CODEX", false);
             });
-            row.spawn(NodeBundle {
-                style: Style {
-                    flex_direction: FlexDirection::Row,
+            row.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
                     column_gap: Val::Px(10.0),
                     flex_shrink: 0.0,
                     flex_wrap: FlexWrap::Wrap,
                     ..default()
-                },
-                ..default()
-            })
+            }
+        ))
             .with_children(|right| {
                 footer_gear_hub_button(right);
                 match mode {
                 FooterMode::Briefing => {
                     let p = UiButtonPalette::primary_cta();
                     right.spawn((
-                        ButtonBundle {
-                            style: Style {
-                                min_width: Val::Px(220.0),
+                        Node {
+                box_sizing: BoxSizing::BorderBox,
+                min_width: Val::Px(220.0),
                                 height: Val::Px(52.0),
                                 justify_content: JustifyContent::Center,
                                 align_items: AlignItems::Center,
                                 border: UiRect::all(Val::Px(2.0)),
                                 ..default()
-                            },
-                            background_color: p.idle_bg.into(),
-                            border_color: BorderColor(p.idle_border),
-                            ..default()
-                        },
+            },
+            Button,
+            BackgroundColor(p.idle_bg.into()),
+            BorderColor::from(p.idle_border),
                         crate::ui::components::StartRunButton,
                         p,
                         UiTooltip::txt(
@@ -2361,33 +2221,29 @@ pub fn spawn_mockup_footer(parent: &mut ChildBuilder, mode: FooterMode) {
                         ),
                     ))
                     .with_children(|b| {
-                        b.spawn(TextBundle::from_section(
-                            "\u{2694} START RUN",
-                            TextStyle {
-                                font_size: UiTheme::FONT_STRONG,
-                                color: Color::WHITE,
-                                ..default()
-                            },
-                        ));
+                        b.spawn((
+                Text::new("\u{2694} START RUN"),
+                TextFont::from_font_size(UiTheme::FONT_STRONG),
+                TextColor(Color::WHITE),
+            ));
                     });
                 }
                 FooterMode::DelvePlayback => {
                     let p = UiButtonPalette::panel_secondary();
                     right.spawn((
-                        ButtonBundle {
-                            style: Style {
-                                min_width: Val::Px(220.0),
+                        Node {
+                box_sizing: BoxSizing::BorderBox,
+                min_width: Val::Px(220.0),
                                 height: Val::Px(44.0),
                                 padding: UiRect::axes(Val::Px(14.0), Val::Px(8.0)),
                                 justify_content: JustifyContent::Center,
                                 align_items: AlignItems::Center,
                                 border: UiRect::all(Val::Px(1.0)),
                                 ..default()
-                            },
-                            background_color: p.idle_bg.into(),
-                            border_color: BorderColor(p.idle_border),
-                            ..default()
-                        },
+            },
+            Button,
+            BackgroundColor(p.idle_bg.into()),
+            BorderColor::from(p.idle_border),
                         SkipPlaybackButton,
                         p,
                         UiTooltip::txt(
@@ -2395,14 +2251,11 @@ pub fn spawn_mockup_footer(parent: &mut ChildBuilder, mode: FooterMode) {
                         ),
                     ))
                     .with_children(|b| {
-                        b.spawn(TextBundle::from_section(
-                            "Skip to results",
-                            TextStyle {
-                                font_size: UiTheme::FONT_SKILL_DIM,
-                                color: UiTheme::muted_cream(),
-                                ..default()
-                            },
-                        ));
+                        b.spawn((
+                Text::new("Skip to results"),
+                TextFont::from_font_size(UiTheme::FONT_SKILL_DIM),
+                TextColor(UiTheme::muted_cream()),
+            ));
                     });
                 }
                 FooterMode::Summary => {}
@@ -2411,57 +2264,54 @@ pub fn spawn_mockup_footer(parent: &mut ChildBuilder, mode: FooterMode) {
         });
 }
 
-fn footer_gear_hub_button(parent: &mut ChildBuilder) {
+fn footer_gear_hub_button(parent: &mut ChildSpawnerCommands<'_>) {
     let p = UiButtonPalette::panel_secondary();
     parent
         .spawn((
-            ButtonBundle {
-                style: Style {
-                    min_width: Val::Px(92.0),
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                min_width: Val::Px(92.0),
                     height: Val::Px(40.0),
                     padding: UiRect::axes(Val::Px(12.0), Val::Px(8.0)),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
                     border: UiRect::all(Val::Px(1.0)),
                     ..default()
-                },
-                background_color: p.idle_bg.into(),
-                border_color: BorderColor(p.idle_border),
-                ..default()
             },
+            Button,
+            BackgroundColor(p.idle_bg.into()),
+            BorderColor::from(p.idle_border),
             GearHubOpenButton,
             p,
             UiTooltip::txt("Open the gear hub (loadout and stash)."),
         ))
         .with_children(|b| {
-            b.spawn(TextBundle::from_section(
-                "\u{2692} Gear",
-                TextStyle {
-                    font_size: UiTheme::FONT_BODY,
-                    color: UiTheme::muted_cream(),
-                    ..default()
-                },
+            b.spawn((
+                Text::new("\u{2692} Gear"),
+                TextFont::from_font_size(UiTheme::FONT_BODY),
+                TextColor(UiTheme::muted_cream()),
             ));
         });
 }
 
-fn footer_pill(parent: &mut ChildBuilder, label: &str, active: bool) {
+fn footer_pill(parent: &mut ChildSpawnerCommands<'_>, label: &str, active: bool) {
     let (bg, border, text) = if active {
         (
             UiTheme::panel_bg().into(),
-            BorderColor(UiTheme::ornate_gold()),
+            BorderColor::from(UiTheme::ornate_gold()),
             UiTheme::muted_gold(),
         )
     } else {
         (
             UiTheme::panel_bg_deep().into(),
-            BorderColor(UiTheme::panel_border()),
+            BorderColor::from(UiTheme::panel_border()),
             UiTheme::body_dim(),
         )
     };
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
                 height: Val::Px(36.0),
                 padding: UiRect::axes(Val::Px(12.0), Val::Px(6.0)),
                 justify_content: JustifyContent::Center,
@@ -2469,18 +2319,14 @@ fn footer_pill(parent: &mut ChildBuilder, label: &str, active: bool) {
                 border: UiRect::all(Val::Px(1.0)),
                 ..default()
             },
-            background_color: bg,
-            border_color: border,
-            ..default()
-        })
+            BackgroundColor(bg),
+            BorderColor::from(border)
+        ))
         .with_children(|n| {
-            n.spawn(TextBundle::from_section(
-                label,
-                TextStyle {
-                    font_size: UiTheme::FONT_CAPTION,
-                    color: text,
-                    ..default()
-                },
+            n.spawn((
+                Text::new(label),
+                TextFont::from_font_size(UiTheme::FONT_CAPTION),
+                TextColor(text),
             ));
         });
 }

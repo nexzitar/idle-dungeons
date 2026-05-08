@@ -4,7 +4,7 @@
 //! under `assets/` (see `assets/ui/README.md`).
 
 use bevy::prelude::*;
-use bevy::render::render_asset::RenderAssetUsages;
+use bevy::asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
 const SZ: u32 = 32;

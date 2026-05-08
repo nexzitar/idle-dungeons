@@ -20,23 +20,23 @@ pub enum GameState {
     Summary,
 }
 
-#[derive(Debug, Clone, Copy, Event)]
+#[derive(Debug, Clone, Copy, Message)]
 pub struct OpenSkillBook {
     pub slot: usize,
     pub kind: PartyHeroKind,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct OpenGearHub;
 
-#[derive(Debug, Clone, Copy, Event)]
+#[derive(Debug, Clone, Copy, Message)]
 pub struct AssignHeroSkill {
     pub slot: usize,
     pub skill: Option<crate::domain::skills::SkillId>,
     pub kind: PartyHeroKind,
 }
 
-#[derive(Debug, Clone, Copy, Event)]
+#[derive(Debug, Clone, Copy, Message)]
 pub struct StartRun {
     pub seed: u64,
 }
@@ -47,24 +47,24 @@ pub struct LatestRunSummary {
     pub rewards_accepted: bool,
 }
 
-#[derive(Debug, Clone, Event)]
+#[derive(Debug, Clone, Message)]
 pub struct AcceptRunRewards;
 
-#[derive(Debug, Clone, Event)]
+#[derive(Debug, Clone, Message)]
 pub struct EquipInventoryItem {
     pub item_id: u64,
 }
 
-#[derive(Debug, Clone, Event)]
+#[derive(Debug, Clone, Message)]
 pub struct SalvageInventoryItem {
     pub item_id: u64,
 }
 
-#[derive(Debug, Clone, Event)]
+#[derive(Debug, Clone, Message)]
 pub struct SkipRunPlayback;
 
 /// Wipe save to [`SaveProfile::default`] and return to briefing (handled in UI).
-#[derive(Debug, Clone, Copy, Event)]
+#[derive(Debug, Clone, Copy, Message)]
 pub struct ResetProgress;
 
 /// Playback timeline for [`GameState::Running`]; advances into [`LatestRunSummary`] unchanged.
@@ -140,15 +140,15 @@ impl Plugin for IdleDungeonsPlugin {
             .init_resource::<ProfileSavePath>()
             .init_resource::<ProfileState>()
             .init_resource::<RunSpeedSetting>()
-            .add_event::<StartRun>()
-            .add_event::<AcceptRunRewards>()
-            .add_event::<EquipInventoryItem>()
-            .add_event::<SalvageInventoryItem>()
-            .add_event::<SkipRunPlayback>()
-            .add_event::<ResetProgress>()
-            .add_event::<OpenSkillBook>()
-            .add_event::<OpenGearHub>()
-            .add_event::<AssignHeroSkill>()
+            .add_message::<StartRun>()
+            .add_message::<AcceptRunRewards>()
+            .add_message::<EquipInventoryItem>()
+            .add_message::<SalvageInventoryItem>()
+            .add_message::<SkipRunPlayback>()
+            .add_message::<ResetProgress>()
+            .add_message::<OpenSkillBook>()
+            .add_message::<OpenGearHub>()
+            .add_message::<AssignHeroSkill>()
             .add_systems(
                 Update,
                 (
@@ -166,7 +166,7 @@ impl Plugin for IdleDungeonsPlugin {
 
 fn start_run(
     mut commands: Commands,
-    mut events: EventReader<StartRun>,
+    mut events: MessageReader<StartRun>,
     mut next_state: ResMut<NextState<GameState>>,
     profile: Res<ProfileState>,
 ) {
@@ -202,7 +202,7 @@ fn start_run(
 }
 
 fn skip_run_playback(
-    mut events: EventReader<SkipRunPlayback>,
+    mut events: MessageReader<SkipRunPlayback>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
     for _ in events.read() {
@@ -224,7 +224,7 @@ fn tick_run_playback(
         return;
     }
 
-    playback.elapsed += time.delta_seconds() * speed.0;
+    playback.elapsed += time.delta_secs() * speed.0;
     while playback.elapsed >= PLAYBACK_STEP_SECS {
         playback.elapsed -= PLAYBACK_STEP_SECS;
         if playback.display_index + 1 < playback.frames.len() {
@@ -249,7 +249,7 @@ fn playback_log_line(frame: &crate::domain::run::RunPlaybackFrame) -> Option<Str
 }
 
 fn accept_run_rewards(
-    mut events: EventReader<AcceptRunRewards>,
+    mut events: MessageReader<AcceptRunRewards>,
     mut latest_summary: Option<ResMut<LatestRunSummary>>,
     mut profile: ResMut<ProfileState>,
     save_path: Res<ProfileSavePath>,
@@ -271,7 +271,7 @@ fn accept_run_rewards(
 }
 
 fn equip_inventory_item(
-    mut events: EventReader<EquipInventoryItem>,
+    mut events: MessageReader<EquipInventoryItem>,
     mut profile: ResMut<ProfileState>,
     save_path: Res<ProfileSavePath>,
 ) {
@@ -287,7 +287,7 @@ fn equip_inventory_item(
 }
 
 fn salvage_inventory_item(
-    mut events: EventReader<SalvageInventoryItem>,
+    mut events: MessageReader<SalvageInventoryItem>,
     mut profile: ResMut<ProfileState>,
     save_path: Res<ProfileSavePath>,
 ) {
@@ -315,7 +315,7 @@ fn apply_run_rewards(profile: &mut SaveProfile, summary: &RunSummary) {
 }
 
 fn assign_hero_skill_from_event(
-    mut events: EventReader<AssignHeroSkill>,
+    mut events: MessageReader<AssignHeroSkill>,
     mut profile: ResMut<ProfileState>,
     save_path: Res<ProfileSavePath>,
 ) {
@@ -390,7 +390,7 @@ mod tests {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
         app.add_plugins(IdleDungeonsPlugin);
-        app.world_mut().send_event(StartRun { seed: 1 });
+        app.world_mut().write_message(StartRun { seed: 1 });
 
         app.update();
 
@@ -421,15 +421,15 @@ mod tests {
         app.add_plugins(MinimalPlugins);
         app.insert_resource(ProfileSavePath(save_path.clone()));
         app.add_plugins(IdleDungeonsPlugin);
-        app.world_mut().send_event(StartRun { seed: 1 });
+        app.world_mut().write_message(StartRun { seed: 1 });
         app.update();
-        app.world_mut().send_event(SkipRunPlayback);
+        app.world_mut().write_message(SkipRunPlayback);
         app.update();
 
         let summary = app.world().resource::<LatestRunSummary>().summary.clone();
-        app.world_mut().send_event(AcceptRunRewards);
+        app.world_mut().write_message(AcceptRunRewards);
         app.update();
-        app.world_mut().send_event(AcceptRunRewards);
+        app.world_mut().write_message(AcceptRunRewards);
         app.update();
 
         let profile = app.world().resource::<ProfileState>();
@@ -458,7 +458,7 @@ mod tests {
             .push(item.clone());
 
         app.world_mut()
-            .send_event(EquipInventoryItem { item_id: item.id });
+            .write_message(EquipInventoryItem { item_id: item.id });
         app.update();
 
         let profile = app.world().resource::<ProfileState>();
@@ -490,7 +490,7 @@ mod tests {
             .push(item.clone());
 
         app.world_mut()
-            .send_event(SalvageInventoryItem { item_id: item.id });
+            .write_message(SalvageInventoryItem { item_id: item.id });
         app.update();
 
         let profile = app.world().resource::<ProfileState>();
@@ -511,7 +511,7 @@ mod tests {
         app.add_plugins(IdleDungeonsPlugin);
         app.update();
 
-        app.world_mut().send_event(AssignHeroSkill {
+        app.world_mut().write_message(AssignHeroSkill {
             slot: 0,
             skill: Some(crate::domain::skills::SkillId::Guard),
             kind: PartyHeroKind::Lead,

@@ -15,23 +15,21 @@ use crate::ui::placeholder_graphics::UiPlaceholderImages;
 use crate::ui::theme::{caption_text, headline_text, section_title, UiTheme};
 
 pub fn spawn_skill_book_modal(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands<'_>,
     target_slot: usize,
     sheet: PartyHeroKind,
     ph: &UiPlaceholderImages,
 ) {
     parent
         .spawn((
-            NodeBundle {
-                style: Style {
-                    width: Val::Percent(100.0),
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                     height: Val::Percent(100.0),
                     position_type: PositionType::Absolute,
                     left: Val::Px(0.0),
                     top: Val::Px(0.0),
                     ..default()
-                },
-                ..default()
             },
             SkillBookRoot,
         ))
@@ -46,27 +44,27 @@ pub fn spawn_skill_book_modal(
                 pressed_border: Color::NONE,
             };
             layer.spawn((
-                ButtonBundle {
-                    style: Style {
-                        position_type: PositionType::Absolute,
+                Node {
+                box_sizing: BoxSizing::BorderBox,
+                position_type: PositionType::Absolute,
                         width: Val::Percent(100.0),
                         height: Val::Percent(100.0),
                         left: Val::Px(0.0),
                         top: Val::Px(0.0),
                         ..default()
-                    },
-                    background_color: backdrop_pal.idle_bg.into(),
-                    border_color: BorderColor(backdrop_pal.idle_border),
-                    ..default()
-                },
+            },
+            Button,
+            BackgroundColor(backdrop_pal.idle_bg.into()),
+            BorderColor::from(backdrop_pal.idle_border),
                 SkillBookBackdrop,
                 backdrop_pal,
                 UiTooltip::txt("Click outside to close the skill book."),
             ));
             layer
-                .spawn(NodeBundle {
-                    style: Style {
-                        position_type: PositionType::Absolute,
+                .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                position_type: PositionType::Absolute,
                         left: Val::Percent(50.0),
                         top: Val::Percent(45.0),
                         margin: UiRect {
@@ -83,11 +81,10 @@ pub fn spawn_skill_book_modal(
                         row_gap: Val::Px(UiTheme::PANEL_INSET),
                         border: UiRect::all(Val::Px(2.0)),
                         ..default()
-                    },
-                    background_color: UiTheme::panel_bg_deep().into(),
-                    border_color: BorderColor(UiTheme::ornate_gold()),
-                    ..default()
-                })
+            },
+            BackgroundColor(UiTheme::panel_bg_deep().into()),
+            BorderColor::from(UiTheme::ornate_gold())
+        ))
                 .with_children(|dialog| {
                     let who = match sheet {
                         PartyHeroKind::Lead => "Lead",
@@ -103,9 +100,9 @@ pub fn spawn_skill_book_modal(
                     dialog.spawn(section_title("LIBRARY"));
                     dialog
                         .spawn((
-                            NodeBundle {
-                                style: Style {
-                                    width: Val::Percent(100.0),
+                            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                                     height: Val::Px(340.0),
                                     flex_shrink: 0.0,
                                     position_type: PositionType::Relative,
@@ -113,12 +110,10 @@ pub fn spawn_skill_book_modal(
                                     overflow: Overflow::clip_y(),
                                     border: UiRect::all(Val::Px(1.0)),
                                     ..default()
-                                },
-                                background_color: UiTheme::panel_bg().into(),
-                                border_color: BorderColor(UiTheme::panel_border_inner()),
-                                focus_policy: FocusPolicy::Pass,
-                                ..default()
-                            },
+            },
+            BackgroundColor(UiTheme::panel_bg().into()),
+            BorderColor::from(UiTheme::panel_border_inner()),
+            FocusPolicy::Pass,
                             RelativeCursorPosition::default(),
                             UiScrollState::default(),
                             UiScrollRegion,
@@ -126,9 +121,9 @@ pub fn spawn_skill_book_modal(
                         .with_children(|viewport| {
                             viewport
                                 .spawn((
-                                    NodeBundle {
-                                        style: Style {
-                                            position_type: PositionType::Absolute,
+                                    Node {
+                box_sizing: BoxSizing::BorderBox,
+                position_type: PositionType::Absolute,
                                             left: Val::Px(0.0),
                                             right: Val::Px(0.0),
                                             top: Val::Px(0.0),
@@ -137,9 +132,7 @@ pub fn spawn_skill_book_modal(
                                             align_items: AlignItems::Stretch,
                                             row_gap: Val::Px(6.0),
                                             ..default()
-                                        },
-                                        ..default()
-                                    },
+            },
                                     UiScrollContent,
                                 ))
                                 .with_children(|inner| {
@@ -180,32 +173,28 @@ pub fn spawn_skill_book_modal(
                     let close_pal = UiButtonPalette::panel_outlined();
                     dialog
                         .spawn((
-                            ButtonBundle {
-                                style: Style {
-                                    width: Val::Percent(100.0),
+                            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                                     min_height: Val::Px(40.0),
                                     justify_content: JustifyContent::Center,
                                     align_items: AlignItems::Center,
                                     border: UiRect::all(Val::Px(1.0)),
                                     ..default()
-                                },
-                                background_color: close_pal.idle_bg.into(),
-                                border_color: BorderColor(close_pal.idle_border),
-                                ..default()
-                            },
+            },
+            Button,
+            BackgroundColor(close_pal.idle_bg.into()),
+            BorderColor::from(close_pal.idle_border),
                             SkillBookCloseButton,
                             close_pal,
                             UiTooltip::txt("Close without changing the slot."),
                         ))
                         .with_children(|b| {
-                            b.spawn(TextBundle::from_section(
-                                "Close",
-                                TextStyle {
-                                    font_size: UiTheme::FONT_BODY,
-                                    color: UiTheme::muted_cream(),
-                                    ..default()
-                                },
-                            ));
+                            b.spawn((
+                Text::new("Close"),
+                TextFont::from_font_size(UiTheme::FONT_BODY),
+                TextColor(UiTheme::muted_cream()),
+            ));
                         });
                 });
         });
@@ -222,7 +211,7 @@ fn pick_row_icon(ph: &UiPlaceholderImages, skill: Option<SkillId>) -> Handle<Ima
 }
 
 fn spawn_pick_row(
-    inner: &mut ChildBuilder,
+    inner: &mut ChildSpawnerCommands<'_>,
     ph: &UiPlaceholderImages,
     target_slot: usize,
     sheet: PartyHeroKind,
@@ -233,20 +222,19 @@ fn spawn_pick_row(
     let p = UiButtonPalette::panel_outlined();
     inner
         .spawn((
-            ButtonBundle {
-                style: Style {
-                    width: Val::Percent(100.0),
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                     min_height: Val::Px(44.0),
                     justify_content: JustifyContent::FlexStart,
                     align_items: AlignItems::Center,
                     padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)),
                     border: UiRect::all(Val::Px(1.0)),
                     ..default()
-                },
-                background_color: p.idle_bg.into(),
-                border_color: BorderColor(p.idle_border),
-                ..default()
             },
+            Button,
+            BackgroundColor(p.idle_bg.into()),
+            BorderColor::from(p.idle_border),
             SkillBookPickButton {
                 slot: target_slot,
                 skill,
@@ -256,36 +244,36 @@ fn spawn_pick_row(
             UiTooltip::txt(tip.to_string()),
         ))
         .with_children(|b| {
-            b.spawn(NodeBundle {
-                style: Style {
-                    width: Val::Percent(100.0),
+            b.spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
                     flex_direction: FlexDirection::Row,
                     column_gap: Val::Px(10.0),
                     align_items: AlignItems::Center,
                     ..default()
-                },
-                ..default()
-            })
+            }
+        ))
             .with_children(|row| {
-                row.spawn(ImageBundle {
-                    style: Style {
+                row.spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
                         width: Val::Px(22.0),
                         height: Val::Px(22.0),
                         flex_shrink: 0.0,
                         ..default()
                     },
-                    image: UiImage::new(pick_row_icon(ph, skill)),
-                    background_color: Color::NONE.into(),
-                    ..default()
-                });
-                row.spawn(TextBundle::from_section(
-                    label,
-                    TextStyle {
-                        font_size: UiTheme::FONT_COMPACT,
-                        color: UiTheme::body(),
+                    ImageNode {
+                        image: pick_row_icon(ph, skill),
+                        color: Color::WHITE,
                         ..default()
                     },
                 ));
+                row.spawn((
+                Text::new(label),
+                TextFont::from_font_size(UiTheme::FONT_COMPACT),
+                TextColor(UiTheme::body()),
+            ));
             });
         });
 }
