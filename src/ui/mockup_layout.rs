@@ -4,9 +4,11 @@ use bevy::prelude::*;
 use bevy::ui::{FocusPolicy, RelativeCursorPosition};
 
 use crate::domain::dungeon::RoomKind;
+use crate::domain::items::GearSlot;
 use crate::domain::progression::MetaProgression;
 use crate::domain::progression::UpgradeId;
 use crate::domain::run::{RunOutcome, RunSummary, DEFAULT_RUN_MAX_DEPTH, DEFAULT_RUN_SEED};
+use crate::domain::skills::{skill_definition, SkillKind};
 use crate::save::StashSortOrder;
 use crate::ui::components::{
     AcceptRewardsButton, BuyUpgradeButton, PlaybackCaptionText, PlaybackDepthText,
@@ -18,9 +20,10 @@ use crate::ui::components::{
     StashSortCycleButton, TopBarField, UiButtonPalette, UiScrollContent, UiScrollRegion,
     UiScrollState, UiTooltip,
 };
+use crate::ui::placeholder_graphics::UiPlaceholderImages;
 use crate::ui::theme::{
-    body_text, caption_text, format_item_stat_summary, headline_text, log_line_present,
-    playback_debuff_text_bundle, rarity_color, section_title, UiTheme,
+    body_text, caption_text, format_item_affix_lines, format_item_stat_summary, headline_text,
+    log_line_present, playback_debuff_text_bundle, rarity_color, section_title, UiTheme,
 };
 use crate::ui::widgets::spawn_scrollable_log;
 
@@ -345,6 +348,7 @@ pub fn spawn_settings_modal(parent: &mut ChildBuilder, speed_mult: f32) {
 
 pub fn spawn_mockup_header(
     parent: &mut ChildBuilder,
+    ph: &UiPlaceholderImages,
     gold: u32,
     salvage: u32,
     skill_slots: usize,
@@ -394,6 +398,7 @@ pub fn spawn_mockup_header(
             .with_children(|center| {
                 resource_chip(
                     center,
+                    Some(ph.gold_coin.clone()),
                     "\u{2694}",
                     "Gold",
                     TopBarField::Gold,
@@ -402,6 +407,7 @@ pub fn spawn_mockup_header(
                 );
                 resource_chip(
                     center,
+                    Some(ph.salvage_shard.clone()),
                     "*",
                     "Salvage",
                     TopBarField::Salvage,
@@ -410,6 +416,7 @@ pub fn spawn_mockup_header(
                 );
                 resource_chip(
                     center,
+                    Some(ph.stat_chip.clone()),
                     "\u{2726}",
                     "Skills",
                     TopBarField::SkillSlots,
@@ -418,6 +425,7 @@ pub fn spawn_mockup_header(
                 );
                 resource_chip(
                     center,
+                    Some(ph.stat_chip.clone()),
                     "\u{2022}",
                     "Depth",
                     TopBarField::Depth,
@@ -426,6 +434,7 @@ pub fn spawn_mockup_header(
                 );
                 resource_chip(
                     center,
+                    Some(ph.stat_chip.clone()),
                     "\u{21BB}",
                     "Speed",
                     TopBarField::Speed,
@@ -491,7 +500,8 @@ pub(crate) fn fmt_speed_label(mult: f32) -> String {
 
 fn resource_chip(
     parent: &mut ChildBuilder,
-    icon: &'static str,
+    icon_tex: Option<Handle<Image>>,
+    icon_fallback: &'static str,
     label: &'static str,
     field: TopBarField,
     value: String,
@@ -512,14 +522,48 @@ fn resource_chip(
             UiTooltip::txt(tooltip),
         ))
         .with_children(|col| {
-            col.spawn(TextBundle::from_section(
-                format!("{icon} {label}"),
-                TextStyle {
-                    font_size: UiTheme::FONT_MICRO,
-                    color: UiTheme::body_dim(),
+            col.spawn(NodeBundle {
+                style: Style {
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    column_gap: Val::Px(5.0),
                     ..default()
                 },
-            ));
+                ..default()
+            })
+            .with_children(|hdr| {
+                if let Some(h) = icon_tex {
+                    hdr.spawn(ImageBundle {
+                        style: Style {
+                            width: Val::Px(18.0),
+                            height: Val::Px(18.0),
+                            flex_shrink: 0.0,
+                            ..default()
+                        },
+                        image: UiImage::new(h),
+                        background_color: Color::NONE.into(),
+                        ..default()
+                    });
+                } else {
+                    hdr.spawn(TextBundle::from_section(
+                        icon_fallback,
+                        TextStyle {
+                            font_size: UiTheme::FONT_MICRO,
+                            color: UiTheme::body_dim(),
+                            ..default()
+                        },
+                    ));
+                }
+                hdr.spawn(TextBundle::from_section(
+                    label,
+                    TextStyle {
+                        font_size: UiTheme::FONT_MICRO,
+                        color: UiTheme::body_dim(),
+                        ..default()
+                    },
+                ));
+            });
             col.spawn((
                 TextBundle::from_section(
                     value,
@@ -587,6 +631,7 @@ fn panel_title_centered(text: impl Into<String>) -> TextBundle {
 
 pub fn spawn_hero_column_mockup(
     parent: &mut ChildBuilder,
+    ph: &UiPlaceholderImages,
     hero: &crate::domain::hero::HeroProfile,
     loadout_lines: &[String],
     skill_slots_interactive: bool,
@@ -608,9 +653,9 @@ pub fn spawn_hero_column_mockup(
             }
             body.spawn(section_title("Skills"));
             if skill_slots_interactive {
-                body.spawn(caption_text("Click a slot to cycle skills."));
+                body.spawn(caption_text("Click a slot to open the skill book."));
             }
-            skill_slot_row(body, hero, skill_slots_interactive);
+            skill_slot_row(body, ph, hero, skill_slots_interactive);
         });
     };
     inner(parent);
@@ -649,8 +694,30 @@ fn stat_line_row(parent: &mut ChildBuilder, label: &str, value: impl std::fmt::D
         });
 }
 
+fn skill_slot_placeholder_handle(
+    hero: &crate::domain::hero::HeroProfile,
+    slot: usize,
+    unlocked: bool,
+    ph: &UiPlaceholderImages,
+) -> Handle<Image> {
+    if !unlocked {
+        return ph.skill_locked.clone();
+    }
+    match hero.equipped_skills.get(slot).copied().flatten() {
+        None => ph.skill_empty.clone(),
+        Some(id) => {
+            if skill_definition(id).kind == SkillKind::Passive {
+                ph.skill_passive.clone()
+            } else {
+                ph.skill_active.clone()
+            }
+        }
+    }
+}
+
 fn skill_slot_row(
     parent: &mut ChildBuilder,
+    ph: &UiPlaceholderImages,
     hero: &crate::domain::hero::HeroProfile,
     skill_slots_interactive: bool,
 ) {
@@ -673,14 +740,14 @@ fn skill_slot_row(
                         .equipped_skills
                         .get(i)
                         .and_then(|s| *s)
-                        .map(|sk| crate::domain::skills::skill_definition(sk).name.to_string())
+                        .map(|sk| skill_definition(sk).name.to_string())
                         .unwrap_or_else(|| format!("Slot {}", i + 1));
                     let tip = hero
                         .equipped_skills
                         .get(i)
                         .and_then(|s| *s)
                         .map(|sk| {
-                            let d = crate::domain::skills::skill_definition(sk);
+                            let d = skill_definition(sk);
                             format!("{}\n{}", d.name, d.description)
                         })
                         .unwrap_or_else(|| {
@@ -688,16 +755,16 @@ fn skill_slot_row(
                                 .to_string()
                         });
                     let p = UiButtonPalette::skill_slot_chip();
+                    let icon = skill_slot_placeholder_handle(hero, i, true, ph);
                     row.spawn((
                         ButtonBundle {
                             style: Style {
-                                width: Val::Px(100.0),
+                                min_width: Val::Px(118.0),
                                 min_height: Val::Px(48.0),
                                 justify_content: JustifyContent::Center,
                                 align_items: AlignItems::Center,
                                 padding: UiRect::horizontal(Val::Px(4.0)),
                                 border: UiRect::all(Val::Px(1.0)),
-                                flex_wrap: FlexWrap::Wrap,
                                 ..default()
                             },
                             background_color: p.idle_bg.into(),
@@ -709,34 +776,42 @@ fn skill_slot_row(
                         UiTooltip::txt(tip),
                     ))
                     .with_children(|s| {
-                        s.spawn(TextBundle::from_section(
-                            label,
-                            TextStyle {
-                                font_size: UiTheme::FONT_LABEL,
-                                color: UiTheme::body(),
+                        s.spawn(NodeBundle {
+                            style: Style {
+                                width: Val::Percent(100.0),
+                                height: Val::Px(44.0),
+                                flex_direction: FlexDirection::Row,
+                                align_items: AlignItems::Center,
+                                column_gap: Val::Px(6.0),
                                 ..default()
                             },
-                        ));
+                            ..default()
+                        })
+                        .with_children(|inner| {
+                            inner.spawn(ImageBundle {
+                                style: Style {
+                                    width: Val::Px(22.0),
+                                    height: Val::Px(22.0),
+                                    flex_shrink: 0.0,
+                                    ..default()
+                                },
+                                image: UiImage::new(icon),
+                                background_color: Color::NONE.into(),
+                                ..default()
+                            });
+                            inner.spawn(TextBundle::from_section(
+                                label,
+                                TextStyle {
+                                    font_size: UiTheme::FONT_LABEL,
+                                    color: UiTheme::body(),
+                                    ..default()
+                                },
+                            ));
+                        });
                     });
                     continue;
                 }
 
-                let label = if unlocked {
-                    hero.equipped_skills
-                        .get(i)
-                        .and_then(|s| *s)
-                        .map(|sk| {
-                            crate::domain::skills::skill_definition(sk)
-                                .name
-                                .chars()
-                                .next()
-                                .unwrap_or('#')
-                                .to_string()
-                        })
-                        .unwrap_or_else(|| (i + 1).to_string())
-                } else {
-                    "\u{1F512}".to_string()
-                };
                 let idle_tip = if !unlocked {
                     "Locked skill slot. Gain delve progress milestones to unlock up to six slots."
                         .to_string()
@@ -745,11 +820,12 @@ fn skill_slot_row(
                         .get(i)
                         .and_then(|s| *s)
                         .map(|sk| {
-                            let d = crate::domain::skills::skill_definition(sk);
+                            let d = skill_definition(sk);
                             format!("{}\n{}", d.name, d.description)
                         })
                         .unwrap_or_else(|| "Empty skill slot.".to_string())
                 };
+                let icon = skill_slot_placeholder_handle(hero, i, unlocked, ph);
                 row.spawn((
                     NodeBundle {
                         style: Style {
@@ -776,28 +852,27 @@ fn skill_slot_row(
                     UiTooltip::txt(idle_tip),
                 ))
                 .with_children(|s| {
-                    s.spawn(TextBundle::from_section(
-                        label,
-                        TextStyle {
-                            font_size: if unlocked {
-                                UiTheme::FONT_SKILL_ACTIVE
-                            } else {
-                                UiTheme::FONT_SKILL_DIM
-                            },
-                            color: if unlocked {
-                                UiTheme::body()
-                            } else {
-                                UiTheme::body_dim()
-                            },
+                    s.spawn(ImageBundle {
+                        style: Style {
+                            width: Val::Px(36.0),
+                            height: Val::Px(36.0),
+                            flex_shrink: 0.0,
                             ..default()
                         },
-                    ));
+                        image: UiImage::new(icon),
+                        background_color: Color::NONE.into(),
+                        ..default()
+                    });
                 });
             }
         });
 }
 
-pub fn mockup_gear_cards(parent: &mut ChildBuilder, profile: &crate::app::ProfileState) {
+pub fn mockup_gear_cards(
+    parent: &mut ChildBuilder,
+    profile: &crate::app::ProfileState,
+    ph: &UiPlaceholderImages,
+) {
     for (label, slot) in [
         ("Weapon", crate::domain::items::GearSlot::Weapon),
         ("Armor", crate::domain::items::GearSlot::Armor),
@@ -805,12 +880,23 @@ pub fn mockup_gear_cards(parent: &mut ChildBuilder, profile: &crate::app::Profil
     ] {
         let item = profile.profile.hero.equipped_item(slot);
         let tip = if let Some(item) = item {
-            format!(
-                "{}\n{:?}\n{}",
-                item.name,
-                item.rarity,
-                format_item_stat_summary(item)
-            )
+            let aff = format_item_affix_lines(item);
+            if aff.is_empty() {
+                format!(
+                    "{}\n{:?}\n{}",
+                    item.name,
+                    item.rarity,
+                    format_item_stat_summary(item)
+                )
+            } else {
+                format!(
+                    "{}\n{:?}\n{}\n{}",
+                    item.name,
+                    item.rarity,
+                    format_item_stat_summary(item),
+                    aff
+                )
+            }
         } else {
             format!(
                 "No {label} equipped yet. Loot gear on runs and equip it from the Inventory tab."
@@ -850,15 +936,23 @@ pub fn mockup_gear_cards(parent: &mut ChildBuilder, profile: &crate::app::Profil
                     border_color: BorderColor(UiTheme::panel_border_inner()),
                     ..default()
                 })
-                .with_children(|ph| {
-                    ph.spawn(TextBundle::from_section(
-                        "\u{2694}",
-                        TextStyle {
-                            font_size: UiTheme::FONT_TITLE,
-                            color: UiTheme::body_dim(),
+                .with_children(|icon_cell| {
+                    let tint = match slot {
+                        GearSlot::Weapon => Color::srgb(1.0, 0.72, 0.45),
+                        GearSlot::Armor => Color::srgb(0.72, 0.82, 0.95),
+                        GearSlot::Trinket => Color::srgb(0.85, 0.68, 1.0),
+                    };
+                    icon_cell.spawn(ImageBundle {
+                        style: Style {
+                            width: Val::Px(44.0),
+                            height: Val::Px(44.0),
+                            flex_shrink: 0.0,
                             ..default()
                         },
-                    ));
+                        image: UiImage::new(ph.item_generic.clone()).with_color(tint),
+                        background_color: Color::NONE.into(),
+                        ..default()
+                    });
                 });
                 card.spawn(NodeBundle {
                     style: Style {
@@ -882,6 +976,10 @@ pub fn mockup_gear_cards(parent: &mut ChildBuilder, profile: &crate::app::Profil
                             },
                         ));
                         txt.spawn(caption_text(format_item_stat_summary(item)));
+                        let aff = format_item_affix_lines(item);
+                        if !aff.is_empty() {
+                            txt.spawn(caption_text(aff));
+                        }
                     } else {
                         txt.spawn(body_text("Empty slot"));
                     }
@@ -1412,6 +1510,7 @@ fn spawn_stash_filters_and_sort_row(parent: &mut ChildBuilder, stash_sort: Stash
 
 pub fn spawn_right_management_column(
     parent: &mut ChildBuilder,
+    ph: &UiPlaceholderImages,
     tab: RightPanelTab,
     meta: &MetaProgression,
     profile: &crate::app::ProfileState,
@@ -1470,7 +1569,7 @@ pub fn spawn_right_management_column(
             spawn_stash_filters_and_sort_row(col, stash_sort);
             if matches!(tab, RightPanelTab::Inventory | RightPanelTab::Loot) {
                 col.spawn(section_title("EQUIPMENT"));
-                mockup_gear_cards(col, profile);
+                mockup_gear_cards(col, profile, ph);
             }
             spawn_right_scroll_body(
                 col,
@@ -1480,6 +1579,7 @@ pub fn spawn_right_management_column(
                 summary_loot,
                 interactive_inventory,
                 stash_sort,
+                ph,
             );
         });
 }
@@ -1537,6 +1637,7 @@ fn spawn_right_scroll_body(
     summary_loot: Option<&[crate::domain::items::ItemInstance]>,
     interactive_inventory: bool,
     stash_sort: StashSortOrder,
+    ph: &UiPlaceholderImages,
 ) {
     parent
         .spawn((
@@ -1583,7 +1684,7 @@ fn spawn_right_scroll_body(
                         for &i in ix.iter().take(14) {
                             let item = &inventory[i];
                             if interactive_inventory {
-                                super::spawn_item_card(body, item);
+                                super::spawn_item_card(body, item, ph);
                             } else {
                                 body.spawn(caption_text(format!(
                                     "\u{2022} {} ({:?})",

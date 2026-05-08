@@ -153,6 +153,8 @@ pub fn rarity_color(rarity: crate::domain::items::ItemRarity) -> Color {
         ItemRarity::Common => UiTheme::body(),
         ItemRarity::Uncommon => Color::srgb(0.48, 0.62, 0.52),
         ItemRarity::Rare => Color::srgb(0.5, 0.55, 0.78),
+        ItemRarity::Epic => Color::srgb(0.65, 0.42, 0.78),
+        ItemRarity::Legendary => Color::srgb(0.92, 0.72, 0.38),
     }
 }
 
@@ -303,6 +305,7 @@ pub fn caption_text(text: impl Into<String>) -> TextBundle {
     )
 }
 
+/// Combined stat total from base item + [`crate::domain::items::ItemInstance::affix_stats`].
 pub fn format_item_stat_summary(item: &crate::domain::items::ItemInstance) -> String {
     let s = item.stats + item.affix_stats();
     let mut parts = Vec::new();
@@ -321,18 +324,21 @@ pub fn format_item_stat_summary(item: &crate::domain::items::ItemInstance) -> St
     if s.attack_speed != 0.0 {
         parts.push(format!("ATK SPD {:+}", s.attack_speed));
     }
-    if !item.affixes.is_empty() {
-        parts.push(
-            item.affixes
-                .iter()
-                .map(|a| format!("{a:?}"))
-                .collect::<Vec<_>>()
-                .join(", "),
-        );
-    }
     if parts.is_empty() {
         "No stat modifiers.".to_string()
     } else {
         parts.join(" · ")
     }
+}
+
+/// One bullet per affix with gameplay wording (see [`ItemAffix::effect_description`]).
+pub fn format_item_affix_lines(item: &crate::domain::items::ItemInstance) -> String {
+    if item.affixes.is_empty() {
+        return String::new();
+    }
+    item.affixes
+        .iter()
+        .map(|a| format!("• {}", a.effect_description()))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
