@@ -244,16 +244,14 @@ fn spawn_pick_row(
             UiTooltip::txt(tip.to_string()),
         ))
         .with_children(|b| {
-            b.spawn((
-            Node {
+            b.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                     flex_direction: FlexDirection::Row,
                     column_gap: Val::Px(10.0),
                     align_items: AlignItems::Center,
                     ..default()
-            }
-        ))
+            })
             .with_children(|row| {
                 row.spawn((
                     Node {

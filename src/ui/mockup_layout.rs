@@ -354,8 +354,7 @@ pub fn spawn_mockup_header(
                 TextFont::from_font_size(UiTheme::FONT_HEADLINE),
                 TextColor(UiTheme::muted_gold()),
             ));
-            row.spawn((
-            Node {
+            row.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_grow: 1.0,
                     flex_direction: FlexDirection::Row,
@@ -365,8 +364,7 @@ pub fn spawn_mockup_header(
                     column_gap: Val::Px(24.0),
                     row_gap: Val::Px(4.0),
                     ..default()
-            }
-        ))
+            })
             .with_children(|center| {
                 resource_chip(
                     center,
@@ -414,15 +412,13 @@ pub fn spawn_mockup_header(
                     "How fast delve playback runs. Also applies to some future real-time combat.",
                 );
             });
-            row.spawn((
-            Node {
+            row.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
                     column_gap: Val::Px(8.0),
                     ..default()
-            }
-        ))
+            })
             .with_children(|btn_row| {
                 let p = UiButtonPalette::panel_outlined();
                 btn_row
@@ -520,16 +516,14 @@ fn resource_chip(
             UiTooltip::txt(tooltip),
         ))
         .with_children(|col| {
-            col.spawn((
-            Node {
+            col.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::Center,
                     column_gap: Val::Px(5.0),
                     ..default()
-            }
-        ))
+            })
             .with_children(|hdr| {
                 if let Some(h) = icon_tex {
                     hdr.spawn((
@@ -570,8 +564,7 @@ fn resource_chip(
 
 pub fn spawn_three_column_row(parent: &mut ChildSpawnerCommands<'_>, f: impl FnOnce(&mut ChildSpawnerCommands<'_>)) {
     parent
-        .spawn((
-            Node {
+        .spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 flex_grow: 1.0,
@@ -581,8 +574,7 @@ pub fn spawn_three_column_row(parent: &mut ChildSpawnerCommands<'_>, f: impl FnO
                 column_gap: Val::Px(10.0),
                 align_items: AlignItems::Stretch,
                 ..default()
-            }
-        ))
+            })
         .with_children(f);
 }
 
@@ -592,8 +584,7 @@ pub fn spawn_ornate_column(
     inner: impl FnOnce(&mut ChildSpawnerCommands<'_>),
 ) {
     parent
-        .spawn((
-            Node {
+        .spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_grow: flex,
                 flex_basis: Val::Px(0.0),
@@ -602,8 +593,7 @@ pub fn spawn_ornate_column(
                 flex_direction: FlexDirection::Column,
                 overflow: Overflow::clip_y(),
                 ..default()
-            }
-        ))
+            })
         .with_children(ornate_shell(inner));
 }
 
@@ -618,8 +608,7 @@ fn panel_title_centered(text: impl Into<String>) -> impl Bundle {
 
 fn spawn_hero_name_row(parent: &mut ChildSpawnerCommands<'_>, slot: u8, allow_rename: bool) {
     parent
-        .spawn((
-            Node {
+        .spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 flex_direction: FlexDirection::Row,
@@ -628,8 +617,7 @@ fn spawn_hero_name_row(parent: &mut ChildSpawnerCommands<'_>, slot: u8, allow_re
                 column_gap: Val::Px(8.0),
                 padding: UiRect::vertical(Val::Px(2.0)),
                 ..default()
-            }
-        ))
+            })
         .with_children(|r| {
             r.spawn((
                 Text::new(""),
@@ -750,8 +738,7 @@ pub fn spawn_hero_column_mockup(
 
 fn stat_line_row(parent: &mut ChildSpawnerCommands<'_>, label: &str, value: impl std::fmt::Display) {
     parent
-        .spawn((
-            Node {
+        .spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 flex_direction: FlexDirection::Row,
@@ -759,8 +746,7 @@ fn stat_line_row(parent: &mut ChildSpawnerCommands<'_>, label: &str, value: impl
                 align_items: AlignItems::Center,
                 padding: UiRect::vertical(Val::Px(2.0)),
                 ..default()
-            }
-        ))
+            })
         .with_children(|r| {
             r.spawn((
                 Text::new(format!("\u{25C8} {label}")),
@@ -804,15 +790,13 @@ fn skill_slot_row(
     sheet: PartyHeroKind,
 ) {
     parent
-        .spawn((
-            Node {
+        .spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                 column_gap: Val::Px(8.0),
                 flex_wrap: FlexWrap::Wrap,
                 ..default()
-            }
-        ))
+            })
         .with_children(|row| {
             let cap = hero.equipped_skills.len().max(6);
             for i in 0..cap {
@@ -857,8 +841,7 @@ fn skill_slot_row(
                         UiTooltip::txt(tip),
                     ))
                     .with_children(|s| {
-                        s.spawn((
-            Node {
+                        s.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                                 height: Val::Px(44.0),
@@ -866,8 +849,7 @@ fn skill_slot_row(
                                 align_items: AlignItems::Center,
                                 column_gap: Val::Px(6.0),
                                 ..default()
-            }
-        ))
+            })
                         .with_children(|inner| {
                             inner.spawn((
                                 Node {
@@ -1037,16 +1019,14 @@ pub fn mockup_gear_cards(
                         },
                     ));
                 });
-                card.spawn((
-            Node {
+                card.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Column,
                         flex_grow: 1.0,
                         align_items: AlignItems::FlexStart,
                         row_gap: Val::Px(2.0),
                         ..default()
-            }
-        ))
+            })
                 .with_children(|txt| {
                     txt.spawn(caption_text(label.to_string()));
                     if let Some(item) = item {
@@ -1293,19 +1273,16 @@ fn spawn_playback_enemy_plate(parent: &mut ChildSpawnerCommands<'_>) {
 fn spawn_playback_damage_meters_block(parent: &mut ChildSpawnerCommands<'_>) {
     parent.spawn(section_title("DAMAGE (THIS ENCOUNTER)"));
     parent
-        .spawn((
-            Node {
+        .spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(3.0),
                 margin: UiRect::bottom(Val::Px(10.0)),
                 ..default()
-            }
-        ))
+            })
         .with_children(|col| {
-            col.spawn((
-            Node {
+            col.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                     flex_direction: FlexDirection::Row,
@@ -1313,16 +1290,13 @@ fn spawn_playback_damage_meters_block(parent: &mut ChildSpawnerCommands<'_>) {
                     column_gap: Val::Px(10.0),
                     margin: UiRect::bottom(Val::Px(2.0)),
                     ..default()
-            }
-        ))
+            })
             .with_children(|r| {
-                r.spawn((
-            Node {
+                r.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 min_width: Val::Px(56.0),
                         ..default()
-            }
-        ))
+            })
                 .with_children(|n| {
                     n.spawn(caption_text("Hero"));
                 });
@@ -1371,13 +1345,11 @@ fn spawn_playback_damage_meters_block(parent: &mut ChildSpawnerCommands<'_>) {
                 PlaybackDmgMeterPartnerRow,
             ))
             .with_children(|r| {
-                r.spawn((
-            Node {
+                r.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 min_width: Val::Px(56.0),
                         ..default()
-            }
-        ))
+            })
                 .with_children(|n| {
                     n.spawn(caption_text("Ally"));
                 });
@@ -1413,24 +1385,20 @@ fn spawn_playback_damage_meters_block(parent: &mut ChildSpawnerCommands<'_>) {
                 ));
             });
 
-            col.spawn((
-            Node {
+            col.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                     flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
                     column_gap: Val::Px(10.0),
                     ..default()
-            }
-        ))
+            })
             .with_children(|r| {
-                r.spawn((
-            Node {
+                r.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 min_width: Val::Px(56.0),
                         ..default()
-            }
-        ))
+            })
                 .with_children(|n| {
                     n.spawn(caption_text("Foe"));
                 });
@@ -1473,8 +1441,7 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildSpawnerCommands<'_>, p
     let ph = ph.clone();
     let inner = move |p: &mut ChildSpawnerCommands<'_>| {
         p.spawn(panel_title_centered("LIVE DELVE"));
-        p.spawn((
-            Node {
+        p.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                 justify_content: JustifyContent::SpaceBetween,
@@ -1483,19 +1450,16 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildSpawnerCommands<'_>, p
                 flex_wrap: FlexWrap::Wrap,
                 column_gap: Val::Px(8.0),
                 ..default()
-            }
-        ))
+            })
         .with_children(|r| {
-            r.spawn((
-            Node {
+            r.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                     column_gap: Val::Px(12.0),
                     flex_wrap: FlexWrap::Wrap,
                     align_items: AlignItems::Center,
                     ..default()
-            }
-        ))
+            })
             .with_children(|meta| {
                 meta.spawn((caption_text("Depth: —"), PlaybackDepthText));
                 meta.spawn((caption_text("Type: —"), PlaybackRoomKindText));
@@ -1530,8 +1494,7 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildSpawnerCommands<'_>, p
             });
         });
 
-        p.spawn((
-            Node {
+        p.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
                 min_height: Val::Px(240.0),
@@ -1540,8 +1503,7 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildSpawnerCommands<'_>, p
                 position_type: PositionType::Relative,
                 margin: UiRect::vertical(Val::Px(8.0)),
                 ..default()
-            }
-        ))
+            })
         .with_children(|theater| {
             theater.spawn((
                 Node {
@@ -1560,8 +1522,7 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildSpawnerCommands<'_>, p
                 },
             ));
             theater
-                .spawn((
-            Node {
+                .spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 position_type: PositionType::Absolute,
                         left: Val::Px(0.0),
@@ -1574,25 +1535,21 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildSpawnerCommands<'_>, p
                         column_gap: Val::Px(10.0),
                         padding: UiRect::axes(Val::Px(6.0), Val::Px(4.0)),
                         ..default()
-            }
-        ))
+            })
                 .with_children(|row| {
-                    row.spawn((
-            Node {
+                    row.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Column,
                             row_gap: Val::Px(12.0),
                             align_items: AlignItems::FlexStart,
                             flex_shrink: 0.0,
                             ..default()
-            }
-        ))
+            })
                     .with_children(|left| {
                         spawn_playback_hero_plate_lead(left);
                         spawn_playback_hero_plate_ally(left);
                     });
-                    row.spawn((
-            Node {
+                    row.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Column,
                             flex_grow: 1.0,
@@ -1601,20 +1558,17 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildSpawnerCommands<'_>, p
                             row_gap: Val::Px(6.0),
                             padding: UiRect::all(Val::Px(4.0)),
                             ..default()
-            }
-        ))
+            })
                     .with_children(|mid| {
                         mid.spawn(section_title("NOW"));
                         mid.spawn((body_text("…"), PlaybackCaptionText));
                     });
-                    row.spawn((
-            Node {
+                    row.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Column,
                             flex_shrink: 0.0,
                             ..default()
-            }
-        ))
+            })
                     .with_children(|right| {
                         spawn_playback_enemy_plate(right);
                     });
@@ -1682,30 +1636,26 @@ pub fn spawn_dungeon_briefing_column(
 ) {
     let inner = move |p: &mut ChildSpawnerCommands<'_>| {
         p.spawn(panel_title_centered("DUNGEON RUN"));
-        p.spawn((
-            Node {
+        p.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                 justify_content: JustifyContent::SpaceBetween,
                 width: Val::Percent(100.0),
                 ..default()
-            }
-        ))
+            })
         .with_children(|r| {
             r.spawn(caption_text(format!(
                 "Target depth: {DEFAULT_RUN_MAX_DEPTH}"
             )));
             r.spawn(caption_text("Phase: briefing"));
         });
-        p.spawn((
-            Node {
+        p.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                 column_gap: Val::Px(12.0),
                 align_items: AlignItems::Center,
                 ..default()
-            }
-        ))
+            })
         .with_children(|row| {
             row.spawn((
             Node {
@@ -1727,15 +1677,13 @@ pub fn spawn_dungeon_briefing_column(
                 TextColor(UiTheme::body_dim()),
             ));
             });
-            row.spawn((
-            Node {
+            row.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Column,
                     flex_grow: 1.0,
                     row_gap: Val::Px(6.0),
                     ..default()
-            }
-        ))
+            })
             .with_children(|col| {
                 col.spawn(headline_text("Awaiting delve"));
                 col.spawn(caption_text(format!(
@@ -1769,15 +1717,13 @@ pub fn spawn_dungeon_briefing_column(
 pub fn spawn_dungeon_camp_column(parent: &mut ChildSpawnerCommands<'_>) {
     let inner = move |p: &mut ChildSpawnerCommands<'_>| {
         p.spawn(panel_title_centered("DUNGEON RUN"));
-        p.spawn((
-            Node {
+        p.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                 justify_content: JustifyContent::SpaceBetween,
                 width: Val::Percent(100.0),
                 ..default()
-            }
-        ))
+            })
         .with_children(|r| {
             r.spawn(caption_text("Depth: —"));
             r.spawn(caption_text("Type: Camp"));
@@ -1803,15 +1749,13 @@ pub fn spawn_dungeon_summary_column(parent: &mut ChildSpawnerCommands<'_>, summa
             UiTheme::muted_gold()
         };
         let type_label = if is_death { "Defeat" } else { "Boss" };
-        p.spawn((
-            Node {
+        p.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                 justify_content: JustifyContent::SpaceBetween,
                 width: Val::Percent(100.0),
                 ..default()
-            }
-        ))
+            })
         .with_children(|r| {
             r.spawn(caption_text(format!("Depth: {depth}")));
             r.spawn((
@@ -1827,15 +1771,13 @@ pub fn spawn_dungeon_summary_column(parent: &mut ChildSpawnerCommands<'_>, summa
             .death_reason
             .clone()
             .unwrap_or_else(|| "Victory".to_string());
-        p.spawn((
-            Node {
+        p.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                 column_gap: Val::Px(12.0),
                 align_items: AlignItems::Center,
                 ..default()
-            }
-        ))
+            })
         .with_children(|row| {
             row.spawn((
             Node {
@@ -1857,15 +1799,13 @@ pub fn spawn_dungeon_summary_column(parent: &mut ChildSpawnerCommands<'_>, summa
                 TextColor(type_color),
             ));
             });
-            row.spawn((
-            Node {
+            row.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Column,
                     flex_grow: 1.0,
                     row_gap: Val::Px(6.0),
                     ..default()
-            }
-        ))
+            })
             .with_children(|col| {
                 col.spawn((
                 Text::new(foe.clone()),
@@ -1982,8 +1922,7 @@ fn health_bar(parent: &mut ChildSpawnerCommands<'_>, frac: f32, fill: Color) {
 
 pub fn spawn_stash_filters_and_sort_row(parent: &mut ChildSpawnerCommands<'_>, stash_sort: StashSortOrder) {
     parent
-        .spawn((
-            Node {
+        .spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Center,
@@ -1992,8 +1931,7 @@ pub fn spawn_stash_filters_and_sort_row(parent: &mut ChildSpawnerCommands<'_>, s
                 flex_wrap: FlexWrap::Wrap,
                 margin: UiRect::bottom(Val::Px(2.0)),
                 ..default()
-            }
-        ))
+            })
         .with_children(|row| {
             row.spawn(caption_text("Stash filters: —"));
             let p = UiButtonPalette::panel_secondary();
@@ -2166,16 +2104,14 @@ pub fn spawn_mockup_footer(parent: &mut ChildSpawnerCommands<'_>, mode: FooterMo
             BorderColor::from(UiTheme::ornate_gold())
         ))
         .with_children(|row| {
-            row.spawn((
-            Node {
+            row.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
                     column_gap: Val::Px(8.0),
                     flex_wrap: FlexWrap::Wrap,
                     ..default()
-            }
-        ))
+            })
             .with_children(|nav| {
                 footer_pill(
                     nav,
@@ -2185,8 +2121,7 @@ pub fn spawn_mockup_footer(parent: &mut ChildSpawnerCommands<'_>, mode: FooterMo
                 footer_pill(nav, "HERO", false);
                 footer_pill(nav, "CODEX", false);
             });
-            row.spawn((
-            Node {
+            row.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
@@ -2194,8 +2129,7 @@ pub fn spawn_mockup_footer(parent: &mut ChildSpawnerCommands<'_>, mode: FooterMo
                     flex_shrink: 0.0,
                     flex_wrap: FlexWrap::Wrap,
                     ..default()
-            }
-        ))
+            })
             .with_children(|right| {
                 footer_gear_hub_button(right);
                 match mode {
