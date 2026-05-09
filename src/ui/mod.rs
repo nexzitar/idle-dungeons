@@ -727,6 +727,7 @@ fn spawn_summary_screen_root(
                 root,
                 summary,
                 profile.profile.stash_sort,
+                ph,
             );
             crate::ui::tooltip::spawn_tooltip_layer(root);
         });
@@ -1058,6 +1059,82 @@ pub(crate) fn spawn_item_card(
                         TextFont::from_font_size(UiTheme::FONT_BODY),
                         TextColor(UiTheme::body()),
                     ));
+                });
+            });
+        });
+}
+
+/// Read-only stash-style card for run rewards (loot not yet in profile).
+pub(crate) fn spawn_item_card_preview(
+    parent: &mut ChildSpawnerCommands<'_>,
+    item: &ItemInstance,
+    ph: &UiPlaceholderImages,
+) {
+    parent
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
+                padding: UiRect::all(Val::Px(UiTheme::PANEL_INSET)),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::FlexStart,
+                row_gap: Val::Px(8.0),
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            BackgroundColor(UiTheme::panel_bg_deep()),
+            BorderColor::from(rarity_color(item.rarity).mix(&Color::BLACK, 0.45)),
+        ))
+        .with_children(|card| {
+            card.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(10.0),
+                    align_items: AlignItems::FlexStart,
+                    ..default()
+                },
+            ))
+            .with_children(|head| {
+                head.spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        width: Val::Px(40.0),
+                        height: Val::Px(40.0),
+                        flex_shrink: 0.0,
+                        ..default()
+                    },
+                    ImageNode {
+                        image: ph.item_generic.clone(),
+                        color: rarity_color(item.rarity).mix(&Color::WHITE, 0.35),
+                        ..default()
+                    },
+                ));
+                head.spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::FlexStart,
+                        row_gap: Val::Px(4.0),
+                        flex_grow: 1.0,
+                        min_width: Val::Px(0.0),
+                        ..default()
+                    },
+                ))
+                .with_children(|txt| {
+                    txt.spawn((
+                        Text::new(item.name.clone()),
+                        TextFont::from_font_size(UiTheme::FONT_SECTION),
+                        TextColor(rarity_color(item.rarity)),
+                    ));
+                    txt.spawn(caption_text(format!("{:?} · {:?}", item.rarity, item.slot)));
+                    txt.spawn(body_text(format_item_stat_summary(item)));
+                    let aff = format_item_affix_lines(item);
+                    if !aff.is_empty() {
+                        txt.spawn(caption_text(aff));
+                    }
+                    txt.spawn(caption_text("Added to stash when you Accept rewards.".to_string()));
                 });
             });
         });

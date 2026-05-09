@@ -19,10 +19,8 @@ const GEAR_LOADOUT_PANEL_W: f32 = 292.0;
 const GEAR_STASH_PANEL_W: f32 = 652.0;
 /// Outer padding: equal top / bottom so panels sit with symmetric vertical margin.
 const GEAR_HUB_MARGIN_Y: f32 = 44.0;
-/// Inset from the left edge (duo hugs the left a bit more than center).
-const GEAR_HUB_MARGIN_X_START: f32 = 22.0;
-/// Breathing room on the right.
-const GEAR_HUB_MARGIN_X_END: f32 = 36.0;
+/// Equal horizontal inset when the hub is centered.
+const GEAR_HUB_MARGIN_X: f32 = 28.0;
 const GEAR_HUB_COLUMN_GAP: f32 = 18.0;
 
 fn gear_side_panel_node(width_px: f32) -> Node {
@@ -102,15 +100,13 @@ pub fn spawn_gear_hub_modal(
                         left: Val::Px(0.0),
                         top: Val::Px(0.0),
                         flex_direction: FlexDirection::Row,
-                        justify_content: JustifyContent::FlexStart,
+                        justify_content: JustifyContent::Center,
                         align_items: AlignItems::Stretch,
                         column_gap: Val::Px(GEAR_HUB_COLUMN_GAP),
-                        padding: UiRect {
-                            left: Val::Px(GEAR_HUB_MARGIN_X_START),
-                            right: Val::Px(GEAR_HUB_MARGIN_X_END),
-                            top: Val::Px(GEAR_HUB_MARGIN_Y),
-                            bottom: Val::Px(GEAR_HUB_MARGIN_Y),
-                        },
+                        padding: UiRect::axes(
+                            Val::Px(GEAR_HUB_MARGIN_X),
+                            Val::Px(GEAR_HUB_MARGIN_Y),
+                        ),
                         ..default()
                     },
                     FocusPolicy::Pass,
