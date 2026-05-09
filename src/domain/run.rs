@@ -161,6 +161,7 @@ fn simulate_run_with_playback_for_rooms(
     let partner_max_hp = party_partner.map(|p| p.derived_stats().max_health);
     let mut partner_current_hp = partner_max_hp.unwrap_or(0);
     let mut floors_cleared = 0u32;
+    let mut granted_pre10_combat_loot = false;
     let mut peak_risk_rank = 0u8;
 
     for room in rooms {
@@ -197,7 +198,7 @@ fn simulate_run_with_playback_for_rooms(
                 let combat = simulate_combat_party(
                     lead,
                     &enemy,
-                    240,
+                    420,
                     at_start,
                     party_partner.map(|p| (p, partner_current_hp)),
                 );
@@ -233,6 +234,24 @@ fn simulate_run_with_playback_for_rooms(
                         log.push(format!("Depth {}: defeated {}", room.depth, enemy.name));
                         gold_earned += room.depth * 3;
                         floors_cleared += 1;
+                        if room.depth < 10
+                            && matches!(room.kind, RoomKind::Monster | RoomKind::Elite)
+                            && !granted_pre10_combat_loot
+                        {
+                            granted_pre10_combat_loot = true;
+                            let item = roll_loot(
+                                room.depth,
+                                config
+                                    .seed
+                                    .wrapping_mul(31337)
+                                    .wrapping_add(room.depth as u64 * 17),
+                            );
+                            log.push(format!(
+                                "Depth {}: scavenged {} (first blood).",
+                                room.depth, item.name
+                            ));
+                            loot.push(item);
+                        }
                         if is_boss {
                             log.push("The Gate Warden falls. The delve is victorious.".to_string());
                             playback.frames.push(playback_frame(

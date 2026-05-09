@@ -5,7 +5,7 @@ use bevy::ui::{FocusPolicy, RelativeCursorPosition};
 
 use crate::domain::party::PartyHeroKind;
 use crate::domain::skills::{
-    format_skill_tags, skill_book_pick_order, skill_definition, SkillId, SkillKind,
+    format_skill_tags, skill_book_pick_order_for, skill_definition, SkillId, SkillKind,
 };
 use crate::ui::components::{
     SkillBookBackdrop, SkillBookCloseButton, SkillBookPickButton, SkillBookRoot, UiButtonPalette,
@@ -18,6 +18,7 @@ pub fn spawn_skill_book_modal(
     parent: &mut ChildSpawnerCommands<'_>,
     target_slot: usize,
     sheet: PartyHeroKind,
+    unlocked: &[crate::domain::skills::SkillId],
     ph: &UiPlaceholderImages,
 ) {
     parent
@@ -145,7 +146,7 @@ pub fn spawn_skill_book_modal(
                                         "(Clear slot)",
                                         "Remove the skill from this slot.",
                                     );
-                                    for id in skill_book_pick_order() {
+                                    for id in skill_book_pick_order_for(unlocked) {
                                         let d = skill_definition(id);
                                         let kind_str = match d.kind {
                                             SkillKind::Active => "Active",

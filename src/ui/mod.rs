@@ -7,6 +7,7 @@ pub mod mockup_layout;
 pub mod placeholder_graphics;
 pub mod run_panel;
 pub mod skill_book;
+pub mod skill_shop;
 pub mod stash_sort;
 pub mod summary_panel;
 pub mod theme;
@@ -15,9 +16,9 @@ pub mod tooltip;
 pub mod widgets;
 
 use crate::app::{
-    AcceptRunRewards, ActiveRunPlayback, AssignHeroSkill, EquipInventoryItem, GameState,
-    LatestRunSummary, OpenGearHub, OpenSkillBook, ProfileSavePath, ProfileState, ResetProgress,
-    RunSpeedSetting, SalvageInventoryItem, SkipRunPlayback, StartRun,
+    AcceptRunRewards, ActiveRunPlayback, AssignHeroSkill, BuySkillUnlock, EquipInventoryItem,
+    GameState, LatestRunSummary, OpenGearHub, OpenSkillBook, OpenSkillShop, ProfileSavePath,
+    ProfileState, ResetProgress, RunSpeedSetting, SalvageInventoryItem, SkipRunPlayback, StartRun,
 };
 use crate::domain::items::ItemInstance;
 use crate::domain::run::{RunPlaybackFrameKind, RunSummary};
@@ -32,11 +33,14 @@ use crate::ui::components::{
     PlaybackDmgMeterLeadValue, PlaybackDmgMeterPartnerFill, PlaybackDmgMeterPartnerRow,
     PlaybackDmgMeterPartnerValue, PlaybackEnemyBarFill, PlaybackEnemyDebuffLine,
     PlaybackEnemyNameText, PlaybackEnemyPortraitBlock, PlaybackHeroBarFill, PlaybackAllyBarFill,
+    PlaybackAllyCastFill, PlaybackAllyCdFill, PlaybackLeadCastFill, PlaybackLeadCdFill,
+    PlaybackFoeCastFill, PlaybackFoeCdFill,
     PlaybackHeroDebuffLine, PlaybackLogScrollRegion, PlaybackLogText, PlaybackProgressBarFill,
     PlaybackProgressLabel, PlaybackRoomKindText, PlaybackTheaterFloatLayer, ResetProgressButton,
     RunPlaybackScreen, SalvageItemButton, SettingsButton, SettingsModalBackdrop,
     SettingsModalCloseButton, SettingsModalRoot, SettingsModalSpeedButton, SettingsModalSpeedLabel,
-    SkillBookBackdrop, SkillBookCloseButton, SkillBookPickButton, SkillBookRoot, SkillSlotButton,
+    SkillBookBackdrop, SkillBookCloseButton, SkillBookPickButton, SkillBookRoot, SkillShopBackdrop,
+    SkillShopBuyButton, SkillShopCloseButton, SkillShopOpenButton, SkillShopRoot, SkillSlotButton,
     SkipPlaybackButton, StartRunButton, StashSortCycleButton, SummaryScreen,
     TitleEnterCampButton, TitleQuitButton, TitleScreen, ToggleCombatLogButton, TopBarField,
     UiButtonPalette, UiRoot, UiScrollContent, UiScrollRegion, UiScrollState, UiTooltip,
@@ -132,12 +136,16 @@ impl Plugin for UiPlugin {
                         (
                             close_skill_book_modal,
                             close_gear_hub_modal,
+                            close_skill_shop_modal,
                             handle_skill_book_pick,
                             handle_stash_sort_button,
                             handle_skill_slot_buttons,
                             request_gear_hub_open,
+                            request_skill_shop_open,
                             handle_open_skill_book,
                             open_gear_hub_from_events,
+                            open_skill_shop_from_events,
+                            handle_skill_shop_purchase,
                             handle_hero_name_edit_button,
                             hero_rename_keyboard,
                         )
@@ -156,6 +164,9 @@ impl Plugin for UiPlugin {
                     tick_campfire_flames.run_if(in_state(GameState::Title)),
                     sync_hero_name_labels,
                     sync_run_playback_ui.run_if(in_state(GameState::Running)),
+                    sync_playback_cast_bars
+                        .run_if(in_state(GameState::Running))
+                        .after(sync_run_playback_ui),
                     sync_run_playback_party_bars
                         .run_if(in_state(GameState::Running))
                         .after(sync_run_playback_ui),
@@ -1068,6 +1079,7 @@ fn handle_open_skill_book(
     existing: Query<(), With<SkillBookRoot>>,
     mut commands: Commands,
     ph: Res<UiPlaceholderImages>,
+    profile: Res<ProfileState>,
 ) {
     for ev in events.read() {
         if !existing.is_empty() {
@@ -1076,8 +1088,15 @@ fn handle_open_skill_book(
         let Ok(root) = roots.single() else {
             continue;
         };
+        let unlocked = profile.profile.meta.unlocked_skill_ids.clone();
         commands.entity(root).with_children(|parent| {
-            crate::ui::skill_book::spawn_skill_book_modal(parent, ev.slot, ev.kind, &ph);
+            crate::ui::skill_book::spawn_skill_book_modal(
+                parent,
+                ev.slot,
+                ev.kind,
+                &unlocked,
+                &ph,
+            );
         });
     }
 }
@@ -1165,6 +1184,99 @@ fn close_gear_hub_modal(
         gear_keep.0 = false;
         for entity in &modal {
             commands.entity(entity).despawn();
+        }
+    }
+}
+
+fn request_skill_shop_open(
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    open_btns: Query<(Entity, &Interaction), With<SkillShopOpenButton>>,
+    mut writer: MessageWriter<OpenSkillShop>,
+) {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction) in &open_btns {
+        if entity == target && ui_click_release_confirms(*interaction) {
+            writer.write(OpenSkillShop);
+            return;
+        }
+    }
+}
+
+fn open_skill_shop_from_events(
+    mut events: MessageReader<OpenSkillShop>,
+    roots: Query<Entity, With<UiRoot>>,
+    existing: Query<Entity, With<SkillShopRoot>>,
+    mut commands: Commands,
+    profile: Res<ProfileState>,
+    state: Res<State<GameState>>,
+) {
+    for _ in events.read() {
+        if !matches!(*state.get(), GameState::Build) {
+            continue;
+        }
+        for e in existing.iter() {
+            commands.entity(e).despawn();
+        }
+        let Ok(root) = roots.single() else {
+            continue;
+        };
+        let unlocked = profile.profile.meta.unlocked_skill_ids.clone();
+        let gold = profile.profile.meta.gold;
+        commands.entity(root).with_children(|parent| {
+            crate::ui::skill_shop::spawn_skill_shop_modal(parent, &unlocked, gold);
+        });
+    }
+}
+
+fn close_skill_shop_modal(
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    backdrop: Query<(Entity, &Interaction), With<SkillShopBackdrop>>,
+    close_btn: Query<(Entity, &Interaction), With<SkillShopCloseButton>>,
+    modal: Query<Entity, With<SkillShopRoot>>,
+    mut commands: Commands,
+) {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    let should_close = backdrop
+        .iter()
+        .any(|(e, i)| e == target && ui_click_release_confirms(*i))
+        || close_btn
+            .iter()
+            .any(|(e, i)| e == target && ui_click_release_confirms(*i));
+    if should_close {
+        for entity in &modal {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+fn handle_skill_shop_purchase(
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    buttons: Query<(Entity, &Interaction, &SkillShopBuyButton)>,
+    mut writer: MessageWriter<BuySkillUnlock>,
+) {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction, btn) in &buttons {
+        if entity == target && ui_click_release_confirms(*interaction) {
+            writer.write(BuySkillUnlock { skill: btn.skill });
+            return;
         }
     }
 }
@@ -1374,6 +1486,51 @@ fn sync_run_playback_ui(
     }
     for mut style in params.p6().iter_mut() {
         style.width = enemy_w;
+    }
+}
+
+fn sync_playback_cast_bars(
+    playback: Res<ActiveRunPlayback>,
+    mut params: ParamSet<(
+        Query<&mut Node, With<PlaybackLeadCastFill>>,
+        Query<&mut Node, With<PlaybackLeadCdFill>>,
+        Query<&mut Node, With<PlaybackAllyCastFill>>,
+        Query<&mut Node, With<PlaybackAllyCdFill>>,
+        Query<&mut Node, With<PlaybackFoeCastFill>>,
+        Query<&mut Node, With<PlaybackFoeCdFill>>,
+    )>,
+) {
+    if playback.frames.is_empty() {
+        return;
+    }
+    let idx = playback.display_index.min(playback.frames.len() - 1);
+    let f = &playback.frames[idx];
+    let crate::domain::run::RunPlaybackFrameKind::Combat(c) = &f.kind else {
+        return;
+    };
+    let lc = Val::Percent((c.lead_cast * 100.0).clamp(0.0, 100.0));
+    let lcdn = Val::Percent((c.lead_cd * 100.0).clamp(0.0, 100.0));
+    let ac = Val::Percent((c.ally_cast * 100.0).clamp(0.0, 100.0));
+    let acdn = Val::Percent((c.ally_cd * 100.0).clamp(0.0, 100.0));
+    let fc = Val::Percent((c.foe_cast * 100.0).clamp(0.0, 100.0));
+    let fcdn = Val::Percent((c.foe_cd * 100.0).clamp(0.0, 100.0));
+    for mut n in params.p0().iter_mut() {
+        n.width = lc;
+    }
+    for mut n in params.p1().iter_mut() {
+        n.width = lcdn;
+    }
+    for mut n in params.p2().iter_mut() {
+        n.width = ac;
+    }
+    for mut n in params.p3().iter_mut() {
+        n.width = acdn;
+    }
+    for mut n in params.p4().iter_mut() {
+        n.width = fc;
+    }
+    for mut n in params.p5().iter_mut() {
+        n.width = fcdn;
     }
 }
 

@@ -14,15 +14,16 @@ use crate::domain::skills::{skill_definition, SkillKind};
 use crate::save::StashSortOrder;
 use crate::ui::components::{
     GearHubOpenButton, HeroNameDisplayText,
-    HeroNameEditButton, PlaybackAggroArrowLine, PlaybackAggroArrowText, PlaybackAllyPortraitBlock,
-    PlaybackCaptionText,
-    PlaybackCombatLogPanel, PlaybackDepthText, PlaybackDmgMeterEnemyFill, PlaybackDmgMeterEnemyValue,
+    HeroNameEditButton, PlaybackAggroArrowLine, PlaybackAggroArrowText, PlaybackAllyCastFill,
+    PlaybackAllyCdFill, PlaybackAllyPortraitBlock, PlaybackCaptionText, PlaybackCombatLogPanel,
+    PlaybackDepthText, PlaybackDmgMeterEnemyFill, PlaybackDmgMeterEnemyValue,
     PlaybackDmgMeterLeadFill, PlaybackDmgMeterLeadValue, PlaybackDmgMeterPartnerFill,
     PlaybackDmgMeterPartnerRow, PlaybackDmgMeterPartnerValue, PlaybackEnemyBarFill,
-    PlaybackEnemyDebuffLine,
-    PlaybackEnemyNameText, PlaybackEnemyPortraitBlock, PlaybackHeroBarFill, PlaybackHeroDebuffLine,
-    PlaybackLeadPortraitBlock, PlaybackLogScrollRegion, PlaybackLogText, PlaybackAllyBarFill, PlaybackProgressBarFill,
-    PlaybackProgressLabel, PlaybackRoomKindText, PlaybackTheaterFloatLayer,
+    PlaybackEnemyDebuffLine, PlaybackEnemyNameText, PlaybackEnemyPortraitBlock, PlaybackFoeCastFill,
+    PlaybackFoeCdFill, PlaybackHeroBarFill, PlaybackHeroDebuffLine, PlaybackLeadCastFill,
+    PlaybackLeadCdFill, PlaybackLeadPortraitBlock, PlaybackLogScrollRegion, PlaybackLogText,
+    PlaybackAllyBarFill, PlaybackProgressBarFill, PlaybackProgressLabel, PlaybackRoomKindText,
+    PlaybackTheaterFloatLayer, SkillShopOpenButton,
     PlaybackCombatLogToggleLabel, ResetProgressButton, SettingsButton,
     SettingsModalBackdrop, SettingsModalCloseButton, SettingsModalRoot, SettingsModalSpeedButton,
     SettingsModalSpeedLabel, SkillSlotButton, SkipPlaybackButton, StashSortCycleButton,
@@ -1140,6 +1141,184 @@ fn playback_enemy_bar(parent: &mut ChildSpawnerCommands<'_>, fill_pct: f32) {
         });
 }
 
+fn playback_cast_cd_stack_lead(parent: &mut ChildSpawnerCommands<'_>) {
+    parent
+        .spawn(Node {
+            box_sizing: BoxSizing::BorderBox,
+            width: Val::Percent(100.0),
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(2.0),
+            ..default()
+        })
+        .with_children(|col| {
+            col.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    width: Val::Percent(100.0),
+                    height: Val::Px(5.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(UiTheme::void_black().into()),
+                BorderColor::from(UiTheme::panel_border()),
+            ))
+            .with_children(|track| {
+                track.spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        width: Val::Percent(0.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(UiTheme::muted_gold().into()),
+                    PlaybackLeadCastFill,
+                ));
+            });
+            col.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    width: Val::Percent(100.0),
+                    height: Val::Px(5.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(UiTheme::void_black().into()),
+                BorderColor::from(UiTheme::panel_border()),
+            ))
+            .with_children(|track| {
+                track.spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        width: Val::Percent(0.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.28, 0.32, 0.42).into()),
+                    PlaybackLeadCdFill,
+                ));
+            });
+        });
+}
+
+fn playback_cast_cd_stack_ally(parent: &mut ChildSpawnerCommands<'_>) {
+    let tone = Color::srgb(0.38, 0.72, 0.92);
+    parent
+        .spawn(Node {
+            box_sizing: BoxSizing::BorderBox,
+            width: Val::Percent(100.0),
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(2.0),
+            ..default()
+        })
+        .with_children(|col| {
+            col.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    width: Val::Percent(100.0),
+                    height: Val::Px(5.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(UiTheme::void_black().into()),
+                BorderColor::from(UiTheme::panel_border()),
+            ))
+            .with_children(|track| {
+                track.spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        width: Val::Percent(0.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(tone.into()),
+                    PlaybackAllyCastFill,
+                ));
+            });
+            col.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    width: Val::Percent(100.0),
+                    height: Val::Px(5.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(UiTheme::void_black().into()),
+                BorderColor::from(UiTheme::panel_border()),
+            ))
+            .with_children(|track| {
+                track.spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        width: Val::Percent(0.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.22, 0.36, 0.48).into()),
+                    PlaybackAllyCdFill,
+                ));
+            });
+        });
+}
+
+fn playback_cast_cd_stack_foe(parent: &mut ChildSpawnerCommands<'_>) {
+    parent
+        .spawn(Node {
+            box_sizing: BoxSizing::BorderBox,
+            width: Val::Percent(100.0),
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(2.0),
+            ..default()
+        })
+        .with_children(|col| {
+            col.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    width: Val::Percent(100.0),
+                    height: Val::Px(5.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(UiTheme::void_black().into()),
+                BorderColor::from(UiTheme::panel_border()),
+            ))
+            .with_children(|track| {
+                track.spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        width: Val::Percent(0.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(UiTheme::danger().mix(&Color::WHITE, 0.25).into()),
+                    PlaybackFoeCastFill,
+                ));
+            });
+            col.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    width: Val::Percent(100.0),
+                    height: Val::Px(5.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(UiTheme::void_black().into()),
+                BorderColor::from(UiTheme::panel_border()),
+            ))
+            .with_children(|track| {
+                track.spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        width: Val::Percent(0.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.35, 0.22, 0.22).into()),
+                    PlaybackFoeCdFill,
+                ));
+            });
+        });
+}
+
 fn spawn_playback_hero_plate_lead(parent: &mut ChildSpawnerCommands<'_>) {
     parent
         .spawn((
@@ -1176,6 +1355,7 @@ fn spawn_playback_hero_plate_lead(parent: &mut ChildSpawnerCommands<'_>) {
                 });
             plate.spawn(caption_text("You"));
             playback_hero_bar(plate, 1.0);
+            playback_cast_cd_stack_lead(plate);
             plate.spawn((
                 crate::ui::theme::playback_debuff_line_bundle("—  ·  —  ·  —  ·  —"),
                 PlaybackHeroDebuffLine,
@@ -1220,6 +1400,7 @@ fn spawn_playback_hero_plate_ally(parent: &mut ChildSpawnerCommands<'_>) {
                 });
             plate.spawn(caption_text("Ally"));
             playback_ally_bar(plate, 1.0);
+            playback_cast_cd_stack_ally(plate);
         });
 }
 
@@ -1263,6 +1444,7 @@ fn spawn_playback_enemy_plate(parent: &mut ChildSpawnerCommands<'_>) {
                 PlaybackAggroArrowText,
             ));
             playback_enemy_bar(plate, 1.0);
+            playback_cast_cd_stack_foe(plate);
             plate.spawn((
                 crate::ui::theme::playback_debuff_line_bundle("—  ·  —  ·  —  ·  —"),
                 PlaybackEnemyDebuffLine,
@@ -2134,6 +2316,7 @@ pub fn spawn_mockup_footer(parent: &mut ChildSpawnerCommands<'_>, mode: FooterMo
                 footer_gear_hub_button(right);
                 match mode {
                 FooterMode::Briefing => {
+                    footer_skill_shop_button(right);
                     let p = UiButtonPalette::primary_cta();
                     right.spawn((
                         Node {
@@ -2222,6 +2405,36 @@ fn footer_gear_hub_button(parent: &mut ChildSpawnerCommands<'_>) {
         .with_children(|b| {
             b.spawn((
                 Text::new("\u{2692} Gear"),
+                TextFont::from_font_size(UiTheme::FONT_BODY),
+                TextColor(UiTheme::muted_cream()),
+            ));
+        });
+}
+
+fn footer_skill_shop_button(parent: &mut ChildSpawnerCommands<'_>) {
+    let p = UiButtonPalette::panel_secondary();
+    parent
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                min_width: Val::Px(104.0),
+                height: Val::Px(40.0),
+                padding: UiRect::axes(Val::Px(12.0), Val::Px(8.0)),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            Button,
+            BackgroundColor(p.idle_bg.into()),
+            BorderColor::from(p.idle_border),
+            SkillShopOpenButton,
+            p,
+            UiTooltip::txt("Spend gold to add skills to your library."),
+        ))
+        .with_children(|b| {
+            b.spawn((
+                Text::new("\u{1F4DA} Skills"),
                 TextFont::from_font_size(UiTheme::FONT_BODY),
                 TextColor(UiTheme::muted_cream()),
             ));

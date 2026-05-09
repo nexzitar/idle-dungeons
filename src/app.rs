@@ -5,6 +5,7 @@ use crate::domain::loot::salvage_value;
 use crate::domain::run::{
     simulate_run_with_playback, RunConfig, RunSimulation, RunSummary, DEFAULT_RUN_MAX_DEPTH,
 };
+use crate::domain::skills::{skill_shop_price_gold, SkillId};
 use crate::save::{load_profile, save_profile, SaveProfile};
 use crate::ui::UiPlugin;
 use bevy::prelude::*;
@@ -28,6 +29,14 @@ pub struct OpenSkillBook {
 
 #[derive(Message)]
 pub struct OpenGearHub;
+
+#[derive(Message)]
+pub struct OpenSkillShop;
+
+#[derive(Debug, Clone, Copy, Message)]
+pub struct BuySkillUnlock {
+    pub skill: SkillId,
+}
 
 #[derive(Debug, Clone, Copy, Message)]
 pub struct AssignHeroSkill {
@@ -148,6 +157,8 @@ impl Plugin for IdleDungeonsPlugin {
             .add_message::<ResetProgress>()
             .add_message::<OpenSkillBook>()
             .add_message::<OpenGearHub>()
+            .add_message::<OpenSkillShop>()
+            .add_message::<BuySkillUnlock>()
             .add_message::<AssignHeroSkill>()
             .add_systems(
                 Update,
@@ -158,6 +169,7 @@ impl Plugin for IdleDungeonsPlugin {
                     tick_run_playback.run_if(in_state(GameState::Running)),
                     equip_inventory_item,
                     salvage_inventory_item,
+                    buy_skill_unlock,
                 ),
             )
             .add_systems(PostUpdate, assign_hero_skill_from_event);
@@ -324,6 +336,11 @@ fn assign_hero_skill_from_event(
         if ev.slot >= profile.profile.meta.unlocked_skill_slots {
             continue;
         }
+        if let Some(s) = ev.skill {
+            if !profile.profile.meta.has_skill_unlocked(s) {
+                continue;
+            }
+        }
         let ok = match ev.kind {
             PartyHeroKind::Lead => profile
                 .profile
@@ -340,6 +357,27 @@ fn assign_hero_skill_from_event(
         if ok {
             save_current_profile(&save_path, &profile);
         }
+    }
+}
+
+fn buy_skill_unlock(
+    mut events: MessageReader<BuySkillUnlock>,
+    mut profile: ResMut<ProfileState>,
+    save_path: Res<ProfileSavePath>,
+) {
+    for ev in events.read() {
+        if profile.profile.meta.has_skill_unlocked(ev.skill) {
+            continue;
+        }
+        let Some(cost) = skill_shop_price_gold(ev.skill) else {
+            continue;
+        };
+        if profile.profile.meta.gold < cost {
+            continue;
+        }
+        profile.profile.meta.gold -= cost;
+        profile.profile.meta.add_skill_unlock(ev.skill);
+        save_current_profile(&save_path, &profile);
     }
 }
 
