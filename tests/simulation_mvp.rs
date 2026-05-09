@@ -50,6 +50,7 @@ fn gold_gain_multiplier_scales_run_gold() {
             seed,
             max_depth: 25,
             gold_gain_multiplier: 1.2,
+            guided_early_combat_claims_already: 0,
         },
     );
     let expected = (base.gold_earned as f32 * 1.2).round() as u32;

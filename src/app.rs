@@ -191,6 +191,7 @@ fn start_run(
                 seed: event.seed,
                 max_depth: DEFAULT_RUN_MAX_DEPTH,
                 gold_gain_multiplier: 1.0,
+                guided_early_combat_claims_already: profile.profile.meta.guided_early_combat_drop_count,
             },
         );
         commands.insert_resource(LatestRunSummary {
@@ -319,6 +320,10 @@ fn apply_run_rewards(profile: &mut SaveProfile, summary: &RunSummary) {
         .meta
         .deepest_floor_reached
         .max(summary.deepest_depth);
+    if summary.guided_early_combat_drop_granted {
+        profile.meta.guided_early_combat_drop_count =
+            profile.meta.guided_early_combat_drop_count.saturating_add(1);
+    }
     if profile.meta.party_slots_unlocked() >= 2 && profile.party_partner.is_none() {
         profile.party_partner = Some(crate::domain::party::default_party_partner_hero());
     }
