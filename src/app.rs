@@ -85,13 +85,36 @@ pub struct ActiveRunPlayback {
     pub log_lines: Vec<String>,
 }
 
+/// Discrete delve playback speeds (header arrows cycle these indices).
+pub const PLAYBACK_SPEED_STEPS: [f32; 5] = [1.0, 2.0, 3.0, 5.0, 10.0];
+
 /// Display-only run speed multiplier (delve playback and future live combat).
 #[derive(Debug, Resource, Clone, Copy)]
-pub struct RunSpeedSetting(pub f32);
+pub struct RunSpeedSetting {
+    /// Clamp to `PLAYBACK_SPEED_STEPS` range when stepping.
+    pub step_index: usize,
+}
+
+impl RunSpeedSetting {
+    pub fn multiplier(&self) -> f32 {
+        let i = self
+            .step_index
+            .min(PLAYBACK_SPEED_STEPS.len().saturating_sub(1));
+        PLAYBACK_SPEED_STEPS[i]
+    }
+
+    pub fn inc(&mut self) {
+        self.step_index = (self.step_index + 1).min(PLAYBACK_SPEED_STEPS.len() - 1);
+    }
+
+    pub fn dec(&mut self) {
+        self.step_index = self.step_index.saturating_sub(1);
+    }
+}
 
 impl Default for RunSpeedSetting {
     fn default() -> Self {
-        Self(1.0)
+        Self { step_index: 0 }
     }
 }
 
@@ -237,7 +260,7 @@ fn tick_run_playback(
         return;
     }
 
-    playback.elapsed += time.delta_secs() * speed.0;
+    playback.elapsed += time.delta_secs() * speed.multiplier();
     while playback.elapsed >= PLAYBACK_STEP_SECS {
         playback.elapsed -= PLAYBACK_STEP_SECS;
         if playback.display_index + 1 < playback.frames.len() {

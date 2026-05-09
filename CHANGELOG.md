@@ -2,6 +2,14 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.8 — 2026-05-08
+
+### UX
+
+- **Post-run loot**: The summary screen and rewards modal call out new gear explicitly (counts, item names, and a reminder to open **Gear** after **Accept rewards**).
+- **Gear hub**: Dialog height is capped with a shorter scroll viewport so the stash list fits typical window sizes without hiding the footer dock.
+- **Playback speed**: Moved out of **Settings** — the header now has **‹** / **›** buttons stepping **1×**, **2×**, **3×**, **5×**, and **10×**; settings only covers reset / close.
+
 ## 0.2.7 — 2026-05-09
 
 ### Early game / loot

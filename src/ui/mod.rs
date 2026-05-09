@@ -39,9 +39,10 @@ use crate::ui::components::{
     PlaybackHeroDebuffLine, PlaybackLogScrollRegion, PlaybackLogText, PlaybackProgressBarFill,
     PlaybackProgressLabel, PlaybackRoomKindText, PlaybackTheaterFloatLayer, ResetProgressButton,
     RunPlaybackScreen, SalvageItemButton, SettingsButton, SettingsModalBackdrop,
-    SettingsModalCloseButton, SettingsModalRoot, SettingsModalSpeedButton, SettingsModalSpeedLabel,
-    SkillBookBackdrop, SkillBookCloseButton, SkillBookPickButton, SkillBookRoot, SkillShopBackdrop,
+    SettingsModalCloseButton, SettingsModalRoot, SkillBookBackdrop,
+    SkillBookCloseButton, SkillBookPickButton, SkillBookRoot, SkillShopBackdrop,
     SkillShopBuyButton, SkillShopCloseButton, SkillShopOpenButton, SkillShopRoot, SkillSlotButton,
+    PlaybackSpeedDecButton, PlaybackSpeedIncButton, PlaybackSpeedValueText,
     SkipPlaybackButton, StartRunButton, StashSortCycleButton, SummaryScreen,
     TitleEnterCampButton, TitleQuitButton, TitleScreen, ToggleCombatLogButton, TopBarField,
     UiButtonPalette, UiRoot, UiScrollContent, UiScrollRegion, UiScrollState, UiTooltip,
@@ -138,7 +139,7 @@ impl Plugin for UiPlugin {
                             fulfill_reset_progress,
                             open_settings_modal,
                             close_settings_modal,
-                            handle_settings_modal_speed,
+                            handle_playback_speed_arrows,
                         )
                             .chain(),
                         (
@@ -169,6 +170,7 @@ impl Plugin for UiPlugin {
                         .chain()
                         .after(handle_open_skill_book),
                     sync_top_bar,
+                    sync_playback_speed_label,
                     tick_campfire_flames.run_if(in_state(GameState::Title)),
                     sync_hero_name_labels,
                     sync_run_playback_ui.run_if(in_state(GameState::Running)),
@@ -250,7 +252,7 @@ fn spawn_title_screen(
     speed: Res<RunSpeedSetting>,
     ph: Res<UiPlaceholderImages>,
 ) {
-    crate::ui::title_camp::spawn_title_screen(&mut commands, &profile, speed.0, &ph);
+    crate::ui::title_camp::spawn_title_screen(&mut commands, &profile, speed.multiplier(), &ph);
 }
 
 fn tick_campfire_flames(time: Res<Time>, mut q: Query<(&CampfireFlame, &mut BackgroundColor)>) {
@@ -318,7 +320,8 @@ struct UiBlockingOverlayPresence<'w, 's> {
 #[derive(SystemParam)]
 struct UiClickResolveMarkers<'w, 's> {
     reset: Query<'w, 's, (), With<ResetProgressButton>>,
-    speed: Query<'w, 's, (), With<SettingsModalSpeedButton>>,
+    playback_speed_dec: Query<'w, 's, (), With<PlaybackSpeedDecButton>>,
+    playback_speed_inc: Query<'w, 's, (), With<PlaybackSpeedIncButton>>,
     settings_close: Query<'w, 's, (), With<SettingsModalCloseButton>>,
     settings_back: Query<'w, 's, (), With<SettingsModalBackdrop>>,
     sbook_pick: Query<'w, 's, (), With<SkillBookPickButton>>,
@@ -369,19 +372,16 @@ fn capture_ui_click_start(
     if !overlay.settings.is_empty() {
         pressed.retain(|&e| {
             m.reset.get(e).is_ok()
-                || m.speed.get(e).is_ok()
                 || m.settings_close.get(e).is_ok()
                 || m.settings_back.get(e).is_ok()
         });
         press.0 = pressed.iter().copied().min_by_key(|&e| {
             let tier = if m.reset.get(e).is_ok() {
                 0u8
-            } else if m.speed.get(e).is_ok() {
-                1
             } else if m.settings_close.get(e).is_ok() {
-                2
+                1
             } else if m.settings_back.get(e).is_ok() {
-                3
+                2
             } else {
                 255
             };
@@ -459,7 +459,14 @@ fn capture_ui_click_start(
         return;
     }
 
-    press.0 = pressed.iter().min_by_key(|e| e.to_bits()).copied();
+    press.0 = pressed
+        .iter()
+        .copied()
+        .filter(|&e| {
+            m.playback_speed_dec.get(e).is_ok() || m.playback_speed_inc.get(e).is_ok()
+        })
+        .min_by_key(|e| e.to_bits())
+        .or_else(|| pressed.iter().min_by_key(|e| e.to_bits()).copied());
 }
 
 /// Bevy UI's `ui_focus_system` may leave [`Interaction::Pressed`] on the frame where the
@@ -523,7 +530,7 @@ fn spawn_running_screen(
     speed: Res<RunSpeedSetting>,
     ph: Res<UiPlaceholderImages>,
 ) {
-    spawn_running_screen_root(&mut commands, &profile, speed.0, &ph);
+    spawn_running_screen_root(&mut commands, &profile, speed.multiplier(), &ph);
 }
 
 fn spawn_running_screen_root(
@@ -588,7 +595,7 @@ fn spawn_build_screen(
     speed: Res<RunSpeedSetting>,
     ph: Res<UiPlaceholderImages>,
 ) {
-    spawn_build_screen_root(&mut commands, &profile, speed.0, &ph);
+    spawn_build_screen_root(&mut commands, &profile, speed.multiplier(), &ph);
 }
 
 fn spawn_build_screen_root(
@@ -661,7 +668,7 @@ fn spawn_summary_screen(
         .as_deref()
         .map(|s| s.summary.clone())
         .unwrap_or_else(crate::ui::summary_panel::empty_run_summary);
-    spawn_summary_screen_root(&mut commands, &profile, &summary, speed.0, &ph);
+    spawn_summary_screen_root(&mut commands, &profile, &summary, speed.multiplier(), &ph);
 }
 
 fn spawn_summary_screen_root(
@@ -795,7 +802,7 @@ fn handle_stash_sort_button(
                     commands.entity(e).despawn();
                 }
                 *name_edit = HeroNameEditState::default();
-                let root = spawn_build_screen_root(&mut commands, &profile, speed.0, &ph);
+                let root = spawn_build_screen_root(&mut commands, &profile, speed.multiplier(), &ph);
                 attach_gear_hub_if_kept_open(
                     &mut commands,
                     root,
@@ -819,7 +826,7 @@ fn handle_stash_sort_button(
                     &mut commands,
                     &profile,
                     &summary,
-                    speed.0,
+                    speed.multiplier(),
                     &ph,
                 );
                 attach_gear_hub_if_kept_open(
@@ -836,7 +843,7 @@ fn handle_stash_sort_button(
                 for e in &running_roots {
                     commands.entity(e).despawn();
                 }
-                spawn_running_screen_root(&mut commands, &profile, speed.0, &ph);
+                spawn_running_screen_root(&mut commands, &profile, speed.multiplier(), &ph);
             }
             GameState::Title => {}
         }
@@ -868,7 +875,7 @@ fn refresh_profile_screen_on_profile_change(
             for e in &title_roots {
                 commands.entity(e).despawn();
             }
-            crate::ui::title_camp::spawn_title_screen(&mut commands, &profile, speed.0, &ph);
+            crate::ui::title_camp::spawn_title_screen(&mut commands, &profile, speed.multiplier(), &ph);
         }
         GameState::Build => {
             if build_roots.is_empty() {
@@ -878,7 +885,7 @@ fn refresh_profile_screen_on_profile_change(
                 commands.entity(e).despawn();
             }
             *name_edit = HeroNameEditState::default();
-            let root = spawn_build_screen_root(&mut commands, &profile, speed.0, &ph);
+            let root = spawn_build_screen_root(&mut commands, &profile, speed.multiplier(), &ph);
             attach_gear_hub_if_kept_open(
                 &mut commands,
                 root,
@@ -902,7 +909,7 @@ fn refresh_profile_screen_on_profile_change(
             }
             *name_edit = HeroNameEditState::default();
             let root =
-                spawn_summary_screen_root(&mut commands, &profile, &summary, speed.0, &ph);
+                spawn_summary_screen_root(&mut commands, &profile, &summary, speed.multiplier(), &ph);
             attach_gear_hub_if_kept_open(
                 &mut commands,
                 root,
@@ -1056,12 +1063,29 @@ pub(crate) fn spawn_item_card(
         });
 }
 
+fn sync_playback_speed_label(
+    speed: Res<RunSpeedSetting>,
+    mut q: Query<&mut Text, With<PlaybackSpeedValueText>>,
+) {
+    if q.is_empty() {
+        return;
+    }
+    if !speed.is_changed() {
+        return;
+    }
+    let label = crate::ui::mockup_layout::fmt_speed_label(speed.multiplier());
+    for mut text in &mut q {
+        if text.0 != label {
+            text.0 = label.clone();
+        }
+    }
+}
+
 fn sync_top_bar(
     state: Res<State<GameState>>,
     profile: Res<ProfileState>,
     latest_summary: Option<Res<LatestRunSummary>>,
     playback: Option<Res<ActiveRunPlayback>>,
-    speed: Res<RunSpeedSetting>,
     mut q: Query<(&TopBarField, &mut Text)>,
 ) {
     let meta = &profile.profile.meta;
@@ -1092,15 +1116,6 @@ fn sync_top_bar(
                 format!("{}/{}", meta.unlocked_skill_slots, skill_cap)
             }
             TopBarField::Depth => depth.clone(),
-            TopBarField::Speed => {
-                if (speed.0 - 1.0).abs() < f32::EPSILON {
-                    "1x".to_string()
-                } else if (speed.0 - 2.0).abs() < f32::EPSILON {
-                    "2x".to_string()
-                } else {
-                    format!("{:.1}x", speed.0)
-                }
-            }
         };
         if text.0 != value {
             text.0 = value;
@@ -1177,7 +1192,7 @@ fn fulfill_reset_progress(
             for e in &roots {
                 commands.entity(e).despawn();
             }
-            crate::ui::title_camp::spawn_title_screen(&mut commands, &profile, speed.0, &ph);
+            crate::ui::title_camp::spawn_title_screen(&mut commands, &profile, speed.multiplier(), &ph);
         } else {
             next_state.set(GameState::Title);
         }
@@ -1190,7 +1205,6 @@ fn open_settings_modal(
     interactions: Query<(Entity, &Interaction), With<SettingsButton>>,
     roots: Query<Entity, With<UiRoot>>,
     existing: Query<(), With<SettingsModalRoot>>,
-    speed: Res<RunSpeedSetting>,
     mut commands: Commands,
 ) {
     if !mouse.just_released(MouseButton::Left) {
@@ -1210,7 +1224,7 @@ fn open_settings_modal(
             return;
         };
         commands.entity(root).with_children(|parent| {
-            crate::ui::mockup_layout::spawn_settings_modal(parent, speed.0);
+            crate::ui::mockup_layout::spawn_settings_modal(parent);
         });
         break;
     }
@@ -1536,12 +1550,12 @@ fn handle_skill_book_pick(
     }
 }
 
-fn handle_settings_modal_speed(
+fn handle_playback_speed_arrows(
     mouse: Res<ButtonInput<MouseButton>>,
     press: Res<UiClickPress>,
-    interactions: Query<(Entity, &Interaction), With<SettingsModalSpeedButton>>,
+    dec: Query<(Entity, &Interaction), With<PlaybackSpeedDecButton>>,
+    inc: Query<(Entity, &Interaction), With<PlaybackSpeedIncButton>>,
     mut speed: ResMut<RunSpeedSetting>,
-    mut labels: Query<&mut Text, With<SettingsModalSpeedLabel>>,
 ) {
     if !mouse.just_released(MouseButton::Left) {
         return;
@@ -1549,26 +1563,17 @@ fn handle_settings_modal_speed(
     let Some(target) = press.0 else {
         return;
     };
-    for (entity, interaction) in &interactions {
-        if entity != target || !ui_click_release_confirms(*interaction) {
-            continue;
+    for (entity, interaction) in &dec {
+        if entity == target && ui_click_release_confirms(*interaction) {
+            speed.dec();
+            return;
         }
-        speed.0 = if (speed.0 - 1.0).abs() < f32::EPSILON {
-            2.0
-        } else {
-            1.0
-        };
-        let speed_label = if (speed.0 - 1.0).abs() < f32::EPSILON {
-            "1x".to_string()
-        } else if (speed.0 - 2.0).abs() < f32::EPSILON {
-            "2x".to_string()
-        } else {
-            format!("{:.1}x", speed.0)
-        };
-        for mut text in &mut labels {
-            text.0 = format!("Speed: {speed_label} (click to toggle)");
+    }
+    for (entity, interaction) in &inc {
+        if entity == target && ui_click_release_confirms(*interaction) {
+            speed.inc();
+            return;
         }
-        break;
     }
 }
 

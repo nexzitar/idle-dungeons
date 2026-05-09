@@ -171,12 +171,6 @@ pub struct SettingsModalBackdrop;
 #[derive(Component)]
 pub struct SettingsModalCloseButton;
 
-#[derive(Component)]
-pub struct SettingsModalSpeedButton;
-
-#[derive(Component)]
-pub struct SettingsModalSpeedLabel;
-
 /// Root of the skill book overlay.
 #[derive(Component)]
 pub struct SkillBookRoot;
@@ -379,8 +373,19 @@ pub enum TopBarField {
     Salvage,
     SkillSlots,
     Depth,
-    Speed,
 }
+
+/// Header control: slower delve playback (steps through [`crate::app::PLAYBACK_SPEED_STEPS`]).
+#[derive(Component)]
+pub struct PlaybackSpeedDecButton;
+
+/// Header control: faster delve playback.
+#[derive(Component)]
+pub struct PlaybackSpeedIncButton;
+
+/// Header text showing current playback multiplier (synced from [`crate::app::RunSpeedSetting`]).
+#[derive(Component)]
+pub struct PlaybackSpeedValueText;
 
 /// Marks the clip viewport for mouse-wheel scrolling (`apply_ui_scroll`).
 #[derive(Component)]
