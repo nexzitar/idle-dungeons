@@ -18,6 +18,10 @@ pub struct MetaProgression {
     /// Saves that omit this field deserialize to the **starter set** (matches a fresh profile).
     #[serde(default = "default_unlocked_skill_ids_migration")]
     pub unlocked_skill_ids: Vec<SkillId>,
+    /// Lifetime claims of guaranteed **before-depth-10** combat salvage on the player's profile:
+    /// first is a **weapon**, second **armor**; later rolls use varied seeds so repeats are not clones.
+    #[serde(default)]
+    pub guided_early_combat_drop_count: u32,
 }
 
 impl Default for MetaProgression {
@@ -29,6 +33,7 @@ impl Default for MetaProgression {
             skill_slot_progress: 0,
             deepest_floor_reached: 0,
             unlocked_skill_ids: STARTER_SKILLS.iter().copied().collect(),
+            guided_early_combat_drop_count: 0,
         }
     }
 }
@@ -89,6 +94,7 @@ mod tests {
     #[test]
     fn starter_skills_only_in_default_meta() {
         let m = MetaProgression::default();
+        assert_eq!(m.guided_early_combat_drop_count, 0);
         assert_eq!(m.unlocked_skill_ids.len(), 4);
         assert!(m.has_skill_unlocked(SkillId::HeavyStrike));
         assert!(!m.has_skill_unlocked(SkillId::PoisonEdge));

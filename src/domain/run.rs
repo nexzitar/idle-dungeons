@@ -6,7 +6,7 @@ use crate::domain::dungeon::{
 };
 use crate::domain::hero::HeroProfile;
 use crate::domain::items::ItemInstance;
-use crate::domain::loot::{roll_loot, salvage_value};
+use crate::domain::loot::{roll_loot, roll_profile_guided_early_combat_drop, salvage_value};
 use serde::{Deserialize, Serialize};
 
 /// Default floor cap for a full delve (matches typical [`RunConfig::max_depth`]).
@@ -21,6 +21,8 @@ pub struct RunConfig {
     pub max_depth: u32,
     /// Multiplier applied to total run gold (from meta upgrades). Default `1.0`.
     pub gold_gain_multiplier: f32,
+    /// Copy of **`MetaProgression::guided_early_combat_drop_count`** at run start — steers weapon→armor pacing for shallow combat salvage.
+    pub guided_early_combat_claims_already: u32,
 }
 
 impl RunConfig {
@@ -29,6 +31,7 @@ impl RunConfig {
             seed,
             max_depth,
             gold_gain_multiplier: 1.0,
+            guided_early_combat_claims_already: 0,
         }
     }
 }
@@ -54,6 +57,9 @@ pub struct RunSummary {
     pub log: Vec<String>,
     #[serde(default)]
     pub peak_risk_note: String,
+    /// This run awarded the once-per-delve salvage before depth **10** (`weapon`/`armor` pacing).
+    #[serde(default)]
+    pub guided_early_combat_drop_granted: bool,
 }
 
 fn default_summary_dungeon_cap() -> u32 {
@@ -162,6 +168,7 @@ fn simulate_run_with_playback_for_rooms(
     let mut partner_current_hp = partner_max_hp.unwrap_or(0);
     let mut floors_cleared = 0u32;
     let mut granted_pre10_combat_loot = false;
+    let mut guided_early_combat_drop_granted_this_run = false;
     let mut peak_risk_rank = 0u8;
     let mut run_dmg_meter_0 = 0u32;
     let mut run_dmg_meter_1 = 0u32;
@@ -193,6 +200,7 @@ fn simulate_run_with_playback_for_rooms(
                             ),
                             log,
                             peak_risk_note: peak_risk_note(peak_risk_rank),
+                            guided_early_combat_drop_granted: guided_early_combat_drop_granted_this_run,
                         },
                         playback,
                     };
@@ -251,16 +259,21 @@ fn simulate_run_with_playback_for_rooms(
                             && !granted_pre10_combat_loot
                         {
                             granted_pre10_combat_loot = true;
-                            let item = roll_loot(
+                            guided_early_combat_drop_granted_this_run = true;
+                            let item = roll_profile_guided_early_combat_drop(
                                 room.depth,
-                                config
-                                    .seed
-                                    .wrapping_mul(31337)
-                                    .wrapping_add(room.depth as u64 * 17),
+                                config.seed,
+                                room.depth,
+                                config.guided_early_combat_claims_already,
                             );
+                            let note = match config.guided_early_combat_claims_already {
+                                0 => "weapon salvage",
+                                1 => "armor salvage",
+                                _ => "skirmish salvage",
+                            };
                             log.push(format!(
-                                "Depth {}: scavenged {} (first blood).",
-                                room.depth, item.name
+                                "Depth {}: scavenged {} ({}).",
+                                room.depth, item.name, note
                             ));
                             loot.push(item);
                         }
@@ -291,6 +304,7 @@ fn simulate_run_with_playback_for_rooms(
                                     death_reason: None,
                                     log,
                                     peak_risk_note: peak_risk_note(peak_risk_rank),
+                                    guided_early_combat_drop_granted: guided_early_combat_drop_granted_this_run,
                                 },
                                 playback,
                             };
@@ -310,6 +324,7 @@ fn simulate_run_with_playback_for_rooms(
                                 death_reason: Some(format!("Defeated by {}", enemy.name)),
                                 log,
                                 peak_risk_note: peak_risk_note(peak_risk_rank),
+                                guided_early_combat_drop_granted: guided_early_combat_drop_granted_this_run,
                             },
                             playback,
                         };
@@ -368,6 +383,7 @@ fn simulate_run_with_playback_for_rooms(
             death_reason: None,
             log,
             peak_risk_note: peak_risk_note(peak_risk_rank),
+            guided_early_combat_drop_granted: guided_early_combat_drop_granted_this_run,
         },
         playback,
     }

@@ -178,19 +178,16 @@ fn loot_display_name(rarity: ItemRarity, slot: GearSlot, affixes: &[ItemAffix]) 
     }
 }
 
-pub fn roll_loot(depth: u32, seed: u64) -> ItemInstance {
-    let mut rng = ChaCha8Rng::seed_from_u64(seed ^ depth as u64);
-    let slot = match rng.gen_range(0..3) {
-        0 => GearSlot::Weapon,
-        1 => GearSlot::Armor,
-        _ => GearSlot::Trinket,
-    };
-    let rarity = rarity_for_depth(depth);
+fn item_from_slot_and_affixes(
+    depth: u32,
+    id_seed: u64,
+    slot: GearSlot,
+    rarity: ItemRarity,
+    affixes: Vec<ItemAffix>,
+) -> ItemInstance {
     let budget = depth as i32 + rarity_bonus(rarity);
-    let affixes = roll_affixes(&mut rng, slot, rarity);
-
     ItemInstance {
-        id: seed ^ ((depth as u64) << 32),
+        id: id_seed ^ ((depth as u64) << 32),
         name: loot_display_name(rarity, slot, &affixes),
         slot,
         rarity,
@@ -211,6 +208,57 @@ pub fn roll_loot(depth: u32, seed: u64) -> ItemInstance {
             },
         },
         affixes,
+    }
+}
+
+/// Roll loot with a locked gear slot — used for onboarding salvage pacing.
+pub fn roll_loot_for_slot(depth: u32, seed: u64, slot: GearSlot) -> ItemInstance {
+    let lane = match slot {
+        GearSlot::Weapon => 0xD15EA5Du64,
+        GearSlot::Armor => 0xBAD00D7Au64,
+        GearSlot::Trinket => 0x731B1EFu64,
+    };
+    let lane_shift = lane.rotate_left(slot as u32);
+    let mut rng =
+        ChaCha8Rng::seed_from_u64(seed.wrapping_add(depth as u64) ^ lane_shift);
+    let rarity = rarity_for_depth(depth);
+    let affixes = roll_affixes(&mut rng, slot, rarity);
+    let id_seed = seed ^ lane_shift;
+    item_from_slot_and_affixes(depth, id_seed, slot, rarity, affixes)
+}
+
+pub fn roll_loot(depth: u32, seed: u64) -> ItemInstance {
+    let mut rng = ChaCha8Rng::seed_from_u64(seed ^ depth as u64);
+    let slot = match rng.gen_range(0..3) {
+        0 => GearSlot::Weapon,
+        1 => GearSlot::Armor,
+        _ => GearSlot::Trinket,
+    };
+    let rarity = rarity_for_depth(depth);
+    let affixes = roll_affixes(&mut rng, slot, rarity);
+    item_from_slot_and_affixes(depth, seed, slot, rarity, affixes)
+}
+
+/// Profile milestone for guaranteed combat salvage before depth **10**:
+/// first **weapon**, second **armor**; later uses [`roll_loot`] with salted RNG so repeats are not clones.
+pub fn roll_profile_guided_early_combat_drop(
+    depth: u32,
+    run_seed: u64,
+    room_depth: u32,
+    profile_claim_count_before_grant: u32,
+) -> ItemInstance {
+    let salt = run_seed
+        .wrapping_mul(31_337)
+        .wrapping_add(u64::from(room_depth).wrapping_mul(17))
+        .wrapping_add(
+            u64::from(profile_claim_count_before_grant)
+                .rotate_left(7)
+                .wrapping_mul(0x9E37_79B97F4A7C15),
+        );
+    match profile_claim_count_before_grant {
+        0 => roll_loot_for_slot(depth, salt, GearSlot::Weapon),
+        1 => roll_loot_for_slot(depth, salt, GearSlot::Armor),
+        _ => roll_loot(depth, salt),
     }
 }
 
@@ -245,6 +293,21 @@ mod tests {
         let second = roll_loot(10, 99);
 
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn guided_early_combat_first_weapon_second_armor() {
+        let w = roll_profile_guided_early_combat_drop(1, 99, 1, 0);
+        let a = roll_profile_guided_early_combat_drop(1, 99, 1, 1);
+        assert_eq!(w.slot, GearSlot::Weapon);
+        assert_eq!(a.slot, GearSlot::Armor);
+    }
+
+    #[test]
+    fn guided_early_claim_tiers_are_not_duplicate_items_same_seed() {
+        let first = roll_profile_guided_early_combat_drop(3, 1, 3, 0);
+        let second = roll_profile_guided_early_combat_drop(3, 1, 3, 1);
+        assert_ne!(first, second, "milestones differ while MVP run seed stays fixed");
     }
 
     #[test]

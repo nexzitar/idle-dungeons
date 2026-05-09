@@ -2,6 +2,12 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.7 — 2026-05-09
+
+### Early game / loot
+
+- Guided **skirmish salvage** (first combat win before depth **10**): on your profile, the **first** claim rolls a **weapon**, the **second** an **armor**; later claims use normal loot with **salted RNG** that includes your lifetime claim count — the MVP **fixed delve seed** no longer hands you the **same starter item** on every run while gold still accrues.
+
 ## 0.2.6 — 2026-05-08
 
 ### UI / input

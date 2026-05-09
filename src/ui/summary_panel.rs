@@ -12,6 +12,7 @@ pub fn empty_run_summary() -> RunSummary {
         death_reason: Some("No chronicle available.".to_string()),
         log: Vec::new(),
         peak_risk_note: String::new(),
+        guided_early_combat_drop_granted: false,
     }
 }
 
@@ -104,6 +105,7 @@ mod tests {
             death_reason: Some("Defeated by Hollow".into()),
             log: vec!["Depth 8: defeated by Hollow".into()],
             peak_risk_note: "Peak room risk: moderate (standard combat).".into(),
+            guided_early_combat_drop_granted: false,
         };
 
         let text = summary_panel_text(&summary);
