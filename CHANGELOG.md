@@ -2,6 +2,17 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.3 — 2026-05-08
+
+### Engine / build
+
+- **Bevy 0.18**: ECS uses **messages** instead of legacy events (`add_message`, `MessageReader`, etc.); **UI** spawns **`Node`** / **`Text`** components instead of bundles; input such as hero rename listens for **`KeyboardInput`** instead of **`ReceivedCharacter`**. Playback and game logic crates are unchanged.
+- **Lean Bevy deps**: `default-features = false` with `features = ["2d"]` drops the bundled **3D** stack (`bevy_pbr`, `bevy_gltf`, etc.) — faster builds and smaller binaries for this UI-first game.
+
+### Maintenance
+
+- Cleaned **`unused_parens`** warnings from UI spawn sites after the automated bundle-to-component refactors.
+
 ## 0.2.2 — 2026-05-06
 
 ### Brand / flow
