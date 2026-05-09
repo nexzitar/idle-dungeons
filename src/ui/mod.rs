@@ -20,6 +20,7 @@ use crate::app::{
     GameState, LatestRunSummary, OpenGearHub, OpenSkillBook, OpenSkillShop, ProfileSavePath,
     ProfileState, ResetProgress, RunSpeedSetting, SalvageInventoryItem, SkipRunPlayback, StartRun,
 };
+use crate::domain::combat::COMBAT_TICK_DISPLAY_SECS;
 use crate::domain::items::ItemInstance;
 use crate::domain::run::{RunPlaybackFrameKind, RunSummary};
 use crate::ui::build_panel::build_panel_text;
@@ -93,6 +94,10 @@ impl Plugin for UiPlugin {
         app.init_resource::<crate::ui::tooltip::TooltipState>();
         app.init_resource::<HeroNameEditState>();
         app.init_resource::<PlaybackCombatLogVisible>();
+        app.add_systems(
+            PreUpdate,
+            raise_tooltip_above_modals,
+        );
         app.add_systems(
             Update,
             crate::ui::tooltip::hide_tooltip_layer_before_pointer_focus.before(UiSystems::Focus),
@@ -219,6 +224,21 @@ fn in_build_or_summary(state: Res<State<GameState>>) -> bool {
 
 fn spawn_camera(mut commands: Commands) {
     commands.spawn((Camera2d, MainCamera));
+}
+
+/// Keep the tooltip layer painted above modals spawned later as additional root children.
+fn raise_tooltip_above_modals(
+    mut commands: Commands,
+    roots: Query<Entity, With<UiRoot>>,
+    tooltip: Query<Entity, With<crate::ui::tooltip::TooltipLayer>>,
+) {
+    let Ok(root) = roots.single() else {
+        return;
+    };
+    let Ok(tip) = tooltip.single() else {
+        return;
+    };
+    commands.entity(root).add_child(tip);
 }
 
 fn spawn_title_screen(
@@ -1686,15 +1706,29 @@ fn sync_playback_damage_meters(
         return;
     }
     let idx = playback.display_index.min(playback.frames.len() - 1);
-    let frame = &playback.frames[idx];
-    let has_partner = frame.partner_snapshot_max_hp.is_some();
-    let (p0, p1, fe) = match &frame.kind {
-        RunPlaybackFrameKind::Combat(c) => (
+    let frames = playback.frames.as_slice();
+    let mut combat: Option<&crate::domain::combat::CombatPlaybackFrame> = None;
+    for f in frames[..=idx].iter().rev() {
+        if let RunPlaybackFrameKind::Combat(c) = &f.kind {
+            combat = Some(c);
+            break;
+        }
+    }
+    let has_partner = frames[idx].partner_snapshot_max_hp.is_some();
+    let secs = COMBAT_TICK_DISPLAY_SECS.max(0.001);
+    let fmt = |dmg: u32, ticks: u32| -> String {
+        let t = ticks.max(1) as f32 * secs;
+        let dps = dmg as f32 / t;
+        format!("{} · {:.1}/s", dmg, dps)
+    };
+    let (p0, p1, fe, tk) = match combat {
+        Some(c) => (
             c.damage_meter_party_0,
             c.damage_meter_party_1,
             c.damage_meter_foe,
+            c.run_sim_ticks,
         ),
-        _ => (0u32, 0u32, 0u32),
+        None => (0u32, 0u32, 0u32, 1u32),
     };
     let max = p0.max(p1).max(fe).max(1) as f32;
     let w0 = (p0 as f32 / max * 100.0).clamp(0.0, 100.0);
@@ -1709,9 +1743,9 @@ fn sync_playback_damage_meters(
     for mut s in fills.p2().iter_mut() {
         s.width = Val::Percent(wf);
     }
-    let s0 = p0.to_string();
-    let s1 = p1.to_string();
-    let sf = fe.to_string();
+    let s0 = fmt(p0, tk);
+    let s1 = fmt(p1, tk);
+    let sf = fmt(fe, tk);
     for mut t in vals.p0().iter_mut() {
         if t.0 != s0 {
             t.0.clone_from(&s0);

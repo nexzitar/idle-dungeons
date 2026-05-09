@@ -163,6 +163,10 @@ fn simulate_run_with_playback_for_rooms(
     let mut floors_cleared = 0u32;
     let mut granted_pre10_combat_loot = false;
     let mut peak_risk_rank = 0u8;
+    let mut run_dmg_meter_0 = 0u32;
+    let mut run_dmg_meter_1 = 0u32;
+    let mut run_dmg_meter_foe = 0u32;
+    let mut run_sim_ticks_total = 0u32;
 
     for room in rooms {
         deepest_depth = room.depth;
@@ -212,7 +216,15 @@ fn simulate_run_with_playback_for_rooms(
                     at_start,
                     partner_max_hp.map(|_| partner_current_hp),
                     partner_max_hp,
+                    run_dmg_meter_0,
+                    run_dmg_meter_1,
+                    run_dmg_meter_foe,
+                    run_sim_ticks_total,
                 ) {
+                    run_dmg_meter_0 = frame.damage_meter_party_0;
+                    run_dmg_meter_1 = frame.damage_meter_party_1;
+                    run_dmg_meter_foe = frame.damage_meter_foe;
+                    run_sim_ticks_total = frame.run_sim_ticks;
                     playback.frames.push(playback_frame(
                         room.depth,
                         room.kind,
