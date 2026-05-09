@@ -1,6 +1,7 @@
 use crate::domain::hero::HeroProfile;
 use crate::domain::items::ItemInstance;
 use crate::domain::progression::MetaProgression;
+use crate::domain::skills::STARTER_SKILLS;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -88,7 +89,10 @@ pub fn load_profile(path: &Path) -> Result<SaveProfile, SaveError> {
         return Ok(SaveProfile::default());
     }
     let contents = std::fs::read_to_string(path)?;
-    let profile = serde_json::from_str(&contents)?;
+    let mut profile: SaveProfile = serde_json::from_str(&contents)?;
+    if profile.meta.unlocked_skill_ids.is_empty() {
+        profile.meta.unlocked_skill_ids = STARTER_SKILLS.iter().copied().collect();
+    }
     Ok(profile)
 }
 
@@ -105,6 +109,21 @@ pub fn save_profile(path: &Path, profile: &SaveProfile) -> Result<(), SaveError>
 mod tests {
     use super::*;
     use crate::domain::progression::MetaProgression;
+    use crate::domain::skills::{SkillId, STARTER_SKILLS};
+
+    #[test]
+    fn empty_unlock_list_on_disk_loads_as_starters() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("profile.json");
+        let mut profile = SaveProfile::default();
+        profile.meta.unlocked_skill_ids.clear();
+        save_profile(&path, &profile).unwrap();
+
+        let loaded = load_profile(&path).unwrap();
+        assert_eq!(loaded.meta.unlocked_skill_ids.len(), STARTER_SKILLS.len());
+        assert!(loaded.meta.has_skill_unlocked(SkillId::HeavyStrike));
+        assert!(!loaded.meta.has_skill_unlocked(SkillId::PoisonEdge));
+    }
 
     #[test]
     fn missing_save_returns_fresh_profile() {

@@ -38,9 +38,13 @@ impl Encounter {
         let mult = if elite { 2 } else { 1 };
         let base_hp = 24 + depth as i32 * 6;
         let mut max_health = base_hp * mult;
-        // Slightly tame the first milestone elite so new runs reliably reach the fight.
+        let mut dmg = (3 + depth as i32 / 2) * mult;
+        let mut armor = depth as i32 / 5;
+        // Milestone elites need to threaten early runs that already earned a loot piece.
         if elite && depth == 10 {
-            max_health = (max_health * 90 / 100).max(base_hp.max(1));
+            max_health = (max_health * 135 / 100).max(base_hp * 3 / 2);
+            dmg += 4;
+            armor += 2;
         }
         Self {
             enemy: Enemy {
@@ -50,8 +54,8 @@ impl Encounter {
                     "Hollow".into()
                 },
                 max_health,
-                damage: (3 + depth as i32 / 2) * mult,
-                armor: depth as i32 / 5,
+                damage: dmg,
+                armor,
                 attack_speed: if elite { 0.9 } else { 1.05 },
                 cast_ticks: if elite { 2 } else { 1 },
                 cooldown_ticks: if elite { 4 } else { 3 },

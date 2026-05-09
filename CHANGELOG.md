@@ -2,17 +2,29 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.5 — 2026-05-08
+
+### Progression / saves
+
+- **Skill library defaults**: Saves that omit **`unlocked_skill_ids`** deserialize to the **starter four** (same as a fresh profile). An **explicit empty list** on disk is normalized to starters on load.
+- **Playback UI**: Tooltip layer is **re-parented each frame** so hover text stays above modals (e.g. skill book).
+
+### Combat playback
+
+- **Damage meters** show **run-wide** totals (carry across encounters in the same delve) plus an approximate **damage per second** (uses `COMBAT_TICK_DISPLAY_SECS` as the display tick length).
+- **Depth-10 elite** is stronger again (more HP, damage, and armor) so early runs without a build do not nearly clear the milestone.
+
 ## 0.2.4 — 2026-05-08
 
 ### Combat & pacing
 
 - **Skill cadence**: **OnAttack** actives use **cast** and **cooldown** simulation ticks (see `skill_timings`); spammy meter-only swings only apply when you have **no** attack actives equipped.
 - **Playback**: **Cast** and **cooldown** micro-bars under each hero/enemy HP bar during combat playback.
-- **Elite / boss tuning**: Depth-10 elite slightly trimmed; Gate Warden stats lowered; longer combat tick budget for simulated fights.
+- **Elite / boss tuning**: Gate Warden stats lowered; longer combat tick budget for simulated fights.
 
 ### Progression
 
-- **Starter skills**: New saves only **four** skills in the book until you purchase more (migrating saves without the field still unlock the **full** roster).
+- **Starter skills**: New saves only **four** skills in the book until you purchase more from the skill guild.
 - **Skill guild** (briefing footer): spend **gold** to permanently add skills to your library; **Assign hero skill** refuses locked IDs.
 
 ### Run rewards
@@ -43,11 +55,11 @@ All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **
 
 - **Backdrop**: Procedural **pixel stone wall** texture (`dungeon_theater` in `UiPlaceholderImages`) tiled behind the live combat strip; swap with `assets/ui/dungeon_theater.png` later if you want hand-drawn art.
 - **Threat focus**: Red **horizontal bar** overlay points at the focused party row (`sync_playback_aggro_arrow_line`), driven by the same threat / target rules as the existing “→ You / Ally” caption on the enemy plate.
-- **Damage meters**: **DAMAGE (THIS ENCOUNTER)** block with bars for **Hero** (lead attacks + poison/thorns to the enemy), **Ally** (partner attacks only; row hidden when solo), and **Foe** (total damage dealt by the enemy to the party). Bar width is relative to the max of the three totals on the current frame.
+- **Damage meters**: **DAMAGE (RUN TOTAL)** block with bars for **Hero** (lead attacks + poison/thorns to the enemy), **Ally** (partner attacks only; row hidden when solo), and **Foe** (total damage dealt by the enemy to the party). Bar width is relative to the max of the three **run cumulative** totals on the current frame.
 
 ### Data / telemetry
 
-- `CombatPlaybackFrame` now carries **`damage_meter_party_0`**, **`damage_meter_party_1`**, and **`damage_meter_foe`**, accumulated while building playback from combat events.
+- `CombatPlaybackFrame` carries **run-cumulative** damage meter fields (`damage_meter_party_0`, `damage_meter_party_1`, `damage_meter_foe`) and **`run_sim_ticks`** for DPS labeling during playback.
 
 ## 0.2.0 — 2026-05-06
 

@@ -1453,7 +1453,7 @@ fn spawn_playback_enemy_plate(parent: &mut ChildSpawnerCommands<'_>) {
 }
 
 fn spawn_playback_damage_meters_block(parent: &mut ChildSpawnerCommands<'_>) {
-    parent.spawn(section_title("DAMAGE (THIS ENCOUNTER)"));
+    parent.spawn(section_title("DAMAGE (RUN TOTAL)"));
     parent
         .spawn(Node {
                 box_sizing: BoxSizing::BorderBox,

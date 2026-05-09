@@ -2,7 +2,7 @@ use crate::domain::skills::{SkillId, STARTER_SKILLS};
 use serde::{Deserialize, Serialize};
 
 fn default_unlocked_skill_ids_migration() -> Vec<SkillId> {
-    SkillId::ALL.iter().copied().collect()
+    STARTER_SKILLS.iter().copied().collect()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -14,7 +14,8 @@ pub struct MetaProgression {
     /// Deepest floor reached on any finished run (used for party slot unlocks).
     #[serde(default)]
     pub deepest_floor_reached: u32,
-    /// Skill book entries purchased or granted (starters). Omitted / empty in old saves ⇒ migrate to full roster.
+    /// Skill book entries purchased or granted (starters).
+    /// Saves that omit this field deserialize to the **starter set** (matches a fresh profile).
     #[serde(default = "default_unlocked_skill_ids_migration")]
     pub unlocked_skill_ids: Vec<SkillId>,
 }

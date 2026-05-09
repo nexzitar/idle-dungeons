@@ -212,6 +212,9 @@ fn flatten_playback_steps(events: &[CombatEvent]) -> Vec<PlaybackStep> {
     out
 }
 
+/// Seconds assumed per combat-sim clock tick when the UI prints DPS alongside run damage meters.
+pub const COMBAT_TICK_DISPLAY_SECS: f32 = 0.48;
+
 /// One row of combat UI: HP totals after a combat event (plus an opening "engage" row).
 #[derive(Debug, Clone, PartialEq)]
 pub struct CombatPlaybackFrame {
@@ -232,12 +235,14 @@ pub struct CombatPlaybackFrame {
     /// Latest threat totals from combat telemetry (`None` until a snapshot exists).
     pub threat_slot0: Option<i32>,
     pub threat_slot1: Option<i32>,
-    /// Cumulative damage the party dealt to the enemy this fight (lead hero attacks + shared DOT/thorns).
+    /// Cumulative **run** damage the party dealt to enemies (meter display; includes prior fights).
     pub damage_meter_party_0: u32,
-    /// Cumulative damage from partner hero attacks (`0` when solo).
+    /// Cumulative **run** damage from partner hero attacks (`0` when solo).
     pub damage_meter_party_1: u32,
-    /// Cumulative damage the enemy dealt to the party (all targets).
+    /// Cumulative **run** damage the foe dealt to the party.
     pub damage_meter_foe: u32,
+    /// Sim-progress through the delve for DPS (~ combat clock ticks accumulated through this frame).
+    pub run_sim_ticks: u32,
     pub sfx_anchor: CombatSfxAnchor,
     /// 0–1 cast bar fill for the lead hero (weapon swing wind-up).
     pub lead_cast: f32,
@@ -256,6 +261,8 @@ pub struct CombatResult {
     pub partner_health: Option<i32>,
     pub partner_max_health: Option<i32>,
     pub enemy_health: i32,
+    /// Combat-simulation clock steps executed (upper bound slice length in [`simulate_combat_party`]).
+    pub clock_ticks: u32,
     pub events: Vec<CombatEvent>,
 }
 
@@ -501,6 +508,7 @@ pub fn simulate_combat_party(
                 None
             },
             enemy_health: enemy.max_health,
+            clock_ticks: 0,
             events: vec![CombatEvent::HeroDefeated],
         };
     }
@@ -511,6 +519,7 @@ pub fn simulate_combat_party(
             partner_health: Some(h1),
             partner_max_health: Some(partner_max),
             enemy_health: enemy.max_health,
+            clock_ticks: 0,
             events: vec![CombatEvent::PartyMemberDown { party_index: 1 }],
         };
     }
@@ -581,7 +590,7 @@ pub fn simulate_combat_party(
     const MAX_EVENTS: usize = 1200;
 
     macro_rules! hero_win {
-        () => {
+        ($cc:expr) => {
             return CombatResult {
                 outcome: CombatOutcome::HeroWon,
                 hero_health: h0,
@@ -596,12 +605,13 @@ pub fn simulate_combat_party(
                     None
                 },
                 enemy_health,
+                clock_ticks: $cc,
                 events,
             };
         };
     }
     macro_rules! enemy_win {
-        () => {
+        ($cc:expr) => {
             return CombatResult {
                 outcome: CombatOutcome::EnemyWon,
                 hero_health: h0,
@@ -616,6 +626,7 @@ pub fn simulate_combat_party(
                     None
                 },
                 enemy_health,
+                clock_ticks: $cc,
                 events,
             };
         };
@@ -632,7 +643,9 @@ pub fn simulate_combat_party(
     let foe_ct = enemy.cast_ticks;
     let foe_dt = enemy.cooldown_ticks;
 
+    let mut combat_clock = 0u32;
     for tick in 0..max_clock_ticks {
+        combat_clock = tick.saturating_add(1);
         if h0 <= 0 || enemy_health <= 0 || (has_partner && h1 <= 0) {
             break;
         }
@@ -677,7 +690,7 @@ pub fn simulate_combat_party(
                 if enemy_health <= 0 {
                     events.push(CombatEvent::EnemyDefeated);
                     maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
-                    hero_win!();
+                    hero_win!(combat_clock);
                 }
             }
         } else if h0 > 0 && enemy_health > 0 {
@@ -707,7 +720,7 @@ pub fn simulate_combat_party(
                     if enemy_health <= 0 {
                         events.push(CombatEvent::EnemyDefeated);
                         maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
-                        hero_win!();
+                        hero_win!(combat_clock);
                     }
                 }
             } else {
@@ -735,7 +748,7 @@ pub fn simulate_combat_party(
                         if enemy_health <= 0 {
                             events.push(CombatEvent::EnemyDefeated);
                             maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
-                            hero_win!();
+                            hero_win!(combat_clock);
                         }
                     }
                 }
@@ -769,7 +782,7 @@ pub fn simulate_combat_party(
                     if enemy_health <= 0 {
                         events.push(CombatEvent::EnemyDefeated);
                         maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
-                        hero_win!();
+                        hero_win!(combat_clock);
                     }
                 }
             } else if h1 > 0 && enemy_health > 0 {
@@ -797,7 +810,7 @@ pub fn simulate_combat_party(
                         if enemy_health <= 0 {
                             events.push(CombatEvent::EnemyDefeated);
                             maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
-                            hero_win!();
+                            hero_win!(combat_clock);
                         }
                     }
                 } else {
@@ -823,7 +836,7 @@ pub fn simulate_combat_party(
                             if enemy_health <= 0 {
                                 events.push(CombatEvent::EnemyDefeated);
                                 maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
-                                hero_win!();
+                                hero_win!(combat_clock);
                             }
                         }
                     }
@@ -895,17 +908,17 @@ pub fn simulate_combat_party(
                     if enemy_health <= 0 {
                         events.push(CombatEvent::EnemyDefeated);
                         maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
-                        hero_win!();
+                        hero_win!(combat_clock);
                     }
                 }
 
                 if target == 0 && h0 <= 0 {
                     events.push(CombatEvent::HeroDefeated);
-                    enemy_win!();
+                    enemy_win!(combat_clock);
                 }
                 if target == 1 && h1 <= 0 {
                     events.push(CombatEvent::PartyMemberDown { party_index: 1 });
-                    enemy_win!();
+                    enemy_win!(combat_clock);
                 }
             }
         } else if enemy_health > 0 && h0 > 0 && (!has_partner || h1 > 0) {
@@ -965,16 +978,16 @@ pub fn simulate_combat_party(
                         if enemy_health <= 0 {
                             events.push(CombatEvent::EnemyDefeated);
                             maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
-                            hero_win!();
+                            hero_win!(combat_clock);
                         }
                     }
                     if target == 0 && h0 <= 0 {
                         events.push(CombatEvent::HeroDefeated);
-                        enemy_win!();
+                        enemy_win!(combat_clock);
                     }
                     if target == 1 && h1 <= 0 {
                         events.push(CombatEvent::PartyMemberDown { party_index: 1 });
-                        enemy_win!();
+                        enemy_win!(combat_clock);
                     }
                     foe_cd_left = foe_dt;
                 }
@@ -1033,16 +1046,16 @@ pub fn simulate_combat_party(
                             if enemy_health <= 0 {
                                 events.push(CombatEvent::EnemyDefeated);
                                 maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
-                                hero_win!();
+                                hero_win!(combat_clock);
                             }
                         }
                         if target == 0 && h0 <= 0 {
                             events.push(CombatEvent::HeroDefeated);
-                            enemy_win!();
+                            enemy_win!(combat_clock);
                         }
                         if target == 1 && h1 <= 0 {
                             events.push(CombatEvent::PartyMemberDown { party_index: 1 });
-                            enemy_win!();
+                            enemy_win!(combat_clock);
                         }
                         foe_cd_left = foe_dt;
                     }
@@ -1131,7 +1144,7 @@ pub fn simulate_combat_party(
             if enemy_health <= 0 {
                 events.push(CombatEvent::EnemyDefeated);
                 maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
-                hero_win!();
+                hero_win!(combat_clock);
             }
         }
     }
@@ -1154,6 +1167,7 @@ pub fn simulate_combat_party(
             None
         },
         enemy_health,
+        clock_ticks: combat_clock,
         events,
     }
 }
@@ -1219,6 +1233,10 @@ pub fn combat_playback_frames_from_result(
     hero_hp_at_start: i32,
     partner_hp_at_start: Option<i32>,
     partner_max_hp: Option<i32>,
+    run_meter_party_0: u32,
+    run_meter_party_1: u32,
+    run_meter_foe: u32,
+    run_sim_ticks_base: u32,
 ) -> Vec<CombatPlaybackFrame> {
     let partner_name = partner.map(|p| p.name.as_str());
     let has_poison = lead.equipped_skill_ids().any(|s| s == SkillId::PoisonEdge)
@@ -1246,6 +1264,18 @@ pub fn combat_playback_frames_from_result(
 
     let mut last_caption = format!("Engaging {enemy_name}.");
 
+    let steps = flatten_playback_steps(&result.events);
+    let total_frames = (1 + steps.len()).max(1) as u32;
+    let combat_ticks = result.clock_ticks.max(1);
+
+    let run_sim_tick_for = |frame_index: u32| -> u32 {
+        if total_frames <= 1 {
+            return run_sim_ticks_base.saturating_add(combat_ticks);
+        }
+        let last_ix = total_frames - 1;
+        run_sim_ticks_base.saturating_add(combat_ticks.saturating_mul(frame_index) / last_ix)
+    };
+
     let mut frames = vec![CombatPlaybackFrame {
         enemy_name: enemy_name.to_string(),
         hero_hp,
@@ -1260,9 +1290,10 @@ pub fn combat_playback_frames_from_result(
         foe_last_target: None,
         threat_slot0: None,
         threat_slot1: None,
-        damage_meter_party_0: 0,
-        damage_meter_party_1: 0,
-        damage_meter_foe: 0,
+        damage_meter_party_0: run_meter_party_0,
+        damage_meter_party_1: run_meter_party_1,
+        damage_meter_foe: run_meter_foe,
+        run_sim_ticks: run_sim_tick_for(0),
         sfx_anchor: CombatSfxAnchor::Neutral,
         lead_cast: 0.0,
         lead_cd: 0.0,
@@ -1279,7 +1310,7 @@ pub fn combat_playback_frames_from_result(
     let mut foe_cast_b = 0.0f32;
     let mut foe_cd_bar = 0.0f32;
 
-    for step in flatten_playback_steps(&result.events) {
+    for step in steps {
         match &step {
             PlaybackStep::Event(event) => {
                 match event {
@@ -1381,6 +1412,7 @@ pub fn combat_playback_frames_from_result(
             }
         };
 
+        let frame_ix = frames.len() as u32;
         frames.push(CombatPlaybackFrame {
             enemy_name: enemy_name.to_string(),
             hero_hp: hero_hp.clamp(0, hero_max_hp),
@@ -1395,9 +1427,10 @@ pub fn combat_playback_frames_from_result(
             foe_last_target,
             threat_slot0,
             threat_slot1,
-            damage_meter_party_0: d0,
-            damage_meter_party_1: d1,
-            damage_meter_foe: foe_meter,
+            damage_meter_party_0: run_meter_party_0.saturating_add(d0),
+            damage_meter_party_1: run_meter_party_1.saturating_add(d1),
+            damage_meter_foe: run_meter_foe.saturating_add(foe_meter),
+            run_sim_ticks: run_sim_tick_for(frame_ix),
             sfx_anchor,
             lead_cast,
             lead_cd,
@@ -1429,6 +1462,10 @@ pub fn combat_playback_frames(
         hero_start,
         None,
         None,
+        0,
+        0,
+        0,
+        0,
     )
 }
 
