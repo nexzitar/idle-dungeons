@@ -2,6 +2,12 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.9 — 2026-05-08
+
+### UX
+
+- **Gear hub**: **Equipped** loadout and **Stash** are shown as **two side-by-side panels** (centered row with gutter space) instead of one tall stack; stash gets a taller scroll viewport.
+
 ## 0.2.8 — 2026-05-08
 
 ### UX
