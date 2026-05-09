@@ -2,6 +2,15 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.12 — 2026-05-09
+
+### Fixes
+
+- **UI clicks**: Serialized **capture → modal/button handlers → `clear_ui_click_after_release`** in one chain so clearing the click target cannot race handlers (skill shop buys and other taps were flaky).
+- **`Interaction::None` on mouse-up**: Treated like a valid confirmation when resolving release, covering Bevy's brief transient state on fast clicks.
+- **Skill guild**: When you lack gold, rows are **non-buttons** so we don't enqueue impossible purchases (tooltip explains how much gold is missing).
+- **Scroll**: Mouse wheel deltas are **inverted** in `apply_ui_scroll` so lists move in the intuitive direction.
+
 ## 0.2.11 — 2026-05-09
 
 ### UX

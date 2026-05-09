@@ -159,16 +159,15 @@ impl Plugin for UiPlugin {
                             hero_rename_keyboard,
                         )
                             .chain(),
+                        (
+                            handle_accept_button.run_if(in_state(GameState::Summary)),
+                            handle_equip_buttons.run_if(in_build_or_summary),
+                            handle_salvage_buttons.run_if(in_build_or_summary),
+                            clear_ui_click_after_release,
+                        )
+                            .chain(),
                     )
                         .chain(),
-                    (
-                        handle_accept_button.run_if(in_state(GameState::Summary)),
-                        handle_equip_buttons.run_if(in_build_or_summary),
-                        handle_salvage_buttons.run_if(in_build_or_summary),
-                        clear_ui_click_after_release,
-                    )
-                        .chain()
-                        .after(handle_open_skill_book),
                     sync_top_bar,
                     sync_playback_speed_label,
                     tick_campfire_flames.run_if(in_state(GameState::Title)),
@@ -472,9 +471,15 @@ fn capture_ui_click_start(
 /// Bevy UI's `ui_focus_system` may leave [`Interaction::Pressed`] on the frame where the
 /// mouse button is released if press and release occur in the same update (common with quick taps).
 /// After a longer hold, release instead becomes [`Interaction::Hovered`].
+/// Bevy can briefly flip a control to [`Interaction::None`] on mouse-up before hover restabilizes,
+/// especially with nested UI hit targets—still treat release as confirming if [`UiClickPress`]
+/// captured this entity on mouse-down (callers gate on matching `target`).
 #[inline]
 fn ui_click_release_confirms(interaction: Interaction) -> bool {
-    matches!(interaction, Interaction::Hovered | Interaction::Pressed)
+    matches!(
+        interaction,
+        Interaction::Hovered | Interaction::Pressed | Interaction::None
+    )
 }
 
 fn clear_ui_click_after_release(
@@ -1534,10 +1539,9 @@ fn handle_skill_shop_purchase(
     let Some(target) = press.0 else {
         return;
     };
-    for (entity, interaction, btn) in &buttons {
-        if entity == target && ui_click_release_confirms(*interaction) {
+    if let Ok((_, interaction, btn)) = buttons.get(target) {
+        if ui_click_release_confirms(*interaction) {
             writer.write(BuySkillUnlock { skill: btn.skill });
-            return;
         }
     }
 }
@@ -2531,7 +2535,8 @@ fn apply_ui_scroll(
     mut content_style: Query<&mut Node, With<UiScrollContent>>,
     content_node: Query<&ComputedNode, With<UiScrollContent>>,
 ) {
-    let delta: f32 = wheel_events.read().map(|e| e.y * 28.0).sum();
+    // Inverted from raw wheel delta: scroll feels like "grab and drag" the content.
+    let delta: f32 = wheel_events.read().map(|e| -e.y * 28.0).sum();
     if delta.abs() < f32::EPSILON {
         return;
     }

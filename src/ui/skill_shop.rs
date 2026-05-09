@@ -189,12 +189,51 @@ fn spawn_buy_row(inner: &mut ChildSpawnerCommands<'_>, id: SkillId, price: u32, 
         price,
         if can_afford { "" } else { "(need gold)" }
     );
-    let tip = format!("{}\n{}\n\n{}", d.name, d.description, d.synergy_hint);
-    let p = if can_afford {
-        UiButtonPalette::primary_cta()
+    let tip = if can_afford {
+        format!("{}\n{}\n\n{}", d.name, d.description, d.synergy_hint)
     } else {
-        UiButtonPalette::panel_outlined()
+        format!(
+            "{}\n{}\n\n{}\nNeed {} more gold.",
+            d.name,
+            d.description,
+            d.synergy_hint,
+            price.saturating_sub(gold),
+        )
     };
+
+    let row_bg = UiTheme::panel_bg_deep();
+
+    // When broke, show a passive row — no [`Button`] / [`SkillShopBuyButton`] so we never
+    // enqueue a doomed purchase click (was easy to confuse with "button dead").
+    if !can_afford {
+        let p = UiButtonPalette::panel_outlined();
+        inner
+            .spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    width: Val::Percent(100.0),
+                    min_height: Val::Px(44.0),
+                    justify_content: JustifyContent::FlexStart,
+                    align_items: AlignItems::Center,
+                    padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)),
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(row_bg.into()),
+                BorderColor::from(p.idle_border),
+                UiTooltip::txt(tip.clone()),
+            ))
+            .with_children(|b| {
+                b.spawn((
+                    Text::new(label),
+                    TextFont::from_font_size(UiTheme::FONT_COMPACT),
+                    TextColor(UiTheme::body_dim()),
+                ));
+            });
+        return;
+    }
+
+    let p = UiButtonPalette::primary_cta();
     inner
         .spawn((
             Node {
@@ -212,7 +251,7 @@ fn spawn_buy_row(inner: &mut ChildSpawnerCommands<'_>, id: SkillId, price: u32, 
             BorderColor::from(p.idle_border),
             SkillShopBuyButton { skill: id },
             p,
-            UiTooltip::txt(tip.to_string()),
+            UiTooltip::txt(tip),
         ))
         .with_children(|b| {
             b.spawn((
