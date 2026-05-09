@@ -2,6 +2,12 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.10 — 2026-05-09
+
+### UX
+
+- **Gear hub**: Panels sit farther **left**, use **matching top/bottom inset** while stretching vertically, the **stash** column is wider, and stash items arrange in **two columns**.
+
 ## 0.2.9 — 2026-05-08
 
 ### UX
