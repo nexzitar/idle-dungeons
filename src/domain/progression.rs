@@ -1,4 +1,9 @@
+use crate::domain::skills::{SkillId, STARTER_SKILLS};
 use serde::{Deserialize, Serialize};
+
+fn default_unlocked_skill_ids_migration() -> Vec<SkillId> {
+    SkillId::ALL.iter().copied().collect()
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MetaProgression {
@@ -9,6 +14,9 @@ pub struct MetaProgression {
     /// Deepest floor reached on any finished run (used for party slot unlocks).
     #[serde(default)]
     pub deepest_floor_reached: u32,
+    /// Skill book entries purchased or granted (starters). Omitted / empty in old saves ⇒ migrate to full roster.
+    #[serde(default = "default_unlocked_skill_ids_migration")]
+    pub unlocked_skill_ids: Vec<SkillId>,
 }
 
 impl Default for MetaProgression {
@@ -19,6 +27,7 @@ impl Default for MetaProgression {
             unlocked_skill_slots: 2,
             skill_slot_progress: 0,
             deepest_floor_reached: 0,
+            unlocked_skill_ids: STARTER_SKILLS.iter().copied().collect(),
         }
     }
 }
@@ -27,6 +36,24 @@ impl Default for MetaProgression {
 pub const PARTY_SLOT_2_UNLOCK_DEPTH: u32 = 75;
 
 impl MetaProgression {
+    pub fn has_skill_unlocked(&self, id: SkillId) -> bool {
+        self.unlocked_skill_ids.iter().any(|&s| s == id)
+    }
+
+    pub fn add_skill_unlock(&mut self, id: SkillId) -> bool {
+        if self.has_skill_unlocked(id) {
+            return false;
+        }
+        self.unlocked_skill_ids.push(id);
+        self.unlocked_skill_ids.sort_by_key(|s| {
+            SkillId::ALL
+                .iter()
+                .position(|x| x == s)
+                .unwrap_or(999)
+        });
+        true
+    }
+
     pub fn add_skill_slot_progress(&mut self, amount: u32) {
         self.skill_slot_progress = self.skill_slot_progress.saturating_add(amount);
         let cap = if self.skill_slot_progress >= 1000 {
@@ -56,6 +83,15 @@ impl MetaProgression {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::skills::SkillId;
+
+    #[test]
+    fn starter_skills_only_in_default_meta() {
+        let m = MetaProgression::default();
+        assert_eq!(m.unlocked_skill_ids.len(), 4);
+        assert!(m.has_skill_unlocked(SkillId::HeavyStrike));
+        assert!(!m.has_skill_unlocked(SkillId::PoisonEdge));
+    }
 
     #[test]
     fn skill_slot_unlocks_after_progress_threshold() {

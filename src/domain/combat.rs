@@ -1,7 +1,7 @@
 use crate::domain::dungeon::Enemy;
 use crate::domain::hero::HeroProfile;
 use crate::domain::items::ItemAffix;
-use crate::domain::skills::SkillId;
+use crate::domain::skills::{skill_definition, skill_timings, SkillId, SkillKind, SkillTrigger};
 use crate::domain::stats::Stats;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -11,7 +11,7 @@ pub enum CombatOutcome {
     TimedOut,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum CombatEvent {
     /// `attacker` 0 = lead hero ("you" in UI), 1 = party partner.
     HeroAttacked {
@@ -35,6 +35,15 @@ pub enum CombatEvent {
     },
     /// Threat totals per party slot (WoW-style aggro telemetry).
     ThreatSnapshot { slot0: i32, slot1: i32 },
+    /// Cast/cooldown meter snapshot for playback bars (`0..=1` each).
+    TimingPulse {
+        lead_cast: f32,
+        lead_cd: f32,
+        ally_cast: f32,
+        ally_cd: f32,
+        foe_cast: f32,
+        foe_cd: f32,
+    },
     EnemyDefeated,
     /// Party member defeated (currently slot `1` = partner). Lead uses [`HeroDefeated`].
     PartyMemberDown { party_index: u8 },
@@ -80,6 +89,7 @@ fn combat_event_caption(event: &CombatEvent, partner_name: Option<&str>) -> Stri
             let p1 = partner_name.unwrap_or("Partner");
             format!("Threat · You {slot0} · {p1} {slot1}")
         }
+        CombatEvent::TimingPulse { .. } => String::new(),
         CombatEvent::EnemyDefeated => "Enemy defeated.".to_string(),
         CombatEvent::PartyMemberDown { party_index } => {
             if *party_index == 1 {
@@ -119,6 +129,7 @@ fn sfx_anchor_for_event(event: &CombatEvent) -> CombatSfxAnchor {
         CombatEvent::HeroHealed { target: 1, .. } => CombatSfxAnchor::Ally,
         CombatEvent::HeroHealed { .. } => CombatSfxAnchor::Lead,
         CombatEvent::ThreatSnapshot { .. } => CombatSfxAnchor::Neutral,
+        CombatEvent::TimingPulse { .. } => CombatSfxAnchor::Neutral,
         CombatEvent::EnemyDefeated => CombatSfxAnchor::Enemy,
         CombatEvent::PartyMemberDown { .. } => CombatSfxAnchor::Ally,
         CombatEvent::HeroDefeated => CombatSfxAnchor::Lead,
@@ -202,7 +213,7 @@ fn flatten_playback_steps(events: &[CombatEvent]) -> Vec<PlaybackStep> {
 }
 
 /// One row of combat UI: HP totals after a combat event (plus an opening "engage" row).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CombatPlaybackFrame {
     pub enemy_name: String,
     pub hero_hp: i32,
@@ -228,9 +239,16 @@ pub struct CombatPlaybackFrame {
     /// Cumulative damage the enemy dealt to the party (all targets).
     pub damage_meter_foe: u32,
     pub sfx_anchor: CombatSfxAnchor,
+    /// 0–1 cast bar fill for the lead hero (weapon swing wind-up).
+    pub lead_cast: f32,
+    pub lead_cd: f32,
+    pub ally_cast: f32,
+    pub ally_cd: f32,
+    pub foe_cast: f32,
+    pub foe_cd: f32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CombatResult {
     pub outcome: CombatOutcome,
     pub hero_health: i32,
@@ -261,6 +279,32 @@ struct PreparedHero {
     barrier: i32,
     guard_flat: i32,
     attack_speed: f32,
+    /// Max ticks from equipped OnAttack actives (0 = use legacy meter spam).
+    attack_cast_total: u32,
+    attack_cd_total: u32,
+}
+
+fn attack_cadence_ticks(hero: &HeroProfile) -> (u32, u32) {
+    let mut max_cast = 0u32;
+    let mut max_cd = 0u32;
+    let mut any_on_attack = false;
+    for sid in hero.equipped_skill_ids() {
+        let def = skill_definition(sid);
+        if def.kind != SkillKind::Active {
+            continue;
+        }
+        if def.trigger != SkillTrigger::OnAttack {
+            continue;
+        }
+        any_on_attack = true;
+        let (c, d) = skill_timings(sid);
+        max_cast = max_cast.max(c as u32);
+        max_cd = max_cd.max(d as u32);
+    }
+    if !any_on_attack {
+        return (0, 0);
+    }
+    (max_cast, max_cd.max(1))
 }
 
 fn prepare_hero_combat(hero: &HeroProfile) -> PreparedHero {
@@ -294,6 +338,8 @@ fn prepare_hero_combat(hero: &HeroProfile) -> PreparedHero {
         guard_flat += 2;
     }
 
+    let (attack_cast_total, attack_cd_total) = attack_cadence_ticks(hero);
+
     PreparedHero {
         stats,
         max_h,
@@ -314,6 +360,8 @@ fn prepare_hero_combat(hero: &HeroProfile) -> PreparedHero {
         barrier,
         guard_flat,
         attack_speed,
+        attack_cast_total,
+        attack_cd_total,
     }
 }
 
@@ -530,7 +578,7 @@ pub fn simulate_combat_party(
         }
     }
 
-    const MAX_EVENTS: usize = 600;
+    const MAX_EVENTS: usize = 1200;
 
     macro_rules! hero_win {
         () => {
@@ -575,6 +623,15 @@ pub fn simulate_combat_party(
 
     let mut last_enemy_target: Option<u8> = None;
 
+    let mut h0_cast_left = 0u32;
+    let mut h0_cd_left = 0u32;
+    let mut h1_cast_left = 0u32;
+    let mut h1_cd_left = 0u32;
+    let mut foe_cast_left = 0u32;
+    let mut foe_cd_left = 0u32;
+    let foe_ct = enemy.cast_ticks;
+    let foe_dt = enemy.cooldown_ticks;
+
     for tick in 0..max_clock_ticks {
         if h0 <= 0 || enemy_health <= 0 || (has_partner && h1 <= 0) {
             break;
@@ -591,61 +648,29 @@ pub fn simulate_combat_party(
             }
         }
 
-        meters[0] += p0.attack_speed;
-        if let Some((p1prep, _, _)) = &p1 {
-            meters[1] += p1prep.attack_speed;
-        }
-        enemy_meter += enemy_as;
-
-        while meters[0] >= 1.0 && h0 > 0 && enemy_health > 0 {
-            meters[0] -= 1.0;
-            if events.len() >= MAX_EVENTS {
-                break;
-            }
-
-            let hero_damage = swing_damage(&p0, enemy, h0, p0.max_h);
-            enemy_health -= hero_damage;
-            events.push(CombatEvent::HeroAttacked {
-                attacker: 0,
-                damage: hero_damage,
-            });
-            if has_partner {
-                threat[0] = threat[0].saturating_add(hero_damage);
-            }
-
-            apply_lifesteal(&p0, hero_damage, &mut h0, p0.max_h, 0, &mut events);
-
-            if p0.has_poison {
-                let inc = if p0.affix_virulent { 3 } else { 2 };
-                poison_stacks = (poison_stacks + inc).min(40);
-            }
-
-            if enemy_health <= 0 {
-                events.push(CombatEvent::EnemyDefeated);
-                maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
-                hero_win!();
-            }
-        }
-
-        if let Some((ref p1prep, _, _)) = p1 {
-            while meters[1] >= 1.0 && h1 > 0 && enemy_health > 0 {
-                meters[1] -= 1.0;
+        // Lead hero weapon cycle (legacy meter spam vs cast + cooldown).
+        if p0.attack_cast_total == 0 && p0.attack_cd_total == 0 {
+            meters[0] += p0.attack_speed;
+            while meters[0] >= 1.0 && h0 > 0 && enemy_health > 0 {
+                meters[0] -= 1.0;
                 if events.len() >= MAX_EVENTS {
                     break;
                 }
 
-                let hero_damage = swing_damage(p1prep, enemy, h1, p1prep.max_h);
+                let hero_damage = swing_damage(&p0, enemy, h0, p0.max_h);
                 enemy_health -= hero_damage;
                 events.push(CombatEvent::HeroAttacked {
-                    attacker: 1,
+                    attacker: 0,
                     damage: hero_damage,
                 });
-                threat[1] = threat[1].saturating_add(hero_damage);
+                if has_partner {
+                    threat[0] = threat[0].saturating_add(hero_damage);
+                }
 
-                apply_lifesteal(p1prep, hero_damage, &mut h1, p1prep.max_h, 1, &mut events);
+                apply_lifesteal(&p0, hero_damage, &mut h0, p0.max_h, 0, &mut events);
 
-                if p1prep.has_poison {
-                    let inc = if p1prep.affix_virulent { 3 } else { 2 };
+                if p0.has_poison {
+                    let inc = if p0.affix_virulent { 3 } else { 2 };
                     poison_stacks = (poison_stacks + inc).min(40);
                 }
 
@@ -655,82 +680,435 @@ pub fn simulate_combat_party(
                     hero_win!();
                 }
             }
+        } else if h0 > 0 && enemy_health > 0 {
+            if h0_cd_left > 0 {
+                h0_cd_left -= 1;
+            } else if h0_cast_left > 0 {
+                h0_cast_left -= 1;
+                if h0_cast_left == 0 {
+                    if events.len() >= MAX_EVENTS {
+                        break;
+                    }
+                    let hero_damage = swing_damage(&p0, enemy, h0, p0.max_h);
+                    enemy_health -= hero_damage;
+                    events.push(CombatEvent::HeroAttacked {
+                        attacker: 0,
+                        damage: hero_damage,
+                    });
+                    if has_partner {
+                        threat[0] = threat[0].saturating_add(hero_damage);
+                    }
+                    apply_lifesteal(&p0, hero_damage, &mut h0, p0.max_h, 0, &mut events);
+                    if p0.has_poison {
+                        let inc = if p0.affix_virulent { 3 } else { 2 };
+                        poison_stacks = (poison_stacks + inc).min(40);
+                    }
+                    h0_cd_left = p0.attack_cd_total;
+                    if enemy_health <= 0 {
+                        events.push(CombatEvent::EnemyDefeated);
+                        maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
+                        hero_win!();
+                    }
+                }
+            } else {
+                meters[0] += p0.attack_speed;
+                if meters[0] >= 1.0 && h0 > 0 && enemy_health > 0 {
+                    meters[0] -= 1.0;
+                    if p0.attack_cast_total > 0 {
+                        h0_cast_left = p0.attack_cast_total;
+                    } else if events.len() < MAX_EVENTS {
+                        let hero_damage = swing_damage(&p0, enemy, h0, p0.max_h);
+                        enemy_health -= hero_damage;
+                        events.push(CombatEvent::HeroAttacked {
+                            attacker: 0,
+                            damage: hero_damage,
+                        });
+                        if has_partner {
+                            threat[0] = threat[0].saturating_add(hero_damage);
+                        }
+                        apply_lifesteal(&p0, hero_damage, &mut h0, p0.max_h, 0, &mut events);
+                        if p0.has_poison {
+                            let inc = if p0.affix_virulent { 3 } else { 2 };
+                            poison_stacks = (poison_stacks + inc).min(40);
+                        }
+                        h0_cd_left = p0.attack_cd_total;
+                        if enemy_health <= 0 {
+                            events.push(CombatEvent::EnemyDefeated);
+                            maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
+                            hero_win!();
+                        }
+                    }
+                }
+            }
         }
 
-        while enemy_meter >= 1.0 && enemy_health > 0 && h0 > 0 && (!has_partner || h1 > 0) {
-            enemy_meter -= 1.0;
-            if events.len() >= MAX_EVENTS {
-                break;
+        if let Some((ref p1prep, _, _)) = p1 {
+            if p1prep.attack_cast_total == 0 && p1prep.attack_cd_total == 0 {
+                meters[1] += p1prep.attack_speed;
+                while meters[1] >= 1.0 && h1 > 0 && enemy_health > 0 {
+                    meters[1] -= 1.0;
+                    if events.len() >= MAX_EVENTS {
+                        break;
+                    }
+
+                    let hero_damage = swing_damage(p1prep, enemy, h1, p1prep.max_h);
+                    enemy_health -= hero_damage;
+                    events.push(CombatEvent::HeroAttacked {
+                        attacker: 1,
+                        damage: hero_damage,
+                    });
+                    threat[1] = threat[1].saturating_add(hero_damage);
+
+                    apply_lifesteal(p1prep, hero_damage, &mut h1, p1prep.max_h, 1, &mut events);
+
+                    if p1prep.has_poison {
+                        let inc = if p1prep.affix_virulent { 3 } else { 2 };
+                        poison_stacks = (poison_stacks + inc).min(40);
+                    }
+
+                    if enemy_health <= 0 {
+                        events.push(CombatEvent::EnemyDefeated);
+                        maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
+                        hero_win!();
+                    }
+                }
+            } else if h1 > 0 && enemy_health > 0 {
+                if h1_cd_left > 0 {
+                    h1_cd_left -= 1;
+                } else if h1_cast_left > 0 {
+                    h1_cast_left -= 1;
+                    if h1_cast_left == 0 {
+                        if events.len() >= MAX_EVENTS {
+                            break;
+                        }
+                        let hero_damage = swing_damage(p1prep, enemy, h1, p1prep.max_h);
+                        enemy_health -= hero_damage;
+                        events.push(CombatEvent::HeroAttacked {
+                            attacker: 1,
+                            damage: hero_damage,
+                        });
+                        threat[1] = threat[1].saturating_add(hero_damage);
+                        apply_lifesteal(p1prep, hero_damage, &mut h1, p1prep.max_h, 1, &mut events);
+                        if p1prep.has_poison {
+                            let inc = if p1prep.affix_virulent { 3 } else { 2 };
+                            poison_stacks = (poison_stacks + inc).min(40);
+                        }
+                        h1_cd_left = p1prep.attack_cd_total;
+                        if enemy_health <= 0 {
+                            events.push(CombatEvent::EnemyDefeated);
+                            maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
+                            hero_win!();
+                        }
+                    }
+                } else {
+                    meters[1] += p1prep.attack_speed;
+                    if meters[1] >= 1.0 && h1 > 0 && enemy_health > 0 {
+                        meters[1] -= 1.0;
+                        if p1prep.attack_cast_total > 0 {
+                            h1_cast_left = p1prep.attack_cast_total;
+                        } else if events.len() < MAX_EVENTS {
+                            let hero_damage = swing_damage(p1prep, enemy, h1, p1prep.max_h);
+                            enemy_health -= hero_damage;
+                            events.push(CombatEvent::HeroAttacked {
+                                attacker: 1,
+                                damage: hero_damage,
+                            });
+                            threat[1] = threat[1].saturating_add(hero_damage);
+                            apply_lifesteal(p1prep, hero_damage, &mut h1, p1prep.max_h, 1, &mut events);
+                            if p1prep.has_poison {
+                                let inc = if p1prep.affix_virulent { 3 } else { 2 };
+                                poison_stacks = (poison_stacks + inc).min(40);
+                            }
+                            h1_cd_left = p1prep.attack_cd_total;
+                            if enemy_health <= 0 {
+                                events.push(CombatEvent::EnemyDefeated);
+                                maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
+                                hero_win!();
+                            }
+                        }
+                    }
+                }
             }
+        }
 
-            let target: u8 = pick_party_enemy_target(
-                tick,
-                threat,
-                h0,
-                h1,
-                has_partner,
-                last_enemy_target,
-            );
+        if foe_ct == 0 && foe_dt == 0 {
+            enemy_meter += enemy_as;
+            while enemy_meter >= 1.0 && enemy_health > 0 && h0 > 0 && (!has_partner || h1 > 0) {
+                enemy_meter -= 1.0;
+                if events.len() >= MAX_EVENTS {
+                    break;
+                }
 
-            last_enemy_target = Some(target);
-            let prep_t = if target == 0 {
-                &p0
-            } else {
-                &p1.as_ref().unwrap().0
-            };
-            let mut enemy_damage = (enemy.damage - prep_t.stats.armor).max(1);
+                let target: u8 = pick_party_enemy_target(
+                    tick,
+                    threat,
+                    h0,
+                    h1,
+                    has_partner,
+                    last_enemy_target,
+                );
 
-            if prep_t.has_guard {
-                enemy_damage = (enemy_damage - prep_t.guard_flat).max(1);
-            }
+                last_enemy_target = Some(target);
+                let prep_t = if target == 0 {
+                    &p0
+                } else {
+                    &p1.as_ref().unwrap().0
+                };
+                let mut enemy_damage = (enemy.damage - prep_t.stats.armor).max(1);
 
-            let bi = target as usize;
-            let absorbed = enemy_damage.min(barrier[bi]);
-            barrier[bi] -= absorbed;
-            let hp_loss = enemy_damage - absorbed;
+                if prep_t.has_guard {
+                    enemy_damage = (enemy_damage - prep_t.guard_flat).max(1);
+                }
 
-            if target == 0 {
-                h0 -= hp_loss;
-            } else {
-                h1 -= hp_loss;
-            }
+                let bi = target as usize;
+                let absorbed = enemy_damage.min(barrier[bi]);
+                barrier[bi] -= absorbed;
+                let hp_loss = enemy_damage - absorbed;
 
-            threat[target as usize] = threat[target as usize].saturating_add(hp_loss);
+                if target == 0 {
+                    h0 -= hp_loss;
+                } else {
+                    h1 -= hp_loss;
+                }
 
-            events.push(CombatEvent::EnemyAttacked {
-                target,
-                damage: hp_loss,
-            });
+                threat[target as usize] = threat[target as usize].saturating_add(hp_loss);
 
-            if has_partner && h0 > 0 && h1 > 0 && events.len() < MAX_EVENTS {
-                events.push(CombatEvent::ThreatSnapshot {
-                    slot0: threat[0],
-                    slot1: threat[1],
+                events.push(CombatEvent::EnemyAttacked {
+                    target,
+                    damage: hp_loss,
                 });
-            }
 
-            if prep_t.has_thorns && hp_loss > 0 {
-                let mut reflect = (hp_loss / 3).max(1);
-                if prep_t.affix_spiked {
-                    reflect = (hp_loss / 2).max(1);
+                if has_partner && h0 > 0 && h1 > 0 && events.len() < MAX_EVENTS {
+                    events.push(CombatEvent::ThreatSnapshot {
+                        slot0: threat[0],
+                        slot1: threat[1],
+                    });
                 }
-                enemy_health -= reflect;
-                events.push(CombatEvent::ThornsReflect { damage: reflect });
-                if enemy_health <= 0 {
-                    events.push(CombatEvent::EnemyDefeated);
-                    maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
-                    hero_win!();
-                }
-            }
 
-            if target == 0 && h0 <= 0 {
-                events.push(CombatEvent::HeroDefeated);
-                enemy_win!();
+                if prep_t.has_thorns && hp_loss > 0 {
+                    let mut reflect = (hp_loss / 3).max(1);
+                    if prep_t.affix_spiked {
+                        reflect = (hp_loss / 2).max(1);
+                    }
+                    enemy_health -= reflect;
+                    events.push(CombatEvent::ThornsReflect { damage: reflect });
+                    if enemy_health <= 0 {
+                        events.push(CombatEvent::EnemyDefeated);
+                        maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
+                        hero_win!();
+                    }
+                }
+
+                if target == 0 && h0 <= 0 {
+                    events.push(CombatEvent::HeroDefeated);
+                    enemy_win!();
+                }
+                if target == 1 && h1 <= 0 {
+                    events.push(CombatEvent::PartyMemberDown { party_index: 1 });
+                    enemy_win!();
+                }
             }
-            if target == 1 && h1 <= 0 {
-                events.push(CombatEvent::PartyMemberDown { party_index: 1 });
-                enemy_win!();
+        } else if enemy_health > 0 && h0 > 0 && (!has_partner || h1 > 0) {
+            if foe_cd_left > 0 {
+                foe_cd_left -= 1;
+            } else if foe_cast_left > 0 {
+                foe_cast_left -= 1;
+                if foe_cast_left == 0 {
+                    if events.len() >= MAX_EVENTS {
+                        break;
+                    }
+                    let target: u8 = pick_party_enemy_target(
+                        tick,
+                        threat,
+                        h0,
+                        h1,
+                        has_partner,
+                        last_enemy_target,
+                    );
+                    last_enemy_target = Some(target);
+                    let prep_t = if target == 0 {
+                        &p0
+                    } else {
+                        &p1.as_ref().unwrap().0
+                    };
+                    let mut enemy_damage = (enemy.damage - prep_t.stats.armor).max(1);
+                    if prep_t.has_guard {
+                        enemy_damage = (enemy_damage - prep_t.guard_flat).max(1);
+                    }
+                    let bi = target as usize;
+                    let absorbed = enemy_damage.min(barrier[bi]);
+                    barrier[bi] -= absorbed;
+                    let hp_loss = enemy_damage - absorbed;
+                    if target == 0 {
+                        h0 -= hp_loss;
+                    } else {
+                        h1 -= hp_loss;
+                    }
+                    threat[target as usize] = threat[target as usize].saturating_add(hp_loss);
+                    events.push(CombatEvent::EnemyAttacked {
+                        target,
+                        damage: hp_loss,
+                    });
+                    if has_partner && h0 > 0 && h1 > 0 && events.len() < MAX_EVENTS {
+                        events.push(CombatEvent::ThreatSnapshot {
+                            slot0: threat[0],
+                            slot1: threat[1],
+                        });
+                    }
+                    if prep_t.has_thorns && hp_loss > 0 {
+                        let mut reflect = (hp_loss / 3).max(1);
+                        if prep_t.affix_spiked {
+                            reflect = (hp_loss / 2).max(1);
+                        }
+                        enemy_health -= reflect;
+                        events.push(CombatEvent::ThornsReflect { damage: reflect });
+                        if enemy_health <= 0 {
+                            events.push(CombatEvent::EnemyDefeated);
+                            maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
+                            hero_win!();
+                        }
+                    }
+                    if target == 0 && h0 <= 0 {
+                        events.push(CombatEvent::HeroDefeated);
+                        enemy_win!();
+                    }
+                    if target == 1 && h1 <= 0 {
+                        events.push(CombatEvent::PartyMemberDown { party_index: 1 });
+                        enemy_win!();
+                    }
+                    foe_cd_left = foe_dt;
+                }
+            } else {
+                enemy_meter += enemy_as;
+                if enemy_meter >= 1.0 && enemy_health > 0 && h0 > 0 && (!has_partner || h1 > 0) {
+                    enemy_meter -= 1.0;
+                    if foe_ct > 0 {
+                        foe_cast_left = foe_ct;
+                    } else if events.len() < MAX_EVENTS {
+                        let target: u8 = pick_party_enemy_target(
+                            tick,
+                            threat,
+                            h0,
+                            h1,
+                            has_partner,
+                            last_enemy_target,
+                        );
+                        last_enemy_target = Some(target);
+                        let prep_t = if target == 0 {
+                            &p0
+                        } else {
+                            &p1.as_ref().unwrap().0
+                        };
+                        let mut enemy_damage = (enemy.damage - prep_t.stats.armor).max(1);
+                        if prep_t.has_guard {
+                            enemy_damage = (enemy_damage - prep_t.guard_flat).max(1);
+                        }
+                        let bi = target as usize;
+                        let absorbed = enemy_damage.min(barrier[bi]);
+                        barrier[bi] -= absorbed;
+                        let hp_loss = enemy_damage - absorbed;
+                        if target == 0 {
+                            h0 -= hp_loss;
+                        } else {
+                            h1 -= hp_loss;
+                        }
+                        threat[target as usize] = threat[target as usize].saturating_add(hp_loss);
+                        events.push(CombatEvent::EnemyAttacked {
+                            target,
+                            damage: hp_loss,
+                        });
+                        if has_partner && h0 > 0 && h1 > 0 && events.len() < MAX_EVENTS {
+                            events.push(CombatEvent::ThreatSnapshot {
+                                slot0: threat[0],
+                                slot1: threat[1],
+                            });
+                        }
+                        if prep_t.has_thorns && hp_loss > 0 {
+                            let mut reflect = (hp_loss / 3).max(1);
+                            if prep_t.affix_spiked {
+                                reflect = (hp_loss / 2).max(1);
+                            }
+                            enemy_health -= reflect;
+                            events.push(CombatEvent::ThornsReflect { damage: reflect });
+                            if enemy_health <= 0 {
+                                events.push(CombatEvent::EnemyDefeated);
+                                maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
+                                hero_win!();
+                            }
+                        }
+                        if target == 0 && h0 <= 0 {
+                            events.push(CombatEvent::HeroDefeated);
+                            enemy_win!();
+                        }
+                        if target == 1 && h1 <= 0 {
+                            events.push(CombatEvent::PartyMemberDown { party_index: 1 });
+                            enemy_win!();
+                        }
+                        foe_cd_left = foe_dt;
+                    }
+                }
             }
+        }
+
+        let lead_cast = if p0.attack_cast_total == 0 {
+            0.0
+        } else if h0_cast_left > 0 {
+            1.0 - (h0_cast_left as f32 / p0.attack_cast_total as f32)
+        } else {
+            0.0
+        };
+        let lead_cd = if p0.attack_cd_total == 0 {
+            0.0
+        } else if h0_cd_left > 0 {
+            1.0 - (h0_cd_left as f32 / p0.attack_cd_total as f32)
+        } else {
+            0.0
+        };
+        let ally_cast = if has_partner {
+            if p1.as_ref().unwrap().0.attack_cast_total == 0 {
+                0.0
+            } else if h1_cast_left > 0 {
+                1.0 - (h1_cast_left as f32 / p1.as_ref().unwrap().0.attack_cast_total as f32)
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        };
+        let ally_cd = if has_partner {
+            if p1.as_ref().unwrap().0.attack_cd_total == 0 {
+                0.0
+            } else if h1_cd_left > 0 {
+                1.0 - (h1_cd_left as f32 / p1.as_ref().unwrap().0.attack_cd_total as f32)
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        };
+        let foe_cast = if foe_ct == 0 {
+            0.0
+        } else if foe_cast_left > 0 {
+            1.0 - (foe_cast_left as f32 / foe_ct as f32)
+        } else {
+            0.0
+        };
+        let foe_cd_b = if foe_dt == 0 {
+            0.0
+        } else if foe_cd_left > 0 {
+            1.0 - (foe_cd_left as f32 / foe_dt as f32)
+        } else {
+            0.0
+        };
+        if events.len() < MAX_EVENTS {
+            events.push(CombatEvent::TimingPulse {
+                lead_cast,
+                lead_cd,
+                ally_cast,
+                ally_cd,
+                foe_cast,
+                foe_cd: foe_cd_b,
+            });
         }
 
         if has_poison_any && poison_stacks > 0 && h0 > 0 && enemy_health > 0 {
@@ -866,6 +1244,8 @@ pub fn combat_playback_frames_from_result(
     let mut d1 = 0u32;
     let mut foe_meter = 0u32;
 
+    let mut last_caption = format!("Engaging {enemy_name}.");
+
     let mut frames = vec![CombatPlaybackFrame {
         enemy_name: enemy_name.to_string(),
         hero_hp,
@@ -874,7 +1254,7 @@ pub fn combat_playback_frames_from_result(
         partner_max_hp,
         enemy_hp,
         enemy_max_hp,
-        caption: format!("Engaging {enemy_name}."),
+        caption: last_caption.clone(),
         hero_debuff_slots: h0,
         enemy_debuff_slots: e0,
         foe_last_target: None,
@@ -884,7 +1264,20 @@ pub fn combat_playback_frames_from_result(
         damage_meter_party_1: 0,
         damage_meter_foe: 0,
         sfx_anchor: CombatSfxAnchor::Neutral,
+        lead_cast: 0.0,
+        lead_cd: 0.0,
+        ally_cast: 0.0,
+        ally_cd: 0.0,
+        foe_cast: 0.0,
+        foe_cd: 0.0,
     }];
+
+    let mut lead_cast = 0.0f32;
+    let mut lead_cd = 0.0f32;
+    let mut ally_cast = 0.0f32;
+    let mut ally_cd = 0.0f32;
+    let mut foe_cast_b = 0.0f32;
+    let mut foe_cd_bar = 0.0f32;
 
     for step in flatten_playback_steps(&result.events) {
         match &step {
@@ -930,6 +1323,21 @@ pub fn combat_playback_frames_from_result(
                         threat_slot0 = Some(*slot0);
                         threat_slot1 = Some(*slot1);
                     }
+                    CombatEvent::TimingPulse {
+                        lead_cast: lc,
+                        lead_cd: lcdn,
+                        ally_cast: ac,
+                        ally_cd: acdn,
+                        foe_cast: fc,
+                        foe_cd: fcdn,
+                    } => {
+                        lead_cast = *lc;
+                        lead_cd = *lcdn;
+                        ally_cast = *ac;
+                        ally_cd = *acdn;
+                        foe_cast_b = *fc;
+                        foe_cd_bar = *fcdn;
+                    }
                     CombatEvent::PartyMemberDown { .. } => {}
                     CombatEvent::EnemyDefeated | CombatEvent::HeroDefeated => {}
                 }
@@ -953,15 +1361,24 @@ pub fn combat_playback_frames_from_result(
         let (hd, ed) = debuff_slots_from_poison(hero_poison_stacks, enemy_poison_stacks);
 
         let (caption, sfx_anchor) = match &step {
-            PlaybackStep::Event(ev) => (combat_event_caption(ev, partner_name), sfx_anchor_for_event(ev)),
+            PlaybackStep::Event(CombatEvent::TimingPulse { .. }) => (
+                last_caption.clone(),
+                CombatSfxAnchor::Neutral,
+            ),
+            PlaybackStep::Event(ev) => {
+                let c = combat_event_caption(ev, partner_name);
+                last_caption = c.clone();
+                (c, sfx_anchor_for_event(ev))
+            }
             PlaybackStep::MergedPoison {
                 total_damage,
                 tick_count,
                 ..
-            } => (
-                merged_poison_caption(*total_damage, *tick_count),
-                CombatSfxAnchor::Enemy,
-            ),
+            } => {
+                let c = merged_poison_caption(*total_damage, *tick_count);
+                last_caption = c.clone();
+                (c, CombatSfxAnchor::Enemy)
+            }
         };
 
         frames.push(CombatPlaybackFrame {
@@ -982,6 +1399,12 @@ pub fn combat_playback_frames_from_result(
             damage_meter_party_1: d1,
             damage_meter_foe: foe_meter,
             sfx_anchor,
+            lead_cast,
+            lead_cd,
+            ally_cast,
+            ally_cd,
+            foe_cast: foe_cast_b,
+            foe_cd: foe_cd_bar,
         });
         partner_hp = partner_clamped;
     }
@@ -1078,6 +1501,8 @@ mod tests {
             damage: 4,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
         let r = simulate_combat_party(
             &lead,
@@ -1112,6 +1537,8 @@ mod tests {
             damage: 1,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let result = simulate_combat(&hero, &enemy, 100, hero.derived_stats().max_health);
@@ -1135,6 +1562,8 @@ mod tests {
             damage: 10,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let result = simulate_combat(&hero, &enemy, 5, hero.derived_stats().max_health);
@@ -1158,6 +1587,8 @@ mod tests {
             damage: 5,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let unarmored_result = simulate_combat(
@@ -1195,6 +1626,8 @@ mod tests {
             damage: 5,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let result = simulate_combat(&hero, &enemy, 1, hero.derived_stats().max_health);
@@ -1220,6 +1653,8 @@ mod tests {
             damage: 8,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let a = simulate_combat(&plain, &enemy, 1, 100);
@@ -1238,6 +1673,8 @@ mod tests {
             damage: 24,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let mut low = HeroProfile::new(Stats {
@@ -1276,10 +1713,12 @@ mod tests {
             damage: 0,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
-        let a = simulate_combat(&plain, &enemy, 2, 100);
-        let b = simulate_combat(&heavy, &enemy, 2, 100);
+        let a = simulate_combat(&plain, &enemy, 20, 100);
+        let b = simulate_combat(&heavy, &enemy, 20, 100);
         let plain_fist = a.events.iter().find_map(|e| {
             if let CombatEvent::HeroAttacked { damage, .. } = e {
                 Some(*damage)
@@ -1313,10 +1752,12 @@ mod tests {
             damage: 0,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
-        let h = simulate_combat(&heavy, &enemy, 2, 100);
-        let c = simulate_combat(&cleave, &enemy, 2, 100);
+        let h = simulate_combat(&heavy, &enemy, 20, 100);
+        let c = simulate_combat(&cleave, &enemy, 20, 100);
         let heavy_dmg = h.events.iter().find_map(|e| match e {
             CombatEvent::HeroAttacked { damage, .. } => Some(*damage),
             _ => None,
@@ -1345,10 +1786,12 @@ mod tests {
             damage: 0,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
-        let r_nimble = simulate_combat(&nimble, &enemy, 1, 100);
-        let r_heavy = simulate_combat(&heavy, &enemy, 1, 100);
+        let r_nimble = simulate_combat(&nimble, &enemy, 12, 100);
+        let r_heavy = simulate_combat(&heavy, &enemy, 12, 100);
 
         let swings_nimble = r_nimble
             .events
@@ -1361,8 +1804,7 @@ mod tests {
             .filter(|e| matches!(e, CombatEvent::HeroAttacked { .. }))
             .count();
 
-        assert_eq!(swings_nimble, 2);
-        assert_eq!(swings_heavy, 1);
+        assert!(swings_nimble > swings_heavy, "heavy kit should swing less often per window");
     }
 
     #[test]
@@ -1377,6 +1819,8 @@ mod tests {
             damage: 0,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let result = simulate_combat(&hero, &enemy, 1, 100);
@@ -1399,6 +1843,8 @@ mod tests {
             damage: 1,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let result = simulate_combat(&hero, &enemy, 12, hero.derived_stats().max_health);
@@ -1436,6 +1882,8 @@ mod tests {
             damage: 1,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let result = simulate_combat(&hero, &enemy, 12, hero.derived_stats().max_health);
@@ -1475,6 +1923,8 @@ mod tests {
             damage: 9,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let result = simulate_combat(&hero, &enemy, 1, 100);
@@ -1496,6 +1946,8 @@ mod tests {
             damage: 12,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let with_barrier = simulate_combat(&hero, &enemy, 1, 100);
@@ -1525,6 +1977,8 @@ mod tests {
             damage: 40,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let start = 12;
@@ -1557,6 +2011,8 @@ mod tests {
             damage: 10,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let r = simulate_combat(&hero, &enemy, 1, 100);
@@ -1581,6 +2037,8 @@ mod tests {
             damage: 30,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let r = simulate_combat(&hero, &enemy, 5, 100);
@@ -1616,6 +2074,8 @@ mod tests {
             damage: 30,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let r = simulate_combat(&hero, &enemy, 15, 100);
@@ -1638,6 +2098,8 @@ mod tests {
             damage: 1,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let r = simulate_combat(&fast, &enemy, 1, 100);
@@ -1704,8 +2166,8 @@ mod tests {
         with_affix.equip_item(maul).unwrap();
 
         let e = dummy_enemy();
-        let a = first_hero_damage(&simulate_combat(&skill_only, &e, 2, 100));
-        let b = first_hero_damage(&simulate_combat(&with_affix, &e, 2, 100));
+        let a = first_hero_damage(&simulate_combat(&skill_only, &e, 20, 100));
+        let b = first_hero_damage(&simulate_combat(&with_affix, &e, 20, 100));
         assert!(b > a);
         assert_eq!(a, 21);
         assert_eq!(b, 25);
@@ -1749,6 +2211,8 @@ mod tests {
             damage: 12,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let r1 = first_thorns(&simulate_combat(&thorns_only, &enemy, 1, 100));
@@ -1777,6 +2241,8 @@ mod tests {
             damage: 12,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let hp_pure = simulate_combat(&pure, &enemy, 1, 100).hero_health;
@@ -1818,6 +2284,8 @@ mod tests {
             damage: 0,
             armor: 8,
             attack_speed: 0.01,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let d_plain = first_hero_damage(&simulate_combat(&plain, &enemy, 2, 100));
@@ -1845,6 +2313,8 @@ mod tests {
             damage: 0,
             armor: 0,
             attack_speed: 0.05,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let r_base = simulate_combat(&base, &enemy, 4, 100);
@@ -1894,6 +2364,8 @@ mod tests {
             damage: 20,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let loss_plain = first_enemy_hit_damage(&simulate_combat(&plain, &enemy, 1, 100));
@@ -1932,6 +2404,8 @@ mod tests {
             damage: 0,
             armor: 0,
             attack_speed: 0.01,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let d_plain = first_hero_damage(&simulate_combat(&plain, &enemy, 2, 60));
@@ -1960,6 +2434,8 @@ mod tests {
             damage: 0,
             armor: 0,
             attack_speed: 0.01,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
 
         let r = simulate_combat(&hero, &enemy, 5, 100);
@@ -2003,6 +2479,7 @@ mod tests {
             damage: 0,
             armor: 0,
             attack_speed: 1.0,
+            ..Default::default()
         }
     }
 
@@ -2057,6 +2534,8 @@ mod tests {
             damage: 12,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
         let partner = default_party_partner_hero();
         let r = simulate_combat_party(
@@ -2086,6 +2565,8 @@ mod tests {
             damage: 3,
             armor: 0,
             attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
         };
         let first = simulate_combat(&hero, &enemy, 1, 100);
         assert_eq!(first.hero_health, 97);

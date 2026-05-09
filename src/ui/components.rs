@@ -194,6 +194,41 @@ pub struct SkillBookPickButton {
     pub kind: PartyHeroKind,
 }
 
+#[derive(Component)]
+pub struct SkillShopRoot;
+
+#[derive(Component)]
+pub struct SkillShopBackdrop;
+
+#[derive(Component)]
+pub struct SkillShopCloseButton;
+
+#[derive(Component)]
+pub struct SkillShopOpenButton;
+
+#[derive(Component, Clone, Copy)]
+pub struct SkillShopBuyButton {
+    pub skill: SkillId,
+}
+
+#[derive(Component)]
+pub struct PlaybackLeadCastFill;
+
+#[derive(Component)]
+pub struct PlaybackLeadCdFill;
+
+#[derive(Component)]
+pub struct PlaybackAllyCastFill;
+
+#[derive(Component)]
+pub struct PlaybackAllyCdFill;
+
+#[derive(Component)]
+pub struct PlaybackFoeCastFill;
+
+#[derive(Component)]
+pub struct PlaybackFoeCdFill;
+
 /// Scroll region for the live delve combat log (auto-scroll to latest).
 #[derive(Component)]
 pub struct PlaybackLogScrollRegion;

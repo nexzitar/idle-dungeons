@@ -12,13 +12,20 @@ pub enum RoomKind {
     Boss,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct Enemy {
+    #[serde(default)]
     pub name: String,
     pub max_health: i32,
     pub damage: i32,
     pub armor: i32,
     pub attack_speed: f32,
+    /// Simulated wind-up ticks before a strike (telegraph / cast bar).
+    #[serde(default)]
+    pub cast_ticks: u32,
+    /// Simulated recovery ticks after a strike.
+    #[serde(default)]
+    pub cooldown_ticks: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -28,7 +35,13 @@ pub struct Encounter {
 
 impl Encounter {
     pub fn monster_for_depth(depth: u32, elite: bool) -> Self {
-        let multiplier = if elite { 2 } else { 1 };
+        let mult = if elite { 2 } else { 1 };
+        let base_hp = 24 + depth as i32 * 6;
+        let mut max_health = base_hp * mult;
+        // Slightly tame the first milestone elite so new runs reliably reach the fight.
+        if elite && depth == 10 {
+            max_health = (max_health * 90 / 100).max(base_hp.max(1));
+        }
         Self {
             enemy: Enemy {
                 name: if elite {
@@ -36,10 +49,12 @@ impl Encounter {
                 } else {
                     "Hollow".into()
                 },
-                max_health: (24 + depth as i32 * 6) * multiplier,
-                damage: (3 + depth as i32 / 2) * multiplier,
+                max_health,
+                damage: (3 + depth as i32 / 2) * mult,
                 armor: depth as i32 / 5,
                 attack_speed: if elite { 0.9 } else { 1.05 },
+                cast_ticks: if elite { 2 } else { 1 },
+                cooldown_ticks: if elite { 4 } else { 3 },
             },
         }
     }
@@ -85,10 +100,12 @@ pub fn generate_dungeon(depth_count: u32, seed: u64) -> Vec<DungeonRoom> {
                 RoomKind::Boss => Some(Encounter {
                     enemy: Enemy {
                         name: "Gate Warden".into(),
-                        max_health: 250,
-                        damage: 18,
-                        armor: 4,
-                        attack_speed: 0.8,
+                        max_health: 168,
+                        damage: 12,
+                        armor: 3,
+                        attack_speed: 0.75,
+                        cast_ticks: 2,
+                        cooldown_ticks: 5,
                     },
                 }),
                 RoomKind::Treasure | RoomKind::Shrine => None,

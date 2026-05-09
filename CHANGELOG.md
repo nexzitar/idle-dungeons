@@ -2,6 +2,23 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.4 — 2026-05-08
+
+### Combat & pacing
+
+- **Skill cadence**: **OnAttack** actives use **cast** and **cooldown** simulation ticks (see `skill_timings`); spammy meter-only swings only apply when you have **no** attack actives equipped.
+- **Playback**: **Cast** and **cooldown** micro-bars under each hero/enemy HP bar during combat playback.
+- **Elite / boss tuning**: Depth-10 elite slightly trimmed; Gate Warden stats lowered; longer combat tick budget for simulated fights.
+
+### Progression
+
+- **Starter skills**: New saves only **four** skills in the book until you purchase more (migrating saves without the field still unlock the **full** roster).
+- **Skill guild** (briefing footer): spend **gold** to permanently add skills to your library; **Assign hero skill** refuses locked IDs.
+
+### Run rewards
+
+- **First blood** loot: the **first** combat win before depth **10** grants **one** rolled item (intended “first-run item” hook).
+
 ## 0.2.3 — 2026-05-08
 
 ### Engine / build
