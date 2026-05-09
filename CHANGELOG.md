@@ -2,6 +2,14 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.6 — 2026-05-08
+
+### UI / input
+
+- **Modal-scoped click capture**: When settings, skill book, skill shop, or gear hub is open, mouse-down **button** resolution ignores **briefing** widgets so **Reset all progress**, **skill picks**, and clears line up with what you actually clicked.
+- **Skill book**: Choices apply from the **hovered** pick row on mouse-up (still ties to the captured press target when Bevy marks several rows briefly).
+- **Title screen**: Spawns the same **tooltip** layer used elsewhere (`raise_tooltip_above_modals`), so hints are consistent after navigation.
+
 ## 0.2.5 — 2026-05-08
 
 ### Progression / saves

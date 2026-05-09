@@ -13,6 +13,7 @@ use crate::ui::components::{
 use crate::ui::mockup_layout::spawn_mockup_header;
 use crate::ui::placeholder_graphics::UiPlaceholderImages;
 use crate::ui::theme::{body_text, caption_text, section_title, UiTheme};
+use crate::ui::tooltip;
 use crate::ui::widgets::spawn_atmosphere;
 
 /// Max party figures around the fire (matches current party slot design).
@@ -81,6 +82,7 @@ pub fn spawn_title_screen(
                 env!("CARGO_PKG_VERSION")
             )));
         });
+        tooltip::spawn_tooltip_layer(root);
     });
 }
 

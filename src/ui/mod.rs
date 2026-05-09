@@ -56,6 +56,7 @@ use crate::ui::widgets::spawn_atmosphere;
 use bevy::app::MainScheduleOrder;
 use bevy::asset::AssetPlugin;
 use bevy::ecs::schedule::ScheduleLabel;
+use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::{MouseButton, MouseWheel};
 use bevy::input::{keyboard::KeyboardInput, ButtonState, InputPlugin};
 use bevy::prelude::*;
@@ -91,6 +92,7 @@ impl Plugin for UiPlugin {
         }
         app.init_resource::<GearHubKeepOpen>();
         app.init_resource::<UiClickPress>();
+        app.init_resource::<UiPressedButtonEntitiesOnClick>();
         app.init_resource::<crate::ui::tooltip::TooltipState>();
         app.init_resource::<HeroNameEditState>();
         app.init_resource::<PlaybackCombatLogVisible>();
@@ -125,6 +127,7 @@ impl Plugin for UiPlugin {
                 (
                     (
                         (
+                            capture_ui_pressed_button_entities,
                             capture_ui_click_start,
                             apply_ui_button_palettes,
                             handle_title_enter_camp.run_if(in_state(GameState::Title)),
@@ -299,17 +302,164 @@ fn handle_title_quit(
     }
 }
 
-fn capture_ui_click_start(
+/// Pressed [`Button`] entities on the current mouse-down (consumed by [`capture_ui_click_start`]).
+#[derive(Resource, Default)]
+struct UiPressedButtonEntitiesOnClick(Option<Vec<Entity>>);
+
+/// Modal roots currently present — used to filter pointer press targets away from briefing UI below.
+#[derive(SystemParam)]
+struct UiBlockingOverlayPresence<'w, 's> {
+    settings: Query<'w, 's, (), With<SettingsModalRoot>>,
+    skill_book: Query<'w, 's, (), With<SkillBookRoot>>,
+    skill_shop: Query<'w, 's, (), With<SkillShopRoot>>,
+    gear_hub: Query<'w, 's, (), With<GearHubRoot>>,
+}
+
+#[derive(SystemParam)]
+struct UiClickResolveMarkers<'w, 's> {
+    reset: Query<'w, 's, (), With<ResetProgressButton>>,
+    speed: Query<'w, 's, (), With<SettingsModalSpeedButton>>,
+    settings_close: Query<'w, 's, (), With<SettingsModalCloseButton>>,
+    settings_back: Query<'w, 's, (), With<SettingsModalBackdrop>>,
+    sbook_pick: Query<'w, 's, (), With<SkillBookPickButton>>,
+    sbook_close: Query<'w, 's, (), With<SkillBookCloseButton>>,
+    sbook_back: Query<'w, 's, (), With<SkillBookBackdrop>>,
+    shop_buy: Query<'w, 's, (), With<SkillShopBuyButton>>,
+    shop_close: Query<'w, 's, (), With<SkillShopCloseButton>>,
+    shop_back: Query<'w, 's, (), With<SkillShopBackdrop>>,
+    gear_back: Query<'w, 's, (), With<GearHubBackdrop>>,
+    gear_close: Query<'w, 's, (), With<GearHubCloseButton>>,
+    equip: Query<'w, 's, (), With<EquipItemButton>>,
+    salvage: Query<'w, 's, (), With<SalvageItemButton>>,
+    stash_sort: Query<'w, 's, (), With<StashSortCycleButton>>,
+}
+
+fn capture_ui_pressed_button_entities(
     mouse: Res<ButtonInput<MouseButton>>,
-    mut press: ResMut<UiClickPress>,
+    mut buf: ResMut<UiPressedButtonEntitiesOnClick>,
     buttons: Query<(Entity, &Interaction), With<Button>>,
 ) {
     if !mouse.just_pressed(MouseButton::Left) {
+        buf.0 = None;
         return;
     }
-    press.0 = buttons
+    let pressed: Vec<Entity> = buttons
         .iter()
-        .find_map(|(e, i)| (*i == Interaction::Pressed).then_some(e));
+        .filter_map(|(e, i)| (*i == Interaction::Pressed).then_some(e))
+        .collect();
+    buf.0 = (!pressed.is_empty()).then_some(pressed);
+}
+
+fn capture_ui_click_start(
+    mut press: ResMut<UiClickPress>,
+    mut buf: ResMut<UiPressedButtonEntitiesOnClick>,
+    overlay: UiBlockingOverlayPresence,
+    m: UiClickResolveMarkers,
+) {
+    let Some(mut pressed) = buf.0.take() else {
+        return;
+    };
+
+    if pressed.is_empty() {
+        press.0 = None;
+        return;
+    }
+
+    // Overlay-only candidates so briefing buttons under the same root cannot steal the press.
+    if !overlay.settings.is_empty() {
+        pressed.retain(|&e| {
+            m.reset.get(e).is_ok()
+                || m.speed.get(e).is_ok()
+                || m.settings_close.get(e).is_ok()
+                || m.settings_back.get(e).is_ok()
+        });
+        press.0 = pressed.iter().copied().min_by_key(|&e| {
+            let tier = if m.reset.get(e).is_ok() {
+                0u8
+            } else if m.speed.get(e).is_ok() {
+                1
+            } else if m.settings_close.get(e).is_ok() {
+                2
+            } else if m.settings_back.get(e).is_ok() {
+                3
+            } else {
+                255
+            };
+            (tier, e.to_bits())
+        });
+        return;
+    }
+
+    if !overlay.skill_book.is_empty() {
+        pressed.retain(|&e| {
+            m.sbook_pick.get(e).is_ok()
+                || m.sbook_close.get(e).is_ok()
+                || m.sbook_back.get(e).is_ok()
+        });
+        press.0 = pressed.iter().copied().min_by_key(|&e| {
+            let tier = if m.sbook_pick.get(e).is_ok() {
+                0u8
+            } else if m.sbook_close.get(e).is_ok() {
+                1
+            } else if m.sbook_back.get(e).is_ok() {
+                2
+            } else {
+                255
+            };
+            (tier, e.to_bits())
+        });
+        return;
+    }
+
+    if !overlay.skill_shop.is_empty() {
+        pressed.retain(|&e| {
+            m.shop_buy.get(e).is_ok()
+                || m.shop_close.get(e).is_ok()
+                || m.shop_back.get(e).is_ok()
+        });
+        press.0 = pressed.iter().copied().min_by_key(|&e| {
+            let tier = if m.shop_buy.get(e).is_ok() {
+                0u8
+            } else if m.shop_close.get(e).is_ok() {
+                1
+            } else if m.shop_back.get(e).is_ok() {
+                2
+            } else {
+                255
+            };
+            (tier, e.to_bits())
+        });
+        return;
+    }
+
+    if !overlay.gear_hub.is_empty() {
+        pressed.retain(|&e| {
+            m.equip.get(e).is_ok()
+                || m.salvage.get(e).is_ok()
+                || m.stash_sort.get(e).is_ok()
+                || m.gear_close.get(e).is_ok()
+                || m.gear_back.get(e).is_ok()
+        });
+        press.0 = pressed.iter().copied().min_by_key(|&e| {
+            let tier = if m.equip.get(e).is_ok() {
+                0u8
+            } else if m.salvage.get(e).is_ok() {
+                1
+            } else if m.stash_sort.get(e).is_ok() {
+                2
+            } else if m.gear_close.get(e).is_ok() {
+                3
+            } else if m.gear_back.get(e).is_ok() {
+                4
+            } else {
+                255
+            };
+            (tier, e.to_bits())
+        });
+        return;
+    }
+
+    press.0 = pressed.iter().min_by_key(|e| e.to_bits()).copied();
 }
 
 /// Bevy UI's `ui_focus_system` may leave [`Interaction::Pressed`] on the frame where the
@@ -1331,7 +1481,7 @@ fn close_skill_book_modal(
 fn handle_skill_book_pick(
     mouse: Res<ButtonInput<MouseButton>>,
     press: Res<UiClickPress>,
-    buttons: Query<(Entity, &Interaction, &SkillBookPickButton)>,
+    buttons: Query<(Entity, &Interaction, &SkillBookPickButton), With<SkillBookPickButton>>,
     mut writer: MessageWriter<AssignHeroSkill>,
     modal: Query<Entity, With<SkillBookRoot>>,
     mut commands: Commands,
@@ -1339,21 +1489,50 @@ fn handle_skill_book_pick(
     if !mouse.just_released(MouseButton::Left) {
         return;
     }
-    let Some(target) = press.0 else {
+    if modal.is_empty() {
         return;
+    }
+
+    let candidates: Vec<(Entity, SkillBookPickButton)> = buttons
+        .iter()
+        .filter_map(|(entity, interaction, pick)| {
+            ui_click_release_confirms(*interaction).then_some((entity, *pick))
+        })
+        .collect();
+
+    if candidates.is_empty() {
+        return;
+    }
+
+    let pick_btn = if candidates.len() == 1 {
+        candidates[0].1
+    } else if let Some(target) = press.0 {
+        candidates
+            .iter()
+            .find(|(entity, _)| *entity == target)
+            .map(|(_, p)| *p)
+            .unwrap_or_else(|| {
+                candidates
+                    .iter()
+                    .min_by_key(|(e, _)| e.to_bits())
+                    .map(|(_, p)| *p)
+                    .unwrap_or(candidates[0].1)
+            })
+    } else {
+        candidates
+            .iter()
+            .min_by_key(|(e, _)| e.to_bits())
+            .map(|(_, p)| *p)
+            .unwrap_or(candidates[0].1)
     };
-    for (entity, interaction, pick) in &buttons {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            writer.write(AssignHeroSkill {
-                slot: pick.slot,
-                skill: pick.skill,
-                kind: pick.kind,
-            });
-            for e in &modal {
-                commands.entity(e).despawn();
-            }
-            break;
-        }
+
+    writer.write(AssignHeroSkill {
+        slot: pick_btn.slot,
+        skill: pick_btn.skill,
+        kind: pick_btn.kind,
+    });
+    for e in &modal {
+        commands.entity(e).despawn();
     }
 }
 
