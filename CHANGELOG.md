@@ -2,6 +2,16 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.13 — 2026-05-09
+
+### Balance
+
+- **Loot rarity curve** (depth → tier) is stretched: floor **10** rewards are **Uncommon** at most; **Legendary** starts at depth **50** (was **24**). See `rarity_for_depth` in `src/domain/loot.rs`.
+
+### UX
+
+- **UI scroll**: Slower wheel speed (`apply_ui_scroll` uses **12** px per unit instead of **28**).
+
 ## 0.2.12 — 2026-05-09
 
 ### Fixes

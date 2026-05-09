@@ -15,14 +15,26 @@ const STANDARD_AFFIXES: [ItemAffix; 8] = [
     ItemAffix::Bastion,
 ];
 
+/// Guaranteed tier from **dungeon depth only** (all normal rolls use this).
+///
+/// Current ladder (slower than early MVP so early elites are not Rare+ and
+/// Legendary does not saturate long runs):
+///
+/// | Depth   | Rarity    |
+/// |---------|-----------|
+/// | 1–4     | Common    |
+/// | 5–14    | Uncommon  |
+/// | 15–29   | Rare      |
+/// | 30–49   | Epic      |
+/// | 50+     | Legendary |
 fn rarity_for_depth(depth: u32) -> ItemRarity {
-    if depth >= 24 {
+    if depth >= 50 {
         ItemRarity::Legendary
-    } else if depth >= 18 {
+    } else if depth >= 30 {
         ItemRarity::Epic
-    } else if depth >= 8 {
+    } else if depth >= 15 {
         ItemRarity::Rare
-    } else if depth >= 3 {
+    } else if depth >= 5 {
         ItemRarity::Uncommon
     } else {
         ItemRarity::Common
@@ -352,9 +364,15 @@ mod tests {
 
     #[test]
     fn very_deep_loot_can_be_legendary_with_two_affixes() {
-        let item = roll_loot(30, 12345);
+        let item = roll_loot(55, 12345);
         assert_eq!(item.rarity, ItemRarity::Legendary);
         assert_eq!(item.affixes.len(), 2);
+    }
+
+    #[test]
+    fn floor_10_loot_is_uncommon_at_most() {
+        let item = roll_loot(10, 777);
+        assert_eq!(item.rarity, ItemRarity::Uncommon);
     }
 
     #[test]
