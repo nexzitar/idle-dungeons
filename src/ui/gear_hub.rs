@@ -1,4 +1,4 @@
-//! Gear hub: loadout and stash as two side-by-side panels (shared backdrop + close).
+//! Gear hub: loadout + stash side-by-side (shared backdrop + close).
 
 use bevy::prelude::*;
 use bevy::text::{TextColor, TextFont};
@@ -13,24 +13,27 @@ use crate::ui::mockup_layout::spawn_stash_filters_and_sort_row;
 use crate::ui::placeholder_graphics::UiPlaceholderImages;
 use crate::ui::theme::{caption_text, headline_text, section_title, UiTheme};
 
-/// Equipped-gear column — three slot rows fit without crowding.
-const GEAR_LOADOUT_PANEL_W: f32 = 300.0;
-/// Stash column — item cards plus equip/salvage need a little more width.
-const GEAR_STASH_PANEL_W: f32 = 372.0;
-/// Max height shared by both panels so the pair clears the footer dock.
-const GEAR_HUB_PANEL_MAX_H: f32 = 528.0;
-/// Stash list viewport inside the right panel.
-const GEAR_STASH_SCROLL_MAX_PX: f32 = 392.0;
+/// Equipped-gear column.
+const GEAR_LOADOUT_PANEL_W: f32 = 292.0;
+/// Stash — wide enough for two item cards side by side.
+const GEAR_STASH_PANEL_W: f32 = 652.0;
+/// Outer padding: equal top / bottom so panels sit with symmetric vertical margin.
+const GEAR_HUB_MARGIN_Y: f32 = 44.0;
+/// Inset from the left edge (duo hugs the left a bit more than center).
+const GEAR_HUB_MARGIN_X_START: f32 = 22.0;
+/// Breathing room on the right.
+const GEAR_HUB_MARGIN_X_END: f32 = 36.0;
+const GEAR_HUB_COLUMN_GAP: f32 = 18.0;
 
 fn gear_side_panel_node(width_px: f32) -> Node {
     Node {
         box_sizing: BoxSizing::BorderBox,
         width: Val::Px(width_px),
-        max_height: Val::Px(GEAR_HUB_PANEL_MAX_H),
         min_height: Val::Px(0.0),
         flex_shrink: 0.0,
         flex_direction: FlexDirection::Column,
         align_items: AlignItems::Stretch,
+        align_self: AlignSelf::Stretch,
         row_gap: Val::Px(UiTheme::PANEL_INSET),
         padding: UiRect::all(Val::Px(UiTheme::PAD_ROOT)),
         overflow: Overflow::clip_y(),
@@ -99,16 +102,15 @@ pub fn spawn_gear_hub_modal(
                         left: Val::Px(0.0),
                         top: Val::Px(0.0),
                         flex_direction: FlexDirection::Row,
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::FlexStart,
-                        align_content: AlignContent::FlexStart,
-                        column_gap: Val::Px(20.0),
-                        padding: UiRect::new(
-                            Val::Px(18.0),
-                            Val::Px(18.0),
-                            Val::Px(54.0),
-                            Val::Px(92.0),
-                        ),
+                        justify_content: JustifyContent::FlexStart,
+                        align_items: AlignItems::Stretch,
+                        column_gap: Val::Px(GEAR_HUB_COLUMN_GAP),
+                        padding: UiRect {
+                            left: Val::Px(GEAR_HUB_MARGIN_X_START),
+                            right: Val::Px(GEAR_HUB_MARGIN_X_END),
+                            top: Val::Px(GEAR_HUB_MARGIN_Y),
+                            bottom: Val::Px(GEAR_HUB_MARGIN_Y),
+                        },
                         ..default()
                     },
                     FocusPolicy::Pass,
@@ -127,7 +129,9 @@ pub fn spawn_gear_hub_modal(
                                 .spawn(Node {
                                     width: Val::Percent(100.0),
                                     flex_direction: FlexDirection::Column,
-                                    flex_shrink: 0.0,
+                                    flex_grow: 1.0,
+                                    flex_basis: Val::Px(0.0),
+                                    min_height: Val::Px(0.0),
                                     row_gap: Val::Px(6.0),
                                     ..default()
                                 })
@@ -158,7 +162,6 @@ pub fn spawn_gear_hub_modal(
                                 interactive_inventory,
                                 stash_sort,
                                 ph,
-                                GEAR_STASH_SCROLL_MAX_PX,
                             );
                             let close_pal = UiButtonPalette::panel_outlined();
                             stash_panel
@@ -191,13 +194,52 @@ pub fn spawn_gear_hub_modal(
         });
 }
 
+/// Split ordered indices into two columns (top-to-bottom in each, left column gets the extra when odd count).
+fn partition_stash_indices(ix: &[usize]) -> (&[usize], &[usize]) {
+    let mid = (ix.len() + 1) / 2;
+    ix.split_at(mid)
+}
+
+fn spawn_stash_column(
+    parent: &mut ChildSpawnerCommands<'_>,
+    rows: &[crate::domain::items::ItemInstance],
+    col_ix: &[usize],
+    interactive_inventory: bool,
+    ph: &UiPlaceholderImages,
+) {
+    parent
+        .spawn(Node {
+            box_sizing: BoxSizing::BorderBox,
+            flex_grow: 1.0,
+            flex_basis: Val::Px(0.0),
+            min_width: Val::Px(0.0),
+            width: Val::Percent(50.0),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Stretch,
+            row_gap: Val::Px(6.0),
+            ..default()
+        })
+        .with_children(|col| {
+            for &i in col_ix {
+                let item = &rows[i];
+                if interactive_inventory {
+                    crate::ui::spawn_item_card(col, item, ph);
+                } else {
+                    col.spawn(caption_text(format!(
+                        "\u{2022} {} ({:?})",
+                        item.name, item.rarity
+                    )));
+                }
+            }
+        });
+}
+
 fn gear_hub_scroll_list(
     parent: &mut ChildSpawnerCommands<'_>,
     rows: &[crate::domain::items::ItemInstance],
     interactive_inventory: bool,
     stash_sort: StashSortOrder,
     ph: &UiPlaceholderImages,
-    scroll_max_px: f32,
 ) {
     parent
         .spawn((
@@ -207,7 +249,6 @@ fn gear_hub_scroll_list(
                 flex_shrink: 1.0,
                 flex_basis: Val::Px(0.0),
                 min_height: Val::Px(72.0),
-                max_height: Val::Px(scroll_max_px),
                 position_type: PositionType::Relative,
                 flex_direction: FlexDirection::Column,
                 overflow: Overflow::clip_y(),
@@ -230,9 +271,10 @@ fn gear_hub_scroll_list(
                         right: Val::Px(0.0),
                         top: Val::Px(0.0),
                         padding: UiRect::all(Val::Px(UiTheme::PANEL_INSET_SM)),
-                        flex_direction: FlexDirection::Column,
-                        align_items: AlignItems::Stretch,
-                        row_gap: Val::Px(6.0),
+                        flex_direction: FlexDirection::Row,
+                        align_items: AlignItems::FlexStart,
+                        column_gap: Val::Px(8.0),
+                        width: Val::Percent(100.0),
                         ..default()
                     },
                     UiScrollContent,
@@ -240,20 +282,13 @@ fn gear_hub_scroll_list(
                 .with_children(|body| {
                     if rows.is_empty() {
                         body.spawn(caption_text("No items in this list."));
-                    } else {
-                        let ix = crate::ui::stash_sort::stash_display_indices(rows, stash_sort);
-                        for &i in ix.iter().take(40) {
-                            let item = &rows[i];
-                            if interactive_inventory {
-                                crate::ui::spawn_item_card(body, item, ph);
-                            } else {
-                                body.spawn(caption_text(format!(
-                                    "\u{2022} {} ({:?})",
-                                    item.name, item.rarity
-                                )));
-                            }
-                        }
+                        return;
                     }
+                    let ix = crate::ui::stash_sort::stash_display_indices(rows, stash_sort);
+                    let ix: Vec<usize> = ix.into_iter().take(40).collect();
+                    let (left_ix, right_ix) = partition_stash_indices(&ix);
+                    spawn_stash_column(body, rows, left_ix, interactive_inventory, ph);
+                    spawn_stash_column(body, rows, right_ix, interactive_inventory, ph);
                 });
         });
 }
