@@ -10,6 +10,7 @@ use crate::domain::progression::MetaProgression;
 use crate::domain::progression::PARTY_SLOT_2_UNLOCK_DEPTH;
 use crate::domain::items::GearSlot;
 use crate::domain::run::{RunOutcome, RunSummary, DEFAULT_RUN_MAX_DEPTH, DEFAULT_RUN_SEED};
+use crate::app::PLAYBACK_SPEED_STEPS;
 use crate::domain::skills::{skill_definition, SkillKind};
 use crate::save::StashSortOrder;
 use crate::ui::components::{
@@ -23,12 +24,12 @@ use crate::ui::components::{
     PlaybackFoeCdFill, PlaybackHeroBarFill, PlaybackHeroDebuffLine, PlaybackLeadCastFill,
     PlaybackLeadCdFill, PlaybackLeadPortraitBlock, PlaybackLogScrollRegion, PlaybackLogText,
     PlaybackAllyBarFill, PlaybackProgressBarFill, PlaybackProgressLabel, PlaybackRoomKindText,
-    PlaybackTheaterFloatLayer, SkillShopOpenButton,
-    PlaybackCombatLogToggleLabel, ResetProgressButton, SettingsButton,
-    SettingsModalBackdrop, SettingsModalCloseButton, SettingsModalRoot, SettingsModalSpeedButton,
-    SettingsModalSpeedLabel, SkillSlotButton, SkipPlaybackButton, StashSortCycleButton,
-    ToggleCombatLogButton, TopBarField, UiButtonPalette, UiScrollContent, UiScrollRegion,
-    UiScrollState, UiTooltip,
+    PlaybackTheaterFloatLayer, PlaybackSpeedDecButton, PlaybackSpeedIncButton,
+    PlaybackSpeedValueText, SkillShopOpenButton,
+    PlaybackCombatLogToggleLabel, ResetProgressButton, SettingsButton, SettingsModalBackdrop,
+    SettingsModalCloseButton, SettingsModalRoot, SkillSlotButton, SkipPlaybackButton,
+    StashSortCycleButton, ToggleCombatLogButton, TopBarField, UiButtonPalette, UiScrollContent,
+    UiScrollRegion, UiScrollState, UiTooltip,
 };
 use crate::ui::placeholder_graphics::UiPlaceholderImages;
 use crate::ui::theme::{
@@ -162,9 +163,8 @@ fn spawn_playback_combat_log_scroll(
         });
 }
 
-/// Full-screen centered settings dialog (speed + reset). Spawn as a child of [`UiRoot`].
-pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>, speed_mult: f32) {
-    let speed_label = fmt_speed_label(speed_mult);
+/// Full-screen centered settings dialog (reset progress). Spawn as a child of [`UiRoot`].
+pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>) {
     parent
         .spawn((
             Node {
@@ -231,38 +231,9 @@ pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>, speed_mult: f
         ))
                 .with_children(|dialog| {
                     dialog.spawn(headline_text("Settings"));
-                    dialog.spawn(section_title("Run playback"));
-                    let speed_btn_pal = UiButtonPalette::panel_outlined();
-                    dialog
-                        .spawn((
-                            Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Percent(100.0),
-                                    min_height: Val::Px(44.0),
-                                    justify_content: JustifyContent::Center,
-                                    align_items: AlignItems::Center,
-                                    border: UiRect::all(Val::Px(1.0)),
-                                    ..default()
-            },
-            Button,
-            BackgroundColor(speed_btn_pal.idle_bg.into()),
-            BorderColor::from(speed_btn_pal.idle_border),
-                            SettingsModalSpeedButton,
-                            speed_btn_pal,
-                            UiTooltip::txt(
-                                "Toggle run playback speed between 1x and 2x. Affects delve playback and future combat timing.",
-                            ),
-                        ))
-                        .with_children(|b| {
-                            b.spawn((
-                                (
-                Text::new(format!("Speed: {speed_label} (click to toggle)")),
-                TextFont::from_font_size(UiTheme::FONT_BODY),
-                TextColor(UiTheme::muted_cream()),
-            ),
-                                SettingsModalSpeedLabel,
-                            ));
-                        });
+                    dialog.spawn(caption_text(
+                        "Playback speed is controlled from the header (arrows next to Speed).",
+                    ));
                     dialog.spawn(section_title("Save"));
                     let reset_pal = UiButtonPalette::salvage();
                     dialog
@@ -318,6 +289,112 @@ pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>, speed_mult: f
                 TextColor(UiTheme::muted_cream()),
             ));
                         });
+                });
+        });
+}
+
+fn spawn_playback_speed_controls(parent: &mut ChildSpawnerCommands<'_>, initial_mult: f32) {
+    parent
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                min_width: Val::Px(128.0),
+                ..default()
+            },
+            Interaction::default(),
+            UiTooltip::txt(
+                "Delve playback speed. ‹ › step through 1×, 2×, 3×, 5×, and 10×.",
+            ),
+        ))
+        .with_children(|wrap| {
+            wrap.spawn(Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                column_gap: Val::Px(5.0),
+                ..default()
+            })
+            .with_children(|hdr| {
+                hdr.spawn((
+                    Text::new("\u{21BB}"),
+                    TextFont::from_font_size(UiTheme::FONT_MICRO),
+                    TextColor(UiTheme::body_dim()),
+                ));
+                hdr.spawn((
+                    Text::new("Speed"),
+                    TextFont::from_font_size(UiTheme::FONT_MICRO),
+                    TextColor(UiTheme::body_dim()),
+                ));
+            });
+            let p_dec = UiButtonPalette::panel_outlined();
+            let p_inc = UiButtonPalette::panel_outlined();
+            wrap
+                .spawn(Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    column_gap: Val::Px(6.0),
+                    ..default()
+                })
+                .with_children(|row| {
+                    row.spawn((
+                        Node {
+                            box_sizing: BoxSizing::BorderBox,
+                            min_width: Val::Px(36.0),
+                            min_height: Val::Px(32.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            border: UiRect::all(Val::Px(1.0)),
+                            ..default()
+                        },
+                        Button,
+                        BackgroundColor(p_dec.idle_bg.into()),
+                        BorderColor::from(p_dec.idle_border),
+                        PlaybackSpeedDecButton,
+                        p_dec,
+                        UiTooltip::txt("Slower delve playback (steps down to 1×)."),
+                    ))
+                    .with_children(|b| {
+                        b.spawn((
+                            Text::new("\u{2039}"),
+                            TextFont::from_font_size(UiTheme::FONT_LABEL),
+                            TextColor(UiTheme::body()),
+                        ));
+                    });
+                    row.spawn((
+                        Text::new(fmt_speed_label(initial_mult)),
+                        TextFont::from_font_size(UiTheme::FONT_BODY),
+                        TextColor(UiTheme::body()),
+                        PlaybackSpeedValueText,
+                    ));
+                    row.spawn((
+                        Node {
+                            box_sizing: BoxSizing::BorderBox,
+                            min_width: Val::Px(36.0),
+                            min_height: Val::Px(32.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            border: UiRect::all(Val::Px(1.0)),
+                            ..default()
+                        },
+                        Button,
+                        BackgroundColor(p_inc.idle_bg.into()),
+                        BorderColor::from(p_inc.idle_border),
+                        PlaybackSpeedIncButton,
+                        p_inc,
+                        UiTooltip::txt("Faster delve playback (steps up to 10×)."),
+                    ))
+                    .with_children(|b| {
+                        b.spawn((
+                            Text::new("\u{203A}"),
+                            TextFont::from_font_size(UiTheme::FONT_LABEL),
+                            TextColor(UiTheme::body()),
+                        ));
+                    });
                 });
         });
 }
@@ -403,15 +480,7 @@ pub fn spawn_mockup_header(
                     depth_label.to_string(),
                     "Deepest floor reached on the latest run (or dash when not applicable).",
                 );
-                resource_chip(
-                    center,
-                    Some(ph.stat_chip.clone()),
-                    "\u{21BB}",
-                    "Speed",
-                    TopBarField::Speed,
-                    fmt_speed_label(speed_mult),
-                    "How fast delve playback runs. Also applies to some future real-time combat.",
-                );
+                spawn_playback_speed_controls(center, speed_mult);
             });
             row.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
@@ -439,7 +508,7 @@ pub fn spawn_mockup_header(
                         SettingsButton,
                         p,
                         UiTooltip::txt(
-                            "Open settings: change playback speed or reset all progress and saves.",
+                            "Open settings: reset all progress or review this note.",
                         ),
                     ))
                     .with_children(|btn| {
@@ -472,9 +541,7 @@ pub fn title_settings_menu_button(parent: &mut ChildSpawnerCommands<'_>) {
             BorderColor::from(p.idle_border),
             SettingsButton,
             p,
-            UiTooltip::txt(
-                "Open settings: change playback speed or reset all progress and saves.",
-            ),
+            UiTooltip::txt("Open settings: reset all progress and saves."),
         ))
         .with_children(|b| {
             b.spawn((
@@ -486,13 +553,14 @@ pub fn title_settings_menu_button(parent: &mut ChildSpawnerCommands<'_>) {
 }
 
 pub(crate) fn fmt_speed_label(mult: f32) -> String {
-    if (mult - 1.0).abs() < f32::EPSILON {
-        "1x".to_string()
-    } else if (mult - 2.0).abs() < f32::EPSILON {
-        "2x".to_string()
-    } else {
-        format!("{mult:.1}x")
+    const EPS: f32 = 1e-3;
+    if PLAYBACK_SPEED_STEPS
+        .iter()
+        .any(|s| (mult - *s).abs() < EPS)
+    {
+        return format!("{}x", mult as i32);
     }
+    format!("{mult:.1}x")
 }
 
 fn resource_chip(
@@ -1998,6 +2066,25 @@ pub fn spawn_dungeon_summary_column(parent: &mut ChildSpawnerCommands<'_>, summa
                 health_bar(col, frac, type_color);
             });
         });
+        if !summary.loot.is_empty() {
+            let n = summary.loot.len();
+            p.spawn(section_title("GEAR FROM THIS RUN"));
+            p.spawn(body_text(format!(
+                "{n} piece(s) here go to your stash when you Accept rewards below. Open Gear after that to equip."
+            )));
+            for item in summary.loot.iter().take(4) {
+                p.spawn(caption_text(format!(
+                    "\u{2022} {} ({:?})",
+                    item.name, item.rarity
+                )));
+            }
+            if summary.loot.len() > 4 {
+                p.spawn(caption_text(format!(
+                    "\u{2026} and {} more in the rewards popup.",
+                    summary.loot.len() - 4
+                )));
+            }
+        }
         p.spawn(section_title("COMBAT LOG"));
         p.spawn(caption_text("Mouse wheel scrolls."));
         let log_lines: Vec<_> = summary
@@ -2206,6 +2293,25 @@ pub fn spawn_summary_rewards_modal(
                         "Gold +{} · Salvage +{} · Depth {}",
                         summary.gold_earned, summary.salvage_earned, summary.deepest_depth
                     )));
+                    if summary.loot.is_empty() {
+                        dialog.spawn(body_text(
+                            "No gear dropped this run—gold and salvage still apply.",
+                        ));
+                    } else {
+                        let n = summary.loot.len();
+                        dialog.spawn((
+                            Text::new(if n == 1 {
+                                "YOU FOUND NEW GEAR (1)".to_string()
+                            } else {
+                                format!("YOU FOUND NEW GEAR ({n})")
+                            }),
+                            TextFont::from_font_size(UiTheme::FONT_SKILL_ACTIVE),
+                            TextColor(UiTheme::muted_gold()),
+                        ));
+                        dialog.spawn(body_text(
+                            "It is not equipped until after you Accept. Then use Gear on the footer bar to stash and equip.",
+                        ));
+                    }
                     dialog.spawn(section_title("LOOT"));
                     spawn_stash_filters_and_sort_row(dialog, stash_sort);
                     spawn_column_flex_scroll(dialog, |scroll| {

@@ -93,7 +93,6 @@ pub fn spawn_top_resource_bar(
     salvage: u32,
     skill_slots: usize,
     depth_label: &str,
-    speed_mult: f32,
 ) {
     parent
         .spawn((
@@ -142,11 +141,6 @@ pub fn spawn_top_resource_bar(
                     format!("Skills: {skill_slots}"),
                 );
                 metric_chip(metrics, TopBarField::Depth, format!("Depth: {depth_label}"));
-                metric_chip(
-                    metrics,
-                    TopBarField::Speed,
-                    format!("Speed: {}x", fmt_speed(speed_mult)),
-                );
             });
 
             let p = UiButtonPalette::panel_outlined();
@@ -183,16 +177,6 @@ fn metric_chip(parent: &mut ChildSpawnerCommands<'_>, field: TopBarField, label:
         TextColor(UiTheme::body()),
         field,
     ));
-}
-
-fn fmt_speed(mult: f32) -> String {
-    if (mult - 1.0).abs() < f32::EPSILON {
-        "1".to_string()
-    } else if (mult - 2.0).abs() < f32::EPSILON {
-        "2".to_string()
-    } else {
-        format!("{mult:.1}")
-    }
 }
 
 fn spawn_panel_scroll_viewport(parent: &mut ChildSpawnerCommands<'_>, content: impl FnOnce(&mut ChildSpawnerCommands<'_>)) {
