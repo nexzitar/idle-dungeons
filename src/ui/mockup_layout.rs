@@ -84,18 +84,27 @@ fn ornate_shell(content: impl FnOnce(&mut ChildSpawnerCommands<'_>)) -> impl FnO
 }
 
 /// Fills remaining column height; scrolls when content exceeds the panel.
-fn spawn_column_flex_scroll(parent: &mut ChildSpawnerCommands<'_>, content: impl FnOnce(&mut ChildSpawnerCommands<'_>)) {
+///
+/// When `min_viewport_height_px` is set, guarantees a minimum viewport height so flex layout
+/// does not collapse empty (e.g. run rewards loot list).
+fn spawn_column_flex_scroll(
+    parent: &mut ChildSpawnerCommands<'_>,
+    min_viewport_height_px: Option<f32>,
+    content: impl FnOnce(&mut ChildSpawnerCommands<'_>),
+) {
     parent
         .spawn((
             Node {
                 box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
-                    flex_grow: 1.0,
-                    flex_shrink: 1.0,
-                    min_height: Val::Px(0.0),
-                    position_type: PositionType::Relative,
-                    overflow: Overflow::clip_y(),
-                    ..default()
+                flex_grow: 1.0,
+                flex_shrink: 1.0,
+                min_height: min_viewport_height_px
+                    .map(Val::Px)
+                    .unwrap_or(Val::Px(0.0)),
+                position_type: PositionType::Relative,
+                overflow: Overflow::clip_y(),
+                ..default()
             },
             FocusPolicy::Pass,
             RelativeCursorPosition::default(),
@@ -739,7 +748,7 @@ pub fn spawn_hero_column_mockup(
 ) {
     let inner = move |p: &mut ChildSpawnerCommands<'_>| {
         p.spawn(panel_title_centered("PARTY"));
-        spawn_column_flex_scroll(p, move |body| {
+        spawn_column_flex_scroll(p, None, move |body| {
             body.spawn(section_title("Lead"));
             spawn_hero_name_row(body, 0, allow_rename);
             let stats = lead.derived_stats();
@@ -2239,6 +2248,7 @@ pub fn spawn_summary_rewards_modal(
     parent: &mut ChildSpawnerCommands<'_>,
     summary: &RunSummary,
     stash_sort: StashSortOrder,
+    ph: &UiPlaceholderImages,
 ) {
     use crate::ui::components::{AcceptRewardsButton, SummaryRewardsModalRoot};
     parent
@@ -2274,15 +2284,20 @@ pub fn spawn_summary_rewards_modal(
                 .spawn((
             Node {
                 box_sizing: BoxSizing::BorderBox,
-                min_width: Val::Px(420.0),
-                        max_width: Val::Px(560.0),
-                        max_height: Val::Percent(85.0),
-                        padding: UiRect::all(Val::Px(UiTheme::PAD_ROOT)),
-                        flex_direction: FlexDirection::Column,
-                        align_items: AlignItems::Stretch,
-                        row_gap: Val::Px(10.0),
-                        border: UiRect::all(Val::Px(2.0)),
-                        ..default()
+                min_width: Val::Px(460.0),
+                max_width: Val::Px(620.0),
+                max_height: Val::Percent(85.0),
+                padding: UiRect {
+                    left: Val::Px(UiTheme::PAD_ROOT),
+                    right: Val::Px(UiTheme::PAD_ROOT),
+                    top: Val::Px(UiTheme::PAD_ROOT),
+                    bottom: Val::Px(UiTheme::PAD_ROOT + 22.0),
+                },
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Stretch,
+                row_gap: Val::Px(10.0),
+                border: UiRect::all(Val::Px(2.0)),
+                ..default()
             },
             BackgroundColor(UiTheme::panel_bg_deep().into()),
             BorderColor::from(UiTheme::ornate_gold())
@@ -2314,7 +2329,7 @@ pub fn spawn_summary_rewards_modal(
                     }
                     dialog.spawn(section_title("LOOT"));
                     spawn_stash_filters_and_sort_row(dialog, stash_sort);
-                    spawn_column_flex_scroll(dialog, |scroll| {
+                    spawn_column_flex_scroll(dialog, Some(200.0), |scroll| {
                         if summary.loot.is_empty() {
                             scroll.spawn(caption_text("No items this run."));
                         } else {
@@ -2324,10 +2339,7 @@ pub fn spawn_summary_rewards_modal(
                             );
                             for &i in ix.iter() {
                                 let item = &summary.loot[i];
-                                scroll.spawn(caption_text(format!(
-                                    "\u{2728} {} ({:?})",
-                                    item.name, item.rarity
-                                )));
+                                crate::ui::spawn_item_card_preview(scroll, item, ph);
                             }
                         }
                     });
@@ -2341,7 +2353,12 @@ pub fn spawn_summary_rewards_modal(
                                     justify_content: JustifyContent::Center,
                                     align_items: AlignItems::Center,
                                     border: UiRect::all(Val::Px(2.0)),
-                                    margin: UiRect::top(Val::Px(8.0)),
+                                    margin: UiRect {
+                                        left: Val::Px(0.0),
+                                        right: Val::Px(0.0),
+                                        top: Val::Px(12.0),
+                                        bottom: Val::Px(6.0),
+                                    },
                                     ..default()
             },
             Button,

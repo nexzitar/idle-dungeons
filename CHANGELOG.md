@@ -2,6 +2,13 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.11 — 2026-05-09
+
+### UX
+
+- **Run rewards**: Loot list shows **read-only item cards** (same look as stash minus actions); loot scroll gets a **minimum height** so it no longer collapses invisible; modal has **extra bottom padding** and the **Accept rewards** button has clearer spacing.
+- **Gear hub**: The equipped + stash pair is **horizontally centered** again with symmetric side margins.
+
 ## 0.2.10 — 2026-05-09
 
 ### UX
