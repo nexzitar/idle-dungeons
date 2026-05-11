@@ -2,6 +2,13 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.21 — 2026-05-09
+
+### Combat / skills
+
+- **`SkillDefinition::max_charges`:** [`InstantStrike`](src/domain/skills.rs) skills (currently Victory Rush) use a per-encounter charge pool. Each use spends one charge and respects GCD; **full [`ability_icd_ticks`](src/domain/skills.rs)** runs only after the pool hits **zero**, then refills to `max_charges`. [`BuffChargeConsumed`](src/domain/combat.rs) reports remaining charges.
+- **[`CombatSimOptions`](src/domain/combat.rs)** + [`simulate_combat_party_with_options`](src/domain/combat.rs) for overriding lead instant-strike max charges in tests/tools. Normal runs use default options via [`simulate_combat_party`](src/domain/combat.rs) / [`simulate_combat_party_with_initial_buffs`](src/domain/combat.rs).
+
 ## 0.2.20 — 2026-05-09
 
 ### Combat

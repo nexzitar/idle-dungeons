@@ -95,7 +95,8 @@ pub enum SkillCombatStyle {
     SwingWeave,
     /// Heroic Strike–style: queue bonus damage on the next white swing; queues trigger [`SkillDefinition::gcd_ticks`].
     NextMeleeBuff,
-    /// Victory Rush–style: instant ability damage; uses GCD + [`SkillDefinition::ability_icd_ticks`].
+    /// Victory Rush–style: instant ability damage; uses GCD + [`SkillDefinition::ability_icd_ticks`]
+    /// and optional [`SkillDefinition::max_charges`].
     InstantStrike,
 }
 
@@ -119,6 +120,10 @@ pub struct SkillDefinition {
     pub gcd_ticks: u8,
     /// Extra per-skill cooldown after use (e.g. so an instant strike is not spammed every GCD).
     pub ability_icd_ticks: u8,
+    /// For [`SkillCombatStyle::InstantStrike`]: pool size per encounter. Each use consumes one charge
+    /// and triggers GCD; when this hits zero, [`Self::ability_icd_ticks`] starts. When that ICD elapses,
+    /// the pool refills to `max_charges`. Other styles ignore this (keep at `1`).
+    pub max_charges: u8,
 }
 
 pub fn format_skill_tags(tags: &[SkillTag]) -> String {
@@ -169,15 +174,15 @@ pub fn skill_timings(id: SkillId) -> (u8, u8) {
     }
 }
 
-pub fn skill_combat_meta(id: SkillId) -> (SkillCombatStyle, u8, u8) {
+pub fn skill_combat_meta(id: SkillId) -> (SkillCombatStyle, u8, u8, u8) {
     use SkillCombatStyle::*;
     match id {
         SkillId::HeavyStrike | SkillId::Cleave | SkillId::PoisonEdge | SkillId::Taunt => {
-            (SwingWeave, 0, 0)
+            (SwingWeave, 0, 0, 1)
         }
-        SkillId::EmpoweredBlow => (NextMeleeBuff, 3, 8),
-        SkillId::VictoryRush => (InstantStrike, 3, 30),
-        _ => (Passive, 0, 0),
+        SkillId::EmpoweredBlow => (NextMeleeBuff, 3, 8, 1),
+        SkillId::VictoryRush => (InstantStrike, 3, 30, 1),
+        _ => (Passive, 0, 0, 1),
     }
 }
 
@@ -239,7 +244,7 @@ pub fn skill_book_pick_order_for(unlocked: &[SkillId]) -> Vec<SkillId> {
 
 pub fn skill_definition(id: SkillId) -> SkillDefinition {
     let (c, d) = skill_timings(id);
-    let (combat_style, gcd_ticks, ability_icd_ticks) = skill_combat_meta(id);
+    let (combat_style, gcd_ticks, ability_icd_ticks, max_charges) = skill_combat_meta(id);
     match id {
         SkillId::LifestealStrike => SkillDefinition {
             id,
@@ -254,6 +259,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::Guard => SkillDefinition {
             id,
@@ -268,6 +274,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::HeavyStrike => SkillDefinition {
             id,
@@ -282,6 +289,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::PoisonEdge => SkillDefinition {
             id,
@@ -296,6 +304,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::ThornSkin => SkillDefinition {
             id,
@@ -310,6 +319,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::BarrierPulse => SkillDefinition {
             id,
@@ -324,6 +334,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::Cleave => SkillDefinition {
             id,
@@ -338,6 +349,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::Taunt => SkillDefinition {
             id,
@@ -352,6 +364,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::SecondWind => SkillDefinition {
             id,
@@ -366,6 +379,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::ToxicMastery => SkillDefinition {
             id,
@@ -380,6 +394,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::VampiricAura => SkillDefinition {
             id,
@@ -394,6 +409,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::ThickHide => SkillDefinition {
             id,
@@ -408,6 +424,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::ArcaneOverflow => SkillDefinition {
             id,
@@ -422,6 +439,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::Berserker => SkillDefinition {
             id,
@@ -436,6 +454,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::SwiftStrikes => SkillDefinition {
             id,
@@ -450,6 +469,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::IronWill => SkillDefinition {
             id,
@@ -464,6 +484,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::BattleFocus => SkillDefinition {
             id,
@@ -478,6 +499,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::CautiousAdvance => SkillDefinition {
             id,
@@ -492,6 +514,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::LuckyStrike => SkillDefinition {
             id,
@@ -506,6 +529,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::EmpoweredBlow => SkillDefinition {
             id,
@@ -520,6 +544,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::VictoryRush => SkillDefinition {
             id,
@@ -534,6 +559,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
         SkillId::Predator => SkillDefinition {
             id,
@@ -548,6 +574,7 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             combat_style,
             gcd_ticks,
             ability_icd_ticks,
+            max_charges,
         },
     }
 }
@@ -558,7 +585,7 @@ mod combat_style_tests {
 
     #[test]
     fn shared_ability_gcd_only_on_instant_and_next_melee_buff() {
-        let (_, _, _) = skill_combat_meta(SkillId::HeavyStrike);
+        let (_, _, _, _) = skill_combat_meta(SkillId::HeavyStrike);
         let d = skill_definition(SkillId::HeavyStrike);
         assert!(!skill_triggers_shared_ability_gcd(d.combat_style));
 
@@ -567,5 +594,11 @@ mod combat_style_tests {
 
         let d = skill_definition(SkillId::EmpoweredBlow);
         assert!(skill_triggers_shared_ability_gcd(d.combat_style));
+    }
+
+    #[test]
+    fn instant_strike_has_max_charges_on_definition() {
+        assert_eq!(skill_definition(SkillId::VictoryRush).max_charges, 1);
+        assert_eq!(skill_definition(SkillId::HeavyStrike).max_charges, 1);
     }
 }

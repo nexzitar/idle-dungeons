@@ -443,6 +443,8 @@ pub(crate) struct PreparedHero {
     empower_icd_ticks: u8,
     vr_gcd_ticks: u8,
     vr_icd_ticks: u8,
+    /// [`SkillDefinition::max_charges`] for Victory Rush when equipped (`1` otherwise).
+    vr_max_charges: u8,
 }
 
 fn attack_cadence_ticks(hero: &HeroProfile) -> (u32, u32) {
@@ -541,8 +543,21 @@ fn prepare_hero_combat(hero: &HeroProfile) -> PreparedHero {
         has_victory_rush: has(SkillId::VictoryRush),
         empower_gcd_ticks: ed.gcd_ticks,
         empower_icd_ticks: ed.ability_icd_ticks,
-        vr_gcd_ticks: vr_def.gcd_ticks,
-        vr_icd_ticks: vr_def.ability_icd_ticks,
+        vr_gcd_ticks: if has(SkillId::VictoryRush) {
+            vr_def.gcd_ticks
+        } else {
+            0
+        },
+        vr_icd_ticks: if has(SkillId::VictoryRush) {
+            vr_def.ability_icd_ticks
+        } else {
+            0
+        },
+        vr_max_charges: if has(SkillId::VictoryRush) {
+            vr_def.max_charges.max(1)
+        } else {
+            1
+        },
     }
 }
 
@@ -719,11 +734,12 @@ fn lead_weapon_pass(
     max_events: usize,
     h0_skill_gcd_left: &mut u32,
     h0_vr_icd_left: &mut u32,
+    h0_vr_charges: &mut u8,
     h0_empower_queued: &mut bool,
     h0_empower_icd_left: &mut u32,
 ) -> (Option<CombatBreak>, bool) {
     if *h0 > 0 && *enemy_health > 0 && p0.has_victory_rush {
-        if *h0_skill_gcd_left == 0 && *h0_vr_icd_left == 0 {
+        if *h0_skill_gcd_left == 0 && *h0_vr_charges > 0 {
             if events.len() >= max_events {
                 return (None, true);
             }
@@ -734,11 +750,12 @@ fn lead_weapon_pass(
                 attacker: 0,
                 strike,
             });
+            *h0_vr_charges = h0_vr_charges.saturating_sub(1);
             if events.len() < max_events {
                 events.push(CombatEvent::BuffChargeConsumed {
                     target: 0,
                     buff_id: BuffId::VictoryRush,
-                    charges_remaining: 0,
+                    charges_remaining: *h0_vr_charges as u32,
                 });
             }
             if has_partner {
@@ -746,7 +763,9 @@ fn lead_weapon_pass(
             }
             apply_lifesteal(p0, hero_damage, h0, p0.max_h, 0, events);
             *h0_skill_gcd_left = p0.vr_gcd_ticks.max(1) as u32;
-            *h0_vr_icd_left = p0.vr_icd_ticks.max(1) as u32;
+            if *h0_vr_charges == 0 {
+                *h0_vr_icd_left = p0.vr_icd_ticks.max(1) as u32;
+            }
             if *enemy_health <= 0 {
                 events.push(CombatEvent::EnemyDefeated);
                 maybe_devourer_heal_on_kill(lead, h0, p0.max_h, events);
@@ -1392,8 +1411,17 @@ pub fn simulate_combat_party(
     )
 }
 
-/// Like [`simulate_combat_party`], but applies [`BuffApplication`] entries at encounter clock **0**.
-pub fn simulate_combat_party_with_initial_buffs(
+/// Optional knobs for [`simulate_combat_party_with_options`]. Prefer [`Default`] for gameplay paths.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CombatSimOptions {
+    /// If set and the lead has [`SkillId::VictoryRush`], overrides [`SkillDefinition::max_charges`] for
+    /// this run (tests / tooling). Long-term gear should adjust [`PreparedHero::vr_max_charges`] in
+    /// [`prepare_hero_combat`] instead.
+    pub lead_instant_strike_max_charges: Option<u8>,
+}
+
+/// Like [`simulate_combat_party_with_initial_buffs`], with optional simulation overrides.
+pub fn simulate_combat_party_with_options(
     lead: &HeroProfile,
     enemy: &Enemy,
     max_clock_ticks: u32,
@@ -1401,8 +1429,14 @@ pub fn simulate_combat_party_with_initial_buffs(
     partner: Option<(&HeroProfile, i32)>,
     initiative_run_salt: u64,
     initial_party_buffs: &[(u8, BuffApplication)],
+    options: CombatSimOptions,
 ) -> CombatResult {
-    let p0 = prepare_hero_combat(lead);
+    let mut p0 = prepare_hero_combat(lead);
+    if let Some(n) = options.lead_instant_strike_max_charges {
+        if p0.has_victory_rush {
+            p0.vr_max_charges = n.max(1);
+        }
+    }
     let p1 = partner.map(|(h, hp)| (prepare_hero_combat(h), h, hp));
     let has_partner = p1.is_some();
 
@@ -1536,6 +1570,7 @@ pub fn simulate_combat_party_with_initial_buffs(
     let mut h0_cd_left = 0u32;
     let mut h0_skill_gcd_left = 0u32;
     let mut h0_vr_icd_left = 0u32;
+    let mut h0_vr_charges = p0.vr_max_charges;
     let mut h0_empower_queued = false;
     let mut h0_empower_icd_left = 0u32;
     let mut h1_cast_left = 0u32;
@@ -1567,6 +1602,9 @@ pub fn simulate_combat_party_with_initial_buffs(
 
         if p0.has_victory_rush && h0_vr_icd_left > 0 {
             h0_vr_icd_left -= 1;
+            if h0_vr_icd_left == 0 {
+                h0_vr_charges = p0.vr_max_charges;
+            }
         }
         if p0.has_empowered_blow && h0_empower_icd_left > 0 {
             h0_empower_icd_left -= 1;
@@ -1577,7 +1615,7 @@ pub fn simulate_combat_party_with_initial_buffs(
             }
         }
         let vr_ready =
-            p0.has_victory_rush && h0_vr_icd_left == 0 && h0_skill_gcd_left == 0;
+            p0.has_victory_rush && h0_skill_gcd_left == 0 && h0_vr_charges > 0;
         if p0.has_empowered_blow
             && !h0_empower_queued
             && h0_skill_gcd_left == 0
@@ -1641,6 +1679,7 @@ pub fn simulate_combat_party_with_initial_buffs(
                         MAX_EVENTS,
                         &mut h0_skill_gcd_left,
                         &mut h0_vr_icd_left,
+                        &mut h0_vr_charges,
                         &mut h0_empower_queued,
                         &mut h0_empower_icd_left,
                     ),
@@ -1819,6 +1858,28 @@ pub fn simulate_combat_party_with_initial_buffs(
         clock_ticks: combat_clock,
         events,
     }
+}
+
+/// Like [`simulate_combat_party`], but applies [`BuffApplication`] entries at encounter clock **0**.
+pub fn simulate_combat_party_with_initial_buffs(
+    lead: &HeroProfile,
+    enemy: &Enemy,
+    max_clock_ticks: u32,
+    lead_health_start: i32,
+    partner: Option<(&HeroProfile, i32)>,
+    initiative_run_salt: u64,
+    initial_party_buffs: &[(u8, BuffApplication)],
+) -> CombatResult {
+    simulate_combat_party_with_options(
+        lead,
+        enemy,
+        max_clock_ticks,
+        lead_health_start,
+        partner,
+        initiative_run_salt,
+        initial_party_buffs,
+        CombatSimOptions::default(),
+    )
 }
 
 /// Solo combat: no party partner (tests and legacy call sites).
@@ -2529,6 +2590,103 @@ mod tests {
                 ..
             }
         )));
+    }
+
+    fn count_victory_rush_hits(r: &CombatResult) -> usize {
+        r.events
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    CombatEvent::HeroAttacked { strike, .. }
+                        if strike.yellow_source_skill == Some(SkillId::VictoryRush)
+                )
+            })
+            .count()
+    }
+
+    #[test]
+    fn instant_strike_one_charge_single_rush_in_short_fight() {
+        let mut hero = HeroProfile::default();
+        hero.unlock_skill_slots(1);
+        hero.equip_skill(0, SkillId::VictoryRush).unwrap();
+        let enemy = Enemy {
+            name: "Dummy".into(),
+            max_health: 99999,
+            damage: 0,
+            armor: 0,
+            attack_speed: 0.05,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
+        };
+        let r = simulate_combat_party_with_options(
+            &hero,
+            &enemy,
+            15,
+            100,
+            None,
+            0,
+            &[],
+            CombatSimOptions::default(),
+        );
+        assert_eq!(
+            count_victory_rush_hits(&r),
+            1,
+            "one charge and long ICD should yield a single Rush in 15 ticks"
+        );
+    }
+
+    #[test]
+    fn instant_strike_two_max_charges_two_rushes_before_icd() {
+        let mut hero = HeroProfile::default();
+        hero.unlock_skill_slots(1);
+        hero.equip_skill(0, SkillId::VictoryRush).unwrap();
+        let enemy = Enemy {
+            name: "Dummy".into(),
+            max_health: 99999,
+            damage: 0,
+            armor: 0,
+            attack_speed: 0.05,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
+        };
+        let r = simulate_combat_party_with_options(
+            &hero,
+            &enemy,
+            15,
+            100,
+            None,
+            0,
+            &[],
+            CombatSimOptions {
+                lead_instant_strike_max_charges: Some(2),
+            },
+        );
+        assert_eq!(
+            count_victory_rush_hits(&r),
+            2,
+            "two charges allow a second Rush after GCD without waiting full ICD"
+        );
+        let vr_consumed: Vec<u32> = r
+            .events
+            .iter()
+            .filter_map(|e| {
+                if let CombatEvent::BuffChargeConsumed {
+                    buff_id: BuffId::VictoryRush,
+                    charges_remaining,
+                    ..
+                } = e
+                {
+                    Some(*charges_remaining)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert!(
+            vr_consumed.iter().any(|&c| c == 1) && vr_consumed.iter().any(|&c| c == 0),
+            "expected descending charge telemetry, got {vr_consumed:?}"
+        );
     }
 
     #[test]
