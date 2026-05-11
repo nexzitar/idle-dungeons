@@ -272,6 +272,9 @@ pub fn playback_float_text_color(caption: &str) -> Color {
     if lower.contains("ability") {
         return UiTheme::muted_gold();
     }
+    if lower.contains("poison") {
+        return UiTheme::danger();
+    }
     if lower.contains("strike")
         || lower.contains("damage")
         || lower.contains("hits")

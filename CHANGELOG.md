@@ -2,6 +2,16 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.20 — 2026-05-09
+
+### Combat
+
+- **Phase 3 — buff runtime:** same [`BuffId`](src/domain/buff.rs) on the same party slot **merges stacks**, **extends expiry** to the later of old/new end times, and **refreshes charges** when the incoming [`BuffApplication`](src/domain/buff.rs) sets them. Poison [`PoisonTick`](src/domain/combat.rs) appends a cosmetic **[`BuffTick`](src/domain/combat.rs)** with [`BuffId::PoisonVenom`](src/domain/buff.rs); **Victory Rush** strikes emit **[`BuffChargeConsumed`](src/domain/combat.rs)** ([`BuffId::VictoryRush`](src/domain/buff.rs)) for playback. Floating text tints poison tick captions red ([`playback_float_text_color`](src/ui/theme.rs)).
+
+### Skills (Phase 4 policy)
+
+- **Shared ability GCD vs weapon cadence:** [`skill_triggers_shared_ability_gcd`](src/domain/skills.rs) is **`true`** for [`InstantStrike`](src/domain/skills.rs) and **[`NextMeleeBuff`](src/domain/skills.rs)**; **`false`** for **[`SwingWeave`](src/domain/skills.rs)** and passives. [`simulate_combat_party`](src/domain/combat.rs) doc comment cross-links this helper (weapon wind-up stays authoritative for Heavy / Cleave-style actives).
+
 ## 0.2.19 — 2026-05-11
 
 ### Combat

@@ -218,6 +218,9 @@ fn combat_event_caption(event: &CombatEvent, partner_name: Option<&str>) -> Stri
             buff_id,
             stacks,
         } => {
+            if *buff_id == BuffId::PoisonVenom {
+                return format!("Poison corrodes the foe (potency ×{stacks}).");
+            }
             let name = buff_display_name(*buff_id);
             if *target == 0 {
                 format!("{name} ticks on you (×{stacks}).")
@@ -275,6 +278,10 @@ fn sfx_anchor_for_event(event: &CombatEvent) -> CombatSfxAnchor {
         CombatEvent::BuffApplied { .. } => CombatSfxAnchor::Ally,
         CombatEvent::BuffExpired { target: 0, .. } => CombatSfxAnchor::Lead,
         CombatEvent::BuffExpired { .. } => CombatSfxAnchor::Ally,
+        CombatEvent::BuffTick {
+            buff_id: BuffId::PoisonVenom,
+            ..
+        } => CombatSfxAnchor::Enemy,
         CombatEvent::BuffTick { target: 0, .. } => CombatSfxAnchor::Lead,
         CombatEvent::BuffTick { .. } => CombatSfxAnchor::Ally,
         CombatEvent::BuffChargeConsumed { target: 0, .. } => CombatSfxAnchor::Lead,
@@ -727,6 +734,13 @@ fn lead_weapon_pass(
                 attacker: 0,
                 strike,
             });
+            if events.len() < max_events {
+                events.push(CombatEvent::BuffChargeConsumed {
+                    target: 0,
+                    buff_id: BuffId::VictoryRush,
+                    charges_remaining: 0,
+                });
+            }
             if has_partner {
                 threat[0] = threat[0].saturating_add(hero_damage);
             }
@@ -1257,25 +1271,56 @@ impl PartyBuffState {
             if events.len() >= max_events {
                 break;
             }
-            let expires_at = buff_expires_at_clock(combat_clock, app.duration_ticks);
-            let buff = ActivePartyBuff {
+            self.apply_with_refresh(target, app, combat_clock, events, max_events);
+        }
+    }
+
+    /// Merge by [`BuffId`] on the same party slot: add stacks, extend expiry to the later tick, refresh charges if set.
+    fn apply_with_refresh(
+        &mut self,
+        target: u8,
+        app: BuffApplication,
+        combat_clock: u32,
+        events: &mut Vec<CombatEvent>,
+        max_events: usize,
+    ) {
+        if events.len() >= max_events {
+            return;
+        }
+        let new_exp = buff_expires_at_clock(combat_clock, app.duration_ticks);
+        let slot = match target {
+            0 => &mut self.slot0,
+            1 => &mut self.slot1,
+            _ => return,
+        };
+        let emit_stacks = if let Some(idx) = slot.iter().position(|b| b.id == app.buff_id) {
+            let b = &mut slot[idx];
+            b.stacks = b.stacks.saturating_add(app.stacks);
+            if let Some(ne) = new_exp {
+                b.expires_at = Some(match b.expires_at {
+                    Some(oe) => oe.max(ne),
+                    None => ne,
+                });
+            }
+            if app.charges.is_some() {
+                b.charges = app.charges;
+            }
+            b.stacks
+        } else {
+            slot.push(ActivePartyBuff {
                 id: app.buff_id,
                 stacks: app.stacks,
-                expires_at,
+                expires_at: new_exp,
                 charges: app.charges,
-            };
-            match target {
-                0 => self.slot0.push(buff),
-                1 => self.slot1.push(buff),
-                _ => continue,
-            }
-            events.push(CombatEvent::BuffApplied {
-                target,
-                buff_id: app.buff_id,
-                stacks: app.stacks,
-                duration_ticks: app.duration_ticks,
             });
-        }
+            app.stacks
+        };
+        events.push(CombatEvent::BuffApplied {
+            target,
+            buff_id: app.buff_id,
+            stacks: emit_stacks,
+            duration_ticks: app.duration_ticks,
+        });
     }
 
     fn tick_end(
@@ -1324,6 +1369,10 @@ impl PartyBuffState {
 ///
 /// `initiative_run_salt`: mixed into per-encounter initiative (e.g. delve `seed` and room depth).
 /// Pass **`0`** for stable ordering that depends only on enemy stats (tests / isolated calls).
+///
+/// **Phase 4 — shared ability GCD:** [`crate::domain::skills::skill_triggers_shared_ability_gcd`]
+/// matches styles that advance **`h0_skill_gcd_left`** (instant strikes and next-melee buff queues).
+/// **`SwingWeave`** (Heavy / Cleave cadence) uses the weapon cast/CD timers instead, not this GCD.
 pub fn simulate_combat_party(
     lead: &HeroProfile,
     enemy: &Enemy,
@@ -1735,6 +1784,13 @@ pub fn simulate_combat_party_with_initial_buffs(
                 damage: d,
                 stacks: poison_stacks,
             });
+            if events.len() < MAX_EVENTS {
+                events.push(CombatEvent::BuffTick {
+                    target: 0,
+                    buff_id: BuffId::PoisonVenom,
+                    stacks: potency,
+                });
+            }
             poison_stacks -= 1;
             enemy_health -= d;
             if enemy_health <= 0 {
@@ -2466,6 +2522,13 @@ mod tests {
             "long ICD should prevent spamming Rush on every GCD, got {} hits",
             vr_hits.len()
         );
+        assert!(r.events.iter().any(|e| matches!(
+            e,
+            CombatEvent::BuffChargeConsumed {
+                buff_id: BuffId::VictoryRush,
+                ..
+            }
+        )));
     }
 
     #[test]
@@ -2563,6 +2626,67 @@ mod tests {
     }
 
     #[test]
+    fn phase3_initial_buffs_merge_stacks_same_id() {
+        use crate::domain::buff::{BuffApplication, BuffId};
+
+        let hero = HeroProfile::default();
+        let enemy = Enemy {
+            name: "Dummy".into(),
+            max_health: 999,
+            damage: 0,
+            armor: 0,
+            attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
+        };
+        let initial = [
+            (
+                0_u8,
+                BuffApplication {
+                    buff_id: BuffId::InnerStrength,
+                    stacks: 1,
+                    duration_ticks: Some(10),
+                    charges: None,
+                },
+            ),
+            (
+                0_u8,
+                BuffApplication {
+                    buff_id: BuffId::InnerStrength,
+                    stacks: 2,
+                    duration_ticks: Some(10),
+                    charges: None,
+                },
+            ),
+        ];
+        let r = simulate_combat_party_with_initial_buffs(
+            &hero,
+            &enemy,
+            2,
+            100,
+            None,
+            0,
+            &initial,
+        );
+        let applied: Vec<u32> = r
+            .events
+            .iter()
+            .filter_map(|e| {
+                if let CombatEvent::BuffApplied { stacks, .. } = e {
+                    Some(*stacks)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(
+            applied,
+            vec![1, 3],
+            "second grant should merge to combined stack height"
+        );
+    }
+
+    #[test]
     fn heavy_strike_slows_attack_pacing() {
         let mut nimble = HeroProfile::default();
         nimble.base_stats.attack_speed = 2.0;
@@ -2623,6 +2747,13 @@ mod tests {
         assert!(result.events.iter().any(|e| matches!(
             e,
             CombatEvent::PoisonTick { damage, .. } if *damage > 0
+        )));
+        assert!(result.events.iter().any(|e| matches!(
+            e,
+            CombatEvent::BuffTick {
+                buff_id: BuffId::PoisonVenom,
+                ..
+            }
         )));
     }
 

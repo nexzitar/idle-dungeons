@@ -181,6 +181,15 @@ pub fn skill_combat_meta(id: SkillId) -> (SkillCombatStyle, u8, u8) {
     }
 }
 
+/// Whether this style advances the **shared ability GCD** (instant strikes and next-melee buff queues).
+/// [`SkillCombatStyle::SwingWeave`] uses the weapon wind-up / post-swing cooldown only.
+pub fn skill_triggers_shared_ability_gcd(style: SkillCombatStyle) -> bool {
+    matches!(
+        style,
+        SkillCombatStyle::InstantStrike | SkillCombatStyle::NextMeleeBuff
+    )
+}
+
 /// Skills in a new hero book before guild purchases (others unlock in the skill shop).
 pub const STARTER_SKILLS: &[SkillId] = &[
     SkillId::LifestealStrike,
@@ -540,5 +549,23 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             gcd_ticks,
             ability_icd_ticks,
         },
+    }
+}
+
+#[cfg(test)]
+mod combat_style_tests {
+    use super::{skill_combat_meta, skill_definition, skill_triggers_shared_ability_gcd, SkillId};
+
+    #[test]
+    fn shared_ability_gcd_only_on_instant_and_next_melee_buff() {
+        let (_, _, _) = skill_combat_meta(SkillId::HeavyStrike);
+        let d = skill_definition(SkillId::HeavyStrike);
+        assert!(!skill_triggers_shared_ability_gcd(d.combat_style));
+
+        let d = skill_definition(SkillId::VictoryRush);
+        assert!(skill_triggers_shared_ability_gcd(d.combat_style));
+
+        let d = skill_definition(SkillId::EmpoweredBlow);
+        assert!(skill_triggers_shared_ability_gcd(d.combat_style));
     }
 }

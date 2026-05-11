@@ -9,12 +9,18 @@ pub enum BuffId {
     InnerStrength,
     /// Queued next-swing damage from the Empowered Blow skill (expires when the swing lands).
     EmpoweredBlow,
+    /// Periodic poison pressure on the foe (telemetry with [`CombatEvent::BuffTick`]).
+    PoisonVenom,
+    /// Instant strike spend (paired with [`CombatEvent::BuffChargeConsumed`]).
+    VictoryRush,
 }
 
 pub fn buff_display_name(id: BuffId) -> &'static str {
     match id {
         BuffId::InnerStrength => "Inner Strength",
         BuffId::EmpoweredBlow => "Empowered Blow",
+        BuffId::PoisonVenom => "Poison",
+        BuffId::VictoryRush => "Victory Rush",
     }
 }
 
