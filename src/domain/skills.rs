@@ -95,8 +95,8 @@ pub enum SkillCombatStyle {
     SwingWeave,
     /// Heroic Strike–style: queue bonus damage on the next white swing; queues trigger [`SkillDefinition::gcd_ticks`].
     NextMeleeBuff,
-    /// Victory Rush–style: instant ability damage; uses GCD + [`SkillDefinition::ability_icd_ticks`]
-    /// and optional [`SkillDefinition::max_charges`].
+    /// Victory Rush–style: instant ability damage; uses [`SkillDefinition::gcd_ticks`] and charge rules from
+    /// [`SkillDefinition::max_charges`] + [`SkillDefinition::ability_icd_ticks`].
     InstantStrike,
 }
 
@@ -118,11 +118,13 @@ pub struct SkillDefinition {
     pub combat_style: SkillCombatStyle,
     /// Ability GCD length in combat ticks when this skill uses the shared ability clock (`0` = none).
     pub gcd_ticks: u8,
-    /// Extra per-skill cooldown after use (e.g. so an instant strike is not spammed every GCD).
+    /// For [`SkillCombatStyle::InstantStrike`]: **recharge interval** in combat ticks between **gaining** each
+    /// stored charge (e.g. “5 s cooldown” → 50 ticks at 100 ms/tick). One charge is restored per pulse while below
+    /// [`Self::max_charges`]; spending a charge starts this timer **only if** no recharge is already in progress.
+    /// Other combat styles may use this field as an extra per-cast gate where wired (often `0`).
     pub ability_icd_ticks: u8,
-    /// For [`SkillCombatStyle::InstantStrike`]: pool size per encounter. Each use consumes one charge
-    /// and triggers GCD; when this hits zero, [`Self::ability_icd_ticks`] starts. When that ICD elapses,
-    /// the pool refills to `max_charges`. Other styles ignore this (keep at `1`).
+    /// For [`SkillCombatStyle::InstantStrike`]: maximum stored charges (encounter starts **full**). Each cast
+    /// needs a charge and the ability GCD. Ignored for other styles (keep at `1`).
     pub max_charges: u8,
 }
 

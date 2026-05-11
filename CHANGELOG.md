@@ -2,12 +2,19 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.22 — 2026-05-09
+
+### Combat
+
+- **Instant strike charges:** [`ability_icd_ticks`](src/domain/skills.rs) is now a **per-charge recharge interval** (one charge gained per pulse while below [`max_charges`](src/domain/skills.rs)), not a full-pool lockout. Each party hero has their own GCD and charge timers; spending a charge starts recharge **only if** none is already running.
+- **Party parity:** Slot **1** uses the same Victory Rush / Empowered Blow pacing as the lead (own [`BuffApplied`](src/domain/combat.rs) / [`BuffExpired`](src/domain/combat.rs) targets, [`BuffChargeConsumed`](src/domain/combat.rs) on slot 1, partner [`maybe_devourer_heal_on_kill`](src/domain/combat.rs) on kills).
+- **[`CombatSimOptions`](src/domain/combat.rs):** optional `partner_instant_strike_max_charges` override.
+
 ## 0.2.21 — 2026-05-09
 
 ### Combat / skills
 
-- **`SkillDefinition::max_charges`:** [`InstantStrike`](src/domain/skills.rs) skills (currently Victory Rush) use a per-encounter charge pool. Each use spends one charge and respects GCD; **full [`ability_icd_ticks`](src/domain/skills.rs)** runs only after the pool hits **zero**, then refills to `max_charges`. [`BuffChargeConsumed`](src/domain/combat.rs) reports remaining charges.
-- **[`CombatSimOptions`](src/domain/combat.rs)** + [`simulate_combat_party_with_options`](src/domain/combat.rs) for overriding lead instant-strike max charges in tests/tools. Normal runs use default options via [`simulate_combat_party`](src/domain/combat.rs) / [`simulate_combat_party_with_initial_buffs`](src/domain/combat.rs).
+- Laid groundwork for **`SkillDefinition::max_charges`** and **[`CombatSimOptions`](src/domain/combat.rs)**. **Recharge behavior was reworked in 0.2.22** (per-charge pulse instead of empty-pool full refill).
 
 ## 0.2.20 — 2026-05-09
 
