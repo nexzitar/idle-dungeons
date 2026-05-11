@@ -2536,7 +2536,12 @@ fn apply_ui_scroll(
     content_node: Query<&ComputedNode, With<UiScrollContent>>,
 ) {
     // Inverted from raw wheel delta: scroll feels like "grab and drag" the content.
-    let delta: f32 = wheel_events.read().map(|e| -e.y * 28.0).sum();
+    // Pixels per wheel notch (lower = slower). Trackpads accumulate small y values.
+    const SCROLL_PIXELS_PER_LINE: f32 = 12.0;
+    let delta: f32 = wheel_events
+        .read()
+        .map(|e| -e.y * SCROLL_PIXELS_PER_LINE)
+        .sum();
     if delta.abs() < f32::EPSILON {
         return;
     }

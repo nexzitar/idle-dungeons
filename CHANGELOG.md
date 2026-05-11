@@ -2,6 +2,33 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.15 — 2026-05-09
+
+### Combat
+
+- **Phase 1 initiative scheduler:** per combat tick, lead / partner / foe take **passes** in **stable initiative order** (from `combat_timing::initiative_ranks`), repeating until idle. Attack-speed meters add **once per tick** per actor; multiple swings in the same 100 ms tick **interleave** with other actors instead of a strict hero-then-foe phase lock. See `combat_round`, `lead_weapon_pass` / `partner_weapon_pass` / `foe_weapon_pass` in `src/domain/combat.rs`.
+
+## 0.2.14 — 2026-05-09
+
+### Balance
+
+- **Loot rarity** is **probability-based** from depth (same seed still yields the same item): **Legendary** starts near **~1%** and rises slowly toward floor **999**; **Legendary is guaranteed only at depth ≥ 1000**. See `roll_rarity_for_depth` in `src/domain/loot.rs`.
+
+### Documentation
+
+- **README** refreshed: correct **Bevy 0.18** stack, skill book + skill guild in the loop, link to changelog, pointer to design philosophy.
+- New **`docs/design-philosophy.md`**: how Delvers combines idle/incremental progression with seeded roguelike runs, simulation-first architecture, buildcraft, itemization, saves, and UX direction.
+
+## 0.2.13 — 2026-05-09
+
+### Balance
+
+- **Loot rarity curve** (depth → tier) is stretched: floor **10** rewards are **Uncommon** at most; **Legendary** starts at depth **50** (was **24**). See `rarity_for_depth` in `src/domain/loot.rs`.
+
+### UX
+
+- **UI scroll**: Slower wheel speed (`apply_ui_scroll` uses **12** px per unit instead of **28**).
+
 ## 0.2.12 — 2026-05-09
 
 ### Fixes
