@@ -966,12 +966,16 @@ fn foe_weapon_pass(
 ///
 /// `partner`: optional second [`HeroProfile`] (party slot 1) and their current HP. Threat is
 /// WoW-style: damage generates threat; tank-stance passives add baseline / drip aggro.
+///
+/// `initiative_run_salt`: mixed into per-encounter initiative (e.g. delve `seed` and room depth).
+/// Pass **`0`** for stable ordering that depends only on enemy stats (tests / isolated calls).
 pub fn simulate_combat_party(
     lead: &HeroProfile,
     enemy: &Enemy,
     max_clock_ticks: u32,
     lead_health_start: i32,
     partner: Option<(&HeroProfile, i32)>,
+    initiative_run_salt: u64,
 ) -> CombatResult {
     let p0 = prepare_hero_combat(lead);
     let p1 = partner.map(|(h, hp)| (prepare_hero_combat(h), h, hp));
@@ -1130,7 +1134,7 @@ pub fn simulate_combat_party(
         }
 
         let enc_seed = crate::domain::combat_timing::encounter_initiative_seed(
-            0,
+            initiative_run_salt,
             (enemy.max_health as u64) ^ ((enemy.damage as u64).rotate_left(17)),
         );
         let party_slots = if has_partner { 2u8 } else { 1u8 };
@@ -1349,7 +1353,7 @@ pub fn simulate_combat(
     max_clock_ticks: u32,
     hero_health_start: i32,
 ) -> CombatResult {
-    simulate_combat_party(hero, enemy, max_clock_ticks, hero_health_start, None)
+    simulate_combat_party(hero, enemy, max_clock_ticks, hero_health_start, None, 0)
 }
 
 /// Heal after the foe is marked defeated (quest / UI ordering: defeat line, then sustain).
@@ -1731,6 +1735,7 @@ mod tests {
             6,
             lead.derived_stats().max_health,
             Some((&partner, partner.derived_stats().max_health)),
+            0,
         );
         let idx = r
             .events
@@ -2771,6 +2776,7 @@ mod tests {
             3,
             100,
             Some((&partner, partner.derived_stats().max_health)),
+            0,
         );
         let first_foe = r
             .events

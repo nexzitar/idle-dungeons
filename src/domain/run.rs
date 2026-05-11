@@ -1,6 +1,7 @@
 use crate::domain::combat::{
     combat_playback_frames_from_result, simulate_combat_party, CombatOutcome, CombatPlaybackFrame,
 };
+use crate::domain::combat_timing::encounter_initiative_seed;
 use crate::domain::dungeon::{
     generate_dungeon, peak_risk_note, room_risk_hint, room_risk_rank, DungeonRoom, RoomKind,
 };
@@ -200,19 +201,23 @@ fn simulate_run_with_playback_for_rooms(
                             ),
                             log,
                             peak_risk_note: peak_risk_note(peak_risk_rank),
-                            guided_early_combat_drop_granted: guided_early_combat_drop_granted_this_run,
+                            guided_early_combat_drop_granted:
+                                guided_early_combat_drop_granted_this_run,
                         },
                         playback,
                     };
                 };
                 let enemy = encounter.enemy.clone();
                 let at_start = hero_current_hp;
+                let initiative_salt =
+                    encounter_initiative_seed(config.seed, u64::from(room.depth).rotate_left(13));
                 let combat = simulate_combat_party(
                     lead,
                     &enemy,
                     420,
                     at_start,
                     party_partner.map(|p| (p, partner_current_hp)),
+                    initiative_salt,
                 );
                 for frame in combat_playback_frames_from_result(
                     lead,
@@ -304,7 +309,8 @@ fn simulate_run_with_playback_for_rooms(
                                     death_reason: None,
                                     log,
                                     peak_risk_note: peak_risk_note(peak_risk_rank),
-                                    guided_early_combat_drop_granted: guided_early_combat_drop_granted_this_run,
+                                    guided_early_combat_drop_granted:
+                                        guided_early_combat_drop_granted_this_run,
                                 },
                                 playback,
                             };
@@ -324,7 +330,8 @@ fn simulate_run_with_playback_for_rooms(
                                 death_reason: Some(format!("Defeated by {}", enemy.name)),
                                 log,
                                 peak_risk_note: peak_risk_note(peak_risk_rank),
-                                guided_early_combat_drop_granted: guided_early_combat_drop_granted_this_run,
+                                guided_early_combat_drop_granted:
+                                    guided_early_combat_drop_granted_this_run,
                             },
                             playback,
                         };

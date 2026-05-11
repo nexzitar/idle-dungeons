@@ -2,6 +2,12 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.16 — 2026-05-09
+
+### Combat
+
+- **Initiative salt from delves:** `simulate_combat_party` takes `initiative_run_salt` (tests / solo helpers pass **`0`**). [`RunConfig`](src/domain/run.rs) mixes **run seed + room depth** into this salt so encounter initiative can **vary by floor and run** while staying deterministic.
+
 ## 0.2.15 — 2026-05-09
 
 ### Combat
