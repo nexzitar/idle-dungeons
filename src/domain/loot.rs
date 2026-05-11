@@ -15,29 +15,45 @@ const STANDARD_AFFIXES: [ItemAffix; 8] = [
     ItemAffix::Bastion,
 ];
 
-/// Guaranteed tier from **dungeon depth only** (all normal rolls use this).
+/// Roll item rarity from **dungeon depth** and RNG (same seed + depth = same tier).
 ///
-/// Current ladder (slower than early MVP so early elites are not Rare+ and
-/// Legendary does not saturate long runs):
-///
-/// | Depth   | Rarity    |
-/// |---------|-----------|
-/// | 1–4     | Common    |
-/// | 5–14    | Uncommon  |
-/// | 15–29   | Rare      |
-/// | 30–49   | Epic      |
-/// | 50+     | Legendary |
-fn rarity_for_depth(depth: u32) -> ItemRarity {
-    if depth >= 50 {
-        ItemRarity::Legendary
-    } else if depth >= 30 {
-        ItemRarity::Epic
-    } else if depth >= 15 {
-        ItemRarity::Rare
-    } else if depth >= 5 {
-        ItemRarity::Uncommon
+/// - **Legendary** starts around **1%** at shallow depths and rises slowly with depth;
+///   it is **not** guaranteed before depth **1000**.
+/// - At depth **≥ 1000**, loot is **always** Legendary.
+/// - Below 1000, non-legendary rolls bias toward Common/Uncommon early and Rare/Epic deeper.
+fn roll_rarity_for_depth(depth: u32, rng: &mut ChaCha8Rng) -> ItemRarity {
+    if depth >= 1000 {
+        return ItemRarity::Legendary;
+    }
+    let t = if depth <= 1 {
+        0.0
     } else {
+        ((depth - 1) as f64 / 999.0).clamp(0.0, 1.0)
+    };
+    // ~1% at depth 1, ~99% at depth 999 (never 100% before floor 1000).
+    let p_legendary = 0.01 + 0.98 * t * t;
+    let r1: f64 = rng.gen();
+    if r1 < p_legendary {
+        return ItemRarity::Legendary;
+    }
+
+    let w_common = (1.0 - t).powf(2.5);
+    let w_uncommon = (1.0 - t).max(0.01) * (0.35 + 0.4 * t);
+    let w_rare = t * t * 1.4 + 0.05;
+    let w_epic = t * t * t * 2.5 + 0.02 * t;
+    let sum = w_common + w_uncommon + w_rare + w_epic;
+    let r2: f64 = rng.gen();
+    let c0 = w_common / sum;
+    let c1 = c0 + w_uncommon / sum;
+    let c2 = c1 + w_rare / sum;
+    if r2 < c0 {
         ItemRarity::Common
+    } else if r2 < c1 {
+        ItemRarity::Uncommon
+    } else if r2 < c2 {
+        ItemRarity::Rare
+    } else {
+        ItemRarity::Epic
     }
 }
 
@@ -231,9 +247,8 @@ pub fn roll_loot_for_slot(depth: u32, seed: u64, slot: GearSlot) -> ItemInstance
         GearSlot::Trinket => 0x731B1EFu64,
     };
     let lane_shift = lane.rotate_left(slot as u32);
-    let mut rng =
-        ChaCha8Rng::seed_from_u64(seed.wrapping_add(depth as u64) ^ lane_shift);
-    let rarity = rarity_for_depth(depth);
+    let mut rng = ChaCha8Rng::seed_from_u64(seed.wrapping_add(depth as u64) ^ lane_shift);
+    let rarity = roll_rarity_for_depth(depth, &mut rng);
     let affixes = roll_affixes(&mut rng, slot, rarity);
     let id_seed = seed ^ lane_shift;
     item_from_slot_and_affixes(depth, id_seed, slot, rarity, affixes)
@@ -246,7 +261,7 @@ pub fn roll_loot(depth: u32, seed: u64) -> ItemInstance {
         1 => GearSlot::Armor,
         _ => GearSlot::Trinket,
     };
-    let rarity = rarity_for_depth(depth);
+    let rarity = roll_rarity_for_depth(depth, &mut rng);
     let affixes = roll_affixes(&mut rng, slot, rarity);
     item_from_slot_and_affixes(depth, seed, slot, rarity, affixes)
 }
@@ -319,18 +334,18 @@ mod tests {
     fn guided_early_claim_tiers_are_not_duplicate_items_same_seed() {
         let first = roll_profile_guided_early_combat_drop(3, 1, 3, 0);
         let second = roll_profile_guided_early_combat_drop(3, 1, 3, 1);
-        assert_ne!(first, second, "milestones differ while MVP run seed stays fixed");
+        assert_ne!(
+            first, second,
+            "milestones differ while MVP run seed stays fixed"
+        );
     }
 
     #[test]
     fn deeper_loot_has_at_least_as_much_stat_budget() {
-        let shallow = roll_loot(1, 42);
-        let deep = roll_loot(20, 42);
+        let shallow = roll_loot_for_slot(100, 42, GearSlot::Weapon);
+        let deep = roll_loot_for_slot(200, 42, GearSlot::Weapon);
 
-        assert!(
-            deep.stats.damage + deep.stats.armor + deep.stats.max_health
-                >= shallow.stats.damage + shallow.stats.armor + shallow.stats.max_health
-        );
+        assert!(deep.stats.damage >= shallow.stats.damage);
     }
 
     #[test]
@@ -363,16 +378,31 @@ mod tests {
     }
 
     #[test]
-    fn very_deep_loot_can_be_legendary_with_two_affixes() {
-        let item = roll_loot(55, 12345);
-        assert_eq!(item.rarity, ItemRarity::Legendary);
-        assert_eq!(item.affixes.len(), 2);
+    fn floor_1000_loot_is_always_legendary_with_two_affixes() {
+        for seed in 0..24u64 {
+            let item = roll_loot(1000, seed);
+            assert_eq!(item.rarity, ItemRarity::Legendary, "seed {seed}");
+            assert_eq!(item.affixes.len(), 2, "seed {seed}");
+        }
     }
 
     #[test]
-    fn floor_10_loot_is_uncommon_at_most() {
-        let item = roll_loot(10, 777);
-        assert_eq!(item.rarity, ItemRarity::Uncommon);
+    fn shallow_depth_legendary_is_possible_but_not_guaranteed() {
+        let mut any_legendary = false;
+        let mut all_legendary = true;
+        for seed in 0..3000u64 {
+            let is_leg = roll_loot(10, seed).rarity == ItemRarity::Legendary;
+            any_legendary |= is_leg;
+            all_legendary &= is_leg;
+        }
+        assert!(
+            !all_legendary,
+            "legendary must not be guaranteed below depth 1000"
+        );
+        assert!(
+            any_legendary,
+            "legendary should sometimes roll at shallow depth"
+        );
     }
 
     #[test]

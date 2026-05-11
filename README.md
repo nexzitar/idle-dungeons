@@ -1,32 +1,39 @@
 # Delvers
 
-Delvers is a Bevy-based roguelike incremental game: you configure a hero, run a seeded delve with automated combat, then spend gold and loot on gear, skills, and permanent upgrades. Progress is saved locally (default: `saves/profile.json`).
+Delvers is a Bevy-based **roguelike incremental**: you configure a hero (and emerging party systems), run a **seeded** delve with **automated combat**, then spend **gold** and **loot** on gear, **skill unlocks**, and permanent upgrades. Progress is saved locally (default: `saves/profile.json`).
 
-**Stack:** Rust, **Bevy 0.14**, serde JSON saves. Crate name: `idle_dungeons`.
+**Stack:** Rust, **Bevy 0.18**, serde JSON saves. Crate name: `idle_dungeons`.
 
 ## Playable loop (today)
 
-1. **Title / campfire** — **Enter camp** opens briefing when you are ready (persistent camp visuals will grow with progression).
-2. **Briefing** — Inspect the hero column; **click unlocked skill slots** to open the **skill book**, pick a skill or clear the slot (build + camp). Start a run when ready.
-3. **Run** — Watch playback or **skip to results**.
+1. **Title / campfire** — **Enter camp** opens the briefing when you are ready.
+2. **Briefing** — Inspect the hero (and party when unlocked). **Skill book:** click unlocked slots to assign or clear skills. **Skill guild:** spend gold to unlock new skills for the book. Start a run when ready.
+3. **Run** — Watch playback or **skip to results**. Combat is simulation-driven and **deterministic** for a given seed and build.
 4. **Summary** — **Accept rewards** once; gold and loot merge into your profile.
-5. **Camp** — **Equip** or **salvage** stash items in the **Gear** hub. Adjust loadout and start another run.
+5. **Camp** — **Gear** hub to equip or salvage stash items; permanent upgrades; adjust loadout and run again.
 
-**UI:** Mockup-style three-column shell (hero · delve / summary · stash), settings (speed toggle, reset progress), hover **tooltips** on most controls, and reliable primary-click handling on buttons. Footer “RUN / CAMP / …” pills are decorative for now.
+**UI:** Three-column shell (hero · delve / summary · stash), **settings** (speed toggle, reset progress), **tooltips** on most controls. Footer pills (RUN / CAMP / …) are placeholder chrome.
+
+## Why it is built this way
+
+The **domain simulation** is the source of truth; the UI sends intents via events and reflects `ProfileState`. That keeps runs **replayable**, **testable**, and safe to extend. For the full design rationale (idle × roguelike, buildcraft, itemization, saves), see:
+
+**→ [docs/design-philosophy.md](docs/design-philosophy.md)**
 
 ## Project layout
 
 | Path | Role |
 |------|------|
 | `src/app.rs` | `GameState` (Title / Build / Running / Summary), events, profile resource, save hooks |
-| `src/domain/` | Hero, skills, combat simulation, dungeon, loot, run summarization |
+| `src/domain/` | Hero, skills, combat, dungeon, loot, run summarization |
 | `src/save.rs` | Load/save `SaveProfile` |
-| `src/ui/` | `UiPlugin`, mockup layout, theme, tooltips, panels |
+| `src/ui/` | `UiPlugin`, layout, theme, tooltips, panels (gear, skill book, skill shop, etc.) |
 
-The **run simulation** (domain + `simulate_run_with_playback`) is the source of truth; the UI sends intents via events and reflects `ProfileState`.
+The run simulation (`simulate_run_with_playback` and friends) drives outcomes; the UI never bypasses it.
 
 ## Design documentation
 
+- **Design philosophy (readable overview):** `docs/design-philosophy.md`
 - Full design: `docs/superpowers/specs/2026-05-06-roguelike-incremental-bevy-design.md`
 - **Post-MVP direction (buildcraft, party, itemization):** `docs/superpowers/specs/2026-05-06-buildcraft-party-systems-roadmap.md`
 - MVP checklist: `docs/mvp-acceptance.md`
@@ -46,17 +53,21 @@ Prefer small, tested changes in `src/domain/` first, then wire through Bevy even
 
 ## Roadmap
 
-Near-term goals to deepen the MVP:
+Near-term:
 
-- **Combat vs skill catalog** — Core skills are wired in `simulate_combat` (Guard, Heavy Strike, Poison DoT with stacking ticks, Thorns, Barrier, Lifesteal) with tests; remaining work is mostly tuning, new skills, and keeping `skill_definition` copy aligned with behavior.
-- **Stash** — Sort by recent vs rarity/name is implemented and persisted; filters / richer inventory UX are still future scope.
-- **Run / world variety** — More room types and affix interplay; playback/summary already surface per-room risk hints and peak risk from the simulation.
-- **Presentation** — Art pass, animation on playback (bars/text), optional easing; keep simulation-driven architecture.
+- **Combat vs skill catalog** — Extend and tune skills; keep `skill_definition` copy aligned with `simulate_combat` behavior (tests as contract).
+- **Stash / inventory** — Sort (recent / rarity / name) is in; filters and richer UX later.
+- **Run variety** — More room types and affix interplay; summary already surfaces per-room risk and peak risk.
+- **Presentation** — Animation on playback, art pass; keep simulation-driven architecture.
 
-Longer-term (post-MVP direction):
+Longer-term (see specs):
 
-- Multiple heroes / party ideas from the design doc
-- Deeper procedural dungeon structure (not only linear depth)
+- Full party experience and role clarity
+- Deeper procedural dungeon structure (beyond linear depth)
 - Optional meta layers (prestige, biome unlocks) once the core loop feels rich
 
 Contributions welcome; open an issue or PR with a short note on scope.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.
