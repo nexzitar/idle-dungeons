@@ -118,7 +118,8 @@ Introduce **`SkillCategory`** (names indicative):
 
 - **Duration buffs**, **charge buffs**, **stacks**, **aura** hooks — all **tick-indexed** (`expires_at_tick`, `charges_remaining`).
 - Refactors called out in product brief (Poison Strike → Poison **Coating**; Lifesteal Strike → **Blood Frenzy** window) become **content** changes once the buff runtime exists.
-- Events: `BuffApplied`, `BuffTick`, `BuffExpired`, `BuffChargeConsumed` (exact names TBD) for playback.
+- Events: `BuffApplied`, `BuffTick`, `BuffExpired`, `BuffChargeConsumed` for playback (see `src/domain/combat.rs`).
+- **Implemented hooks:** party [`PartyBuffState`](../../../src/domain/combat.rs) merges same-id applications on a slot (stacks add, expiry max, optional charge refresh). Poison emits `BuffTick` with `BuffId::PoisonVenom` after each `PoisonTick`; Victory Rush spends narrative charge via `BuffChargeConsumed` after a Rush hit.
 
 ---
 
@@ -127,6 +128,7 @@ Introduce **`SkillCategory`** (names indicative):
 - **GCD** as a **shared lockout** on **core attack** category (duration in ticks); buffs/reactions can be excluded.
 - Per-skill **cooldown** timers separate from GCD where needed.
 - Prevent “proc soup”: rate limits, shared buckets, or **event coalescing** in UI — domain may still emit truth; UI samples.
+- **Policy in code:** [`skill_triggers_shared_ability_gcd`](../../../src/domain/skills.rs) — **`InstantStrike`** / **`NextMeleeBuff`** use the shared ability GCD bucket; **`SwingWeave`** does **not** (weapon `attack_cadence_ticks` only). See [`simulate_combat_party`](../../../src/domain/combat.rs) rustdoc.
 
 ---
 

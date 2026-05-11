@@ -2,6 +2,30 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.22 — 2026-05-09
+
+### Combat
+
+- **Instant strike charges:** [`ability_icd_ticks`](src/domain/skills.rs) is now a **per-charge recharge interval** (one charge gained per pulse while below [`max_charges`](src/domain/skills.rs)), not a full-pool lockout. Each party hero has their own GCD and charge timers; spending a charge starts recharge **only if** none is already running.
+- **Party parity:** Slot **1** uses the same Victory Rush / Empowered Blow pacing as the lead (own [`BuffApplied`](src/domain/combat.rs) / [`BuffExpired`](src/domain/combat.rs) targets, [`BuffChargeConsumed`](src/domain/combat.rs) on slot 1, partner [`maybe_devourer_heal_on_kill`](src/domain/combat.rs) on kills).
+- **[`CombatSimOptions`](src/domain/combat.rs):** optional `partner_instant_strike_max_charges` override.
+
+## 0.2.21 — 2026-05-09
+
+### Combat / skills
+
+- Laid groundwork for **`SkillDefinition::max_charges`** and **[`CombatSimOptions`](src/domain/combat.rs)**. **Recharge behavior was reworked in 0.2.22** (per-charge pulse instead of empty-pool full refill).
+
+## 0.2.20 — 2026-05-09
+
+### Combat
+
+- **Phase 3 — buff runtime:** same [`BuffId`](src/domain/buff.rs) on the same party slot **merges stacks**, **extends expiry** to the later of old/new end times, and **refreshes charges** when the incoming [`BuffApplication`](src/domain/buff.rs) sets them. Poison [`PoisonTick`](src/domain/combat.rs) appends a cosmetic **[`BuffTick`](src/domain/combat.rs)** with [`BuffId::PoisonVenom`](src/domain/buff.rs); **Victory Rush** strikes emit **[`BuffChargeConsumed`](src/domain/combat.rs)** ([`BuffId::VictoryRush`](src/domain/buff.rs)) for playback. Floating text tints poison tick captions red ([`playback_float_text_color`](src/ui/theme.rs)).
+
+### Skills (Phase 4 policy)
+
+- **Shared ability GCD vs weapon cadence:** [`skill_triggers_shared_ability_gcd`](src/domain/skills.rs) is **`true`** for [`InstantStrike`](src/domain/skills.rs) and **[`NextMeleeBuff`](src/domain/skills.rs)**; **`false`** for **[`SwingWeave`](src/domain/skills.rs)** and passives. [`simulate_combat_party`](src/domain/combat.rs) doc comment cross-links this helper (weapon wind-up stays authoritative for Heavy / Cleave-style actives).
+
 ## 0.2.19 — 2026-05-11
 
 ### Combat
