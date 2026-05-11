@@ -157,3 +157,7 @@ Introduce **`SkillCategory`** (names indicative):
 ## Next step (process)
 
 After this spec is reviewed, use **writing-plans** to break Phase 1 into PR-sized tasks (scheduler core → parity tests → playback verification → UI pulse if needed).
+
+## Implementation
+
+- **Phase 1 plan:** [combat-scheduler-phase1.md](../plans/2026-05-09-combat-scheduler-phase1.md)
