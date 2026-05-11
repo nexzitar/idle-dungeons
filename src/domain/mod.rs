@@ -1,4 +1,5 @@
 pub mod combat;
+pub mod combat_timing;
 pub mod dungeon;
 pub mod hero;
 pub mod party;
