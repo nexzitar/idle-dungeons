@@ -2,6 +2,12 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.15 — 2026-05-09
+
+### Combat
+
+- **Phase 1 initiative scheduler:** per combat tick, lead / partner / foe take **passes** in **stable initiative order** (from `combat_timing::initiative_ranks`), repeating until idle. Attack-speed meters add **once per tick** per actor; multiple swings in the same 100 ms tick **interleave** with other actors instead of a strict hero-then-foe phase lock. See `combat_round`, `lead_weapon_pass` / `partner_weapon_pass` / `foe_weapon_pass` in `src/domain/combat.rs`.
+
 ## 0.2.14 — 2026-05-09
 
 ### Balance
