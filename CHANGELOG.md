@@ -2,6 +2,16 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.17 — 2026-05-09
+
+### Combat
+
+- **White vs ability damage:** [`HeroAttacked`](src/domain/combat.rs) carries a [`HeroStrikeDamage`](src/domain/combat.rs) split (`white` / `yellow` + optional source skill). Heavy / Cleave bonuses count as **yellow**; total damage matches the previous combined hit for unchanged loadouts.
+- **Skill combat styles:** [`SkillCombatStyle`](src/domain/skills.rs) and per-skill [`gcd_ticks`](src/domain/skills.rs) / [`ability_icd_ticks`](src/domain/skills.rs) on [`SkillDefinition`](src/domain/skills.rs). Only **SwingWeave** actives merge into the weapon cadence (`attack_cadence_ticks`); **NextMeleeBuff** and **InstantStrike** do not stretch the heavy wind-up bar.
+- **Empowered Blow** (Heroic Strike–style): queues bonus yellow on the **next** white swing; queuing triggers the ability GCD and a short internal cooldown after consume.
+- **Victory Rush** (instant strike): yellow-only hits on their own initiative passes with shared ability GCD and a **longer ICD** so it cannot be used every GCD.
+- **UI:** combat log captions describe white / ability mix; floating text uses **gold** for lines that mention **ability damage** ([`playback_float_text_color`](src/ui/theme.rs)).
+
 ## 0.2.16 — 2026-05-09
 
 ### Combat

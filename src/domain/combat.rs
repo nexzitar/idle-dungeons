@@ -1,7 +1,24 @@
 use crate::domain::dungeon::Enemy;
 use crate::domain::hero::HeroProfile;
 use crate::domain::items::ItemAffix;
-use crate::domain::skills::{skill_definition, skill_timings, SkillId, SkillKind, SkillTrigger};
+use crate::domain::skills::{
+    skill_definition, skill_timings, SkillCombatStyle, SkillId, SkillKind, SkillTrigger,
+};
+
+/// Split between auto-attack ("white") and ability ("yellow") contribution on one combat hit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HeroStrikeDamage {
+    pub white: i32,
+    pub yellow: i32,
+    /// Primary ability credited for yellow damage (display / telemetry).
+    pub yellow_source_skill: Option<SkillId>,
+}
+
+impl HeroStrikeDamage {
+    pub fn total(self) -> i32 {
+        self.white.saturating_add(self.yellow)
+    }
+}
 use crate::domain::stats::Stats;
 
 /// Early exit from multi-pass swing resolution inside `simulate_combat_party`.
@@ -23,7 +40,7 @@ pub enum CombatEvent {
     /// `attacker` 0 = lead hero ("you" in UI), 1 = party partner.
     HeroAttacked {
         attacker: u8,
-        damage: i32,
+        strike: HeroStrikeDamage,
     },
     /// Poison at end of clock iteration. `stacks` is potency **before** this tick (and before decrement).
     PoisonTick {
@@ -67,13 +84,39 @@ pub enum CombatEvent {
 
 fn combat_event_caption(event: &CombatEvent, partner_name: Option<&str>) -> String {
     match event {
-        CombatEvent::HeroAttacked { attacker, damage } => {
-            if *attacker == 0 {
-                format!("You strike for {damage} damage.")
+        CombatEvent::HeroAttacked { attacker, strike } => {
+            let total = strike.total();
+            if strike.yellow == 0 {
+                if *attacker == 0 {
+                    format!("You strike for {total} damage.")
+                } else if let Some(n) = partner_name {
+                    format!("{n} strikes for {total} damage.")
+                } else {
+                    format!("Partner strikes for {total} damage.")
+                }
+            } else if strike.white == 0 {
+                if *attacker == 0 {
+                    format!("You hit for {total} ability damage.")
+                } else if let Some(n) = partner_name {
+                    format!("{n} hits for {total} ability damage.")
+                } else {
+                    format!("Partner hits for {total} ability damage.")
+                }
+            } else if *attacker == 0 {
+                format!(
+                    "You strike for {} white and {} ability ({} total).",
+                    strike.white, strike.yellow, total
+                )
             } else if let Some(n) = partner_name {
-                format!("{n} strikes for {damage} damage.")
+                format!(
+                    "{n} strikes for {} white and {} ability ({} total).",
+                    strike.white, strike.yellow, total
+                )
             } else {
-                format!("Partner strikes for {damage} damage.")
+                format!(
+                    "Partner strikes for {} white and {} ability ({} total).",
+                    strike.white, strike.yellow, total
+                )
             }
         }
         CombatEvent::PoisonTick { damage, stacks } => {
@@ -297,6 +340,14 @@ pub(crate) struct PreparedHero {
     /// Max ticks from equipped OnAttack actives (0 = use legacy meter spam).
     attack_cast_total: u32,
     attack_cd_total: u32,
+    /// Cleave wins over Heavy when both equipped (yellow damage credit).
+    heavy_skill: Option<SkillId>,
+    has_empowered_blow: bool,
+    has_victory_rush: bool,
+    empower_gcd_ticks: u8,
+    empower_icd_ticks: u8,
+    vr_gcd_ticks: u8,
+    vr_icd_ticks: u8,
 }
 
 fn attack_cadence_ticks(hero: &HeroProfile) -> (u32, u32) {
@@ -309,6 +360,9 @@ fn attack_cadence_ticks(hero: &HeroProfile) -> (u32, u32) {
             continue;
         }
         if def.trigger != SkillTrigger::OnAttack {
+            continue;
+        }
+        if def.combat_style != SkillCombatStyle::SwingWeave {
             continue;
         }
         any_on_attack = true;
@@ -355,6 +409,16 @@ fn prepare_hero_combat(hero: &HeroProfile) -> PreparedHero {
 
     let (attack_cast_total, attack_cd_total) = attack_cadence_ticks(hero);
 
+    let heavy_skill = if has(SkillId::Cleave) {
+        Some(SkillId::Cleave)
+    } else if has(SkillId::HeavyStrike) {
+        Some(SkillId::HeavyStrike)
+    } else {
+        None
+    };
+    let ed = skill_definition(SkillId::EmpoweredBlow);
+    let vr_def = skill_definition(SkillId::VictoryRush);
+
     PreparedHero {
         stats,
         max_h,
@@ -377,26 +441,81 @@ fn prepare_hero_combat(hero: &HeroProfile) -> PreparedHero {
         attack_speed,
         attack_cast_total,
         attack_cd_total,
+        heavy_skill,
+        has_empowered_blow: has(SkillId::EmpoweredBlow),
+        has_victory_rush: has(SkillId::VictoryRush),
+        empower_gcd_ticks: ed.gcd_ticks,
+        empower_icd_ticks: ed.ability_icd_ticks,
+        vr_gcd_ticks: vr_def.gcd_ticks,
+        vr_icd_ticks: vr_def.ability_icd_ticks,
     }
 }
 
-fn swing_damage(p: &PreparedHero, enemy: &Enemy, cur_hp: i32, max_h: i32) -> i32 {
+fn weapon_base_after_armor(p: &PreparedHero, enemy: &Enemy) -> i32 {
     let effective_armor = if p.affix_shattering {
         (enemy.armor - 4).max(0)
     } else {
         enemy.armor
     };
-    let mut d = (p.stats.damage - effective_armor).max(1);
+    (p.stats.damage - effective_armor).max(1)
+}
+
+fn hero_strike_damage(
+    p: &PreparedHero,
+    enemy: &Enemy,
+    cur_hp: i32,
+    max_h: i32,
+    consume_empower: bool,
+) -> HeroStrikeDamage {
+    let base = weapon_base_after_armor(p, enemy);
+    let mut yellow_sub = 0i32;
     if p.has_heavy {
-        d += d / 2;
+        yellow_sub += base / 2;
+        let mid = base + base / 2;
+        if p.affix_heavy {
+            yellow_sub += mid / 5;
+        }
     }
-    if p.has_heavy && p.affix_heavy {
-        d += d / 5;
+    if consume_empower {
+        yellow_sub += (base / 2).max(2);
     }
-    if p.affix_titans && cur_hp * 2 <= max_h {
-        d = ((d as i64 * 5 / 4).max(1)) as i32;
+    let white_sub = base;
+    let raw_total = white_sub.saturating_add(yellow_sub);
+    let scaled_total = if p.affix_titans && cur_hp * 2 <= max_h {
+        ((raw_total as i64 * 5 / 4).max(1)) as i32
+    } else {
+        raw_total.max(1)
+    };
+    let (white, yellow) = if raw_total > 0 {
+        let w =
+            ((scaled_total as i64 * white_sub as i64) / raw_total as i64).max(1) as i32;
+        let y = scaled_total.saturating_sub(w);
+        (w, y)
+    } else {
+        (scaled_total.max(1), 0)
+    };
+    let yellow_source_skill = if consume_empower {
+        Some(SkillId::EmpoweredBlow)
+    } else if p.has_heavy {
+        p.heavy_skill
+    } else {
+        None
+    };
+    HeroStrikeDamage {
+        white,
+        yellow,
+        yellow_source_skill,
     }
-    d
+}
+
+fn victory_rush_strike(p: &PreparedHero, enemy: &Enemy) -> HeroStrikeDamage {
+    let base = weapon_base_after_armor(p, enemy);
+    let y = ((base as i64 * 3) / 5).max(3) as i32;
+    HeroStrikeDamage {
+        white: 0,
+        yellow: y,
+        yellow_source_skill: Some(SkillId::VictoryRush),
+    }
 }
 
 fn apply_lifesteal(
@@ -494,7 +613,37 @@ fn lead_weapon_pass(
     threat: &mut [i32; 2],
     events: &mut Vec<CombatEvent>,
     max_events: usize,
+    h0_skill_gcd_left: &mut u32,
+    h0_vr_icd_left: &mut u32,
+    h0_empower_queued: &mut bool,
+    h0_empower_icd_left: &mut u32,
 ) -> (Option<CombatBreak>, bool) {
+    if *h0 > 0 && *enemy_health > 0 && p0.has_victory_rush {
+        if *h0_skill_gcd_left == 0 && *h0_vr_icd_left == 0 {
+            if events.len() >= max_events {
+                return (None, true);
+            }
+            let strike = victory_rush_strike(p0, enemy);
+            let hero_damage = strike.total();
+            *enemy_health -= hero_damage;
+            events.push(CombatEvent::HeroAttacked {
+                attacker: 0,
+                strike,
+            });
+            if has_partner {
+                threat[0] = threat[0].saturating_add(hero_damage);
+            }
+            apply_lifesteal(p0, hero_damage, h0, p0.max_h, 0, events);
+            *h0_skill_gcd_left = p0.vr_gcd_ticks.max(1) as u32;
+            *h0_vr_icd_left = p0.vr_icd_ticks.max(1) as u32;
+            if *enemy_health <= 0 {
+                events.push(CombatEvent::EnemyDefeated);
+                maybe_devourer_heal_on_kill(lead, h0, p0.max_h, events);
+                return (Some(CombatBreak::HeroWin), true);
+            }
+            return (None, true);
+        }
+    }
     if p0.attack_cast_total == 0 && p0.attack_cd_total == 0 {
         if *h0 <= 0 || *enemy_health <= 0 {
             return (None, false);
@@ -508,17 +657,23 @@ fn lead_weapon_pass(
             if events.len() >= max_events {
                 return (None, true);
             }
-            let hero_damage = swing_damage(p0, enemy, *h0, p0.max_h);
+            let consume = *h0_empower_queued;
+            if consume {
+                *h0_empower_queued = false;
+                *h0_empower_icd_left = p0.empower_icd_ticks.max(1) as u32;
+            }
+            let strike = hero_strike_damage(p0, enemy, *h0, p0.max_h, consume);
+            let hero_damage = strike.total();
             *enemy_health -= hero_damage;
             events.push(CombatEvent::HeroAttacked {
                 attacker: 0,
-                damage: hero_damage,
+                strike,
             });
             if has_partner {
                 threat[0] = threat[0].saturating_add(hero_damage);
             }
             apply_lifesteal(p0, hero_damage, h0, p0.max_h, 0, events);
-            if p0.has_poison {
+            if p0.has_poison && strike.white > 0 {
                 let inc = if p0.affix_virulent { 3 } else { 2 };
                 *poison_stacks = (*poison_stacks + inc).min(40);
             }
@@ -541,17 +696,23 @@ fn lead_weapon_pass(
                 if events.len() >= max_events {
                     return (None, true);
                 }
-                let hero_damage = swing_damage(p0, enemy, *h0, p0.max_h);
+                let consume = *h0_empower_queued;
+                if consume {
+                    *h0_empower_queued = false;
+                    *h0_empower_icd_left = p0.empower_icd_ticks.max(1) as u32;
+                }
+                let strike = hero_strike_damage(p0, enemy, *h0, p0.max_h, consume);
+                let hero_damage = strike.total();
                 *enemy_health -= hero_damage;
                 events.push(CombatEvent::HeroAttacked {
                     attacker: 0,
-                    damage: hero_damage,
+                    strike,
                 });
                 if has_partner {
                     threat[0] = threat[0].saturating_add(hero_damage);
                 }
                 apply_lifesteal(p0, hero_damage, h0, p0.max_h, 0, events);
-                if p0.has_poison {
+                if p0.has_poison && strike.white > 0 {
                     let inc = if p0.affix_virulent { 3 } else { 2 };
                     *poison_stacks = (*poison_stacks + inc).min(40);
                 }
@@ -576,17 +737,23 @@ fn lead_weapon_pass(
                 return (None, true);
             }
             if events.len() < max_events {
-                let hero_damage = swing_damage(p0, enemy, *h0, p0.max_h);
+                let consume = *h0_empower_queued;
+                if consume {
+                    *h0_empower_queued = false;
+                    *h0_empower_icd_left = p0.empower_icd_ticks.max(1) as u32;
+                }
+                let strike = hero_strike_damage(p0, enemy, *h0, p0.max_h, consume);
+                let hero_damage = strike.total();
                 *enemy_health -= hero_damage;
                 events.push(CombatEvent::HeroAttacked {
                     attacker: 0,
-                    damage: hero_damage,
+                    strike,
                 });
                 if has_partner {
                     threat[0] = threat[0].saturating_add(hero_damage);
                 }
                 apply_lifesteal(p0, hero_damage, h0, p0.max_h, 0, events);
-                if p0.has_poison {
+                if p0.has_poison && strike.white > 0 {
                     let inc = if p0.affix_virulent { 3 } else { 2 };
                     *poison_stacks = (*poison_stacks + inc).min(40);
                 }
@@ -635,15 +802,16 @@ fn partner_weapon_pass(
             if events.len() >= max_events {
                 return (None, true);
             }
-            let hero_damage = swing_damage(p1prep, enemy, *h1, p1prep.max_h);
+            let strike = hero_strike_damage(p1prep, enemy, *h1, p1prep.max_h, false);
+            let hero_damage = strike.total();
             *enemy_health -= hero_damage;
             events.push(CombatEvent::HeroAttacked {
                 attacker: 1,
-                damage: hero_damage,
+                strike,
             });
             threat[1] = threat[1].saturating_add(hero_damage);
             apply_lifesteal(p1prep, hero_damage, h1, p1prep.max_h, 1, events);
-            if p1prep.has_poison {
+            if p1prep.has_poison && strike.white > 0 {
                 let inc = if p1prep.affix_virulent { 3 } else { 2 };
                 *poison_stacks = (*poison_stacks + inc).min(40);
             }
@@ -666,15 +834,16 @@ fn partner_weapon_pass(
                 if events.len() >= max_events {
                     return (None, true);
                 }
-                let hero_damage = swing_damage(p1prep, enemy, *h1, p1prep.max_h);
+                let strike = hero_strike_damage(p1prep, enemy, *h1, p1prep.max_h, false);
+                let hero_damage = strike.total();
                 *enemy_health -= hero_damage;
                 events.push(CombatEvent::HeroAttacked {
                     attacker: 1,
-                    damage: hero_damage,
+                    strike,
                 });
                 threat[1] = threat[1].saturating_add(hero_damage);
                 apply_lifesteal(p1prep, hero_damage, h1, p1prep.max_h, 1, events);
-                if p1prep.has_poison {
+                if p1prep.has_poison && strike.white > 0 {
                     let inc = if p1prep.affix_virulent { 3 } else { 2 };
                     *poison_stacks = (*poison_stacks + inc).min(40);
                 }
@@ -699,15 +868,16 @@ fn partner_weapon_pass(
                 return (None, true);
             }
             if events.len() < max_events {
-                let hero_damage = swing_damage(p1prep, enemy, *h1, p1prep.max_h);
+                let strike = hero_strike_damage(p1prep, enemy, *h1, p1prep.max_h, false);
+                let hero_damage = strike.total();
                 *enemy_health -= hero_damage;
                 events.push(CombatEvent::HeroAttacked {
                     attacker: 1,
-                    damage: hero_damage,
+                    strike,
                 });
                 threat[1] = threat[1].saturating_add(hero_damage);
                 apply_lifesteal(p1prep, hero_damage, h1, p1prep.max_h, 1, events);
-                if p1prep.has_poison {
+                if p1prep.has_poison && strike.white > 0 {
                     let inc = if p1prep.affix_virulent { 3 } else { 2 };
                     *poison_stacks = (*poison_stacks + inc).min(40);
                 }
@@ -1106,6 +1276,10 @@ pub fn simulate_combat_party(
 
     let mut h0_cast_left = 0u32;
     let mut h0_cd_left = 0u32;
+    let mut h0_skill_gcd_left = 0u32;
+    let mut h0_vr_icd_left = 0u32;
+    let mut h0_empower_queued = false;
+    let mut h0_empower_icd_left = 0u32;
     let mut h1_cast_left = 0u32;
     let mut h1_cd_left = 0u32;
     let mut foe_cast_left = 0u32;
@@ -1131,6 +1305,29 @@ pub fn simulate_combat_party(
             {
                 threat[1] = threat[1].saturating_add(1);
             }
+        }
+
+        if p0.has_victory_rush && h0_vr_icd_left > 0 {
+            h0_vr_icd_left -= 1;
+        }
+        if p0.has_empowered_blow && h0_empower_icd_left > 0 {
+            h0_empower_icd_left -= 1;
+        }
+        if p0.has_empowered_blow || p0.has_victory_rush {
+            if h0_skill_gcd_left > 0 {
+                h0_skill_gcd_left -= 1;
+            }
+        }
+        let vr_ready =
+            p0.has_victory_rush && h0_vr_icd_left == 0 && h0_skill_gcd_left == 0;
+        if p0.has_empowered_blow
+            && !h0_empower_queued
+            && h0_skill_gcd_left == 0
+            && h0_empower_icd_left == 0
+            && !vr_ready
+        {
+            h0_empower_queued = true;
+            h0_skill_gcd_left = p0.empower_gcd_ticks.max(1) as u32;
         }
 
         let enc_seed = crate::domain::combat_timing::encounter_initiative_seed(
@@ -1176,6 +1373,10 @@ pub fn simulate_combat_party(
                         &mut threat,
                         &mut events,
                         MAX_EVENTS,
+                        &mut h0_skill_gcd_left,
+                        &mut h0_vr_icd_left,
+                        &mut h0_empower_queued,
+                        &mut h0_empower_icd_left,
                     ),
                     1 => {
                         if let Some((ref p1prep, _, _)) = p1 {
@@ -1486,14 +1687,15 @@ pub fn combat_playback_frames_from_result(
     for step in steps {
         match &step {
             PlaybackStep::Event(event) => match event {
-                CombatEvent::HeroAttacked { attacker, damage } => {
+                CombatEvent::HeroAttacked { attacker, strike } => {
+                    let total = strike.total();
                     if *attacker == 0 {
-                        d0 = d0.saturating_add(*damage as u32);
+                        d0 = d0.saturating_add(total as u32);
                     } else {
-                        d1 = d1.saturating_add(*damage as u32);
+                        d1 = d1.saturating_add(total as u32);
                     }
-                    enemy_hp -= damage;
-                    if has_poison {
+                    enemy_hp -= total;
+                    if has_poison && strike.white > 0 {
                         enemy_poison_stacks = (enemy_poison_stacks + 2).min(40);
                     }
                 }
@@ -1949,15 +2151,15 @@ mod tests {
         let a = simulate_combat(&plain, &enemy, 20, 100);
         let b = simulate_combat(&heavy, &enemy, 20, 100);
         let plain_fist = a.events.iter().find_map(|e| {
-            if let CombatEvent::HeroAttacked { damage, .. } = e {
-                Some(*damage)
+            if let CombatEvent::HeroAttacked { strike, .. } = e {
+                Some(strike.total())
             } else {
                 None
             }
         });
         let heavy_fist = b.events.iter().find_map(|e| {
-            if let CombatEvent::HeroAttacked { damage, .. } = e {
-                Some(*damage)
+            if let CombatEvent::HeroAttacked { strike, .. } = e {
+                Some(strike.total())
             } else {
                 None
             }
@@ -1988,14 +2190,91 @@ mod tests {
         let h = simulate_combat(&heavy, &enemy, 20, 100);
         let c = simulate_combat(&cleave, &enemy, 20, 100);
         let heavy_dmg = h.events.iter().find_map(|e| match e {
-            CombatEvent::HeroAttacked { damage, .. } => Some(*damage),
+            CombatEvent::HeroAttacked { strike, .. } => Some(strike.total()),
             _ => None,
         });
         let cleave_dmg = c.events.iter().find_map(|e| match e {
-            CombatEvent::HeroAttacked { damage, .. } => Some(*damage),
+            CombatEvent::HeroAttacked { strike, .. } => Some(strike.total()),
             _ => None,
         });
         assert_eq!(heavy_dmg, cleave_dmg);
+    }
+
+    #[test]
+    fn victory_rush_hits_are_yellow_and_icd_limits_frequency() {
+        let mut hero = HeroProfile::default();
+        hero.unlock_skill_slots(1);
+        hero.equip_skill(0, SkillId::VictoryRush).unwrap();
+        let enemy = Enemy {
+            name: "Dummy".into(),
+            max_health: 99999,
+            damage: 0,
+            armor: 0,
+            attack_speed: 0.05,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
+        };
+        let r = simulate_combat(&hero, &enemy, 120, 100);
+        let vr_hits: Vec<HeroStrikeDamage> = r
+            .events
+            .iter()
+            .filter_map(|e| {
+                if let CombatEvent::HeroAttacked { strike, .. } = e {
+                    if strike.yellow_source_skill == Some(SkillId::VictoryRush) {
+                        Some(*strike)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert!(
+            vr_hits.len() >= 2,
+            "expected ICD to allow more than one Rush in a long window, got {vr_hits:?}"
+        );
+        assert!(
+            vr_hits.iter().all(|s| s.white == 0 && s.yellow > 0),
+            "Victory Rush should be ability-only damage: {vr_hits:?}"
+        );
+        assert!(
+            vr_hits.len() <= 5,
+            "long ICD should prevent spamming Rush on every GCD, got {} hits",
+            vr_hits.len()
+        );
+    }
+
+    #[test]
+    fn empowered_blow_buffs_next_white_swing_with_yellow() {
+        let mut hero = HeroProfile::default();
+        hero.unlock_skill_slots(1);
+        hero.equip_skill(0, SkillId::EmpoweredBlow).unwrap();
+        let enemy = Enemy {
+            name: "Dummy".into(),
+            max_health: 999,
+            damage: 0,
+            armor: 0,
+            attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
+        };
+        let r = simulate_combat(&hero, &enemy, 20, 100);
+        let empowered_swing = r.events.iter().find_map(|e| {
+            if let CombatEvent::HeroAttacked { strike, .. } = e {
+                if strike.white > 0
+                    && strike.yellow > 0
+                    && strike.yellow_source_skill == Some(SkillId::EmpoweredBlow)
+                {
+                    return Some(*strike);
+                }
+            }
+            None
+        });
+        assert!(
+            empowered_swing.is_some(),
+            "expected Empowered Blow on a white+yellow melee hit"
+        );
     }
 
     #[test]
@@ -2719,8 +2998,8 @@ mod tests {
         r.events
             .iter()
             .find_map(|e| {
-                if let CombatEvent::HeroAttacked { damage, .. } = e {
-                    Some(*damage)
+                if let CombatEvent::HeroAttacked { strike, .. } = e {
+                    Some(strike.total())
                 } else {
                     None
                 }
