@@ -269,6 +269,9 @@ pub fn playback_float_text_color(caption: &str) -> Color {
     if lower.contains("recover") {
         return UiTheme::healing();
     }
+    if lower.contains("ability") {
+        return UiTheme::muted_gold();
+    }
     if lower.contains("strike")
         || lower.contains("damage")
         || lower.contains("hits")

@@ -2,6 +2,37 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.19 — 2026-05-11
+
+### Combat
+
+- **Empowered Blow → buff runtime:** queueing the next-swing buff emits **`BuffApplied`** (`BuffId::EmpoweredBlow`); landing the charged swing emits **`BuffExpired`**.
+
+## 0.2.18 — 2026-05-11
+
+### Combat (Phase 3 — buff runtime)
+
+- New [`domain::buff`](src/domain/buff.rs): [`BuffId`](src/domain/buff.rs), [`BuffApplication`](src/domain/buff.rs), tick-based expiry helper.
+- [`CombatEvent`](src/domain/combat.rs): **`BuffApplied`**, **`BuffExpired`**, **`BuffTick`**, **`BuffChargeConsumed`** (latter two ready for HoT/charge hooks).
+- Party buff state in [`combat.rs`](src/domain/combat.rs): [`simulate_combat_party_with_initial_buffs`](src/domain/combat.rs) seeds buffs at encounter clock **0**; each tick end removes expired buffs. [`simulate_combat_party`](src/domain/combat.rs) unchanged for callers (`[]`).
+- Playback captions and floating anchors for buff lines.
+
+## 0.2.17 — 2026-05-09
+
+### Combat
+
+- **White vs ability damage:** [`HeroAttacked`](src/domain/combat.rs) carries a [`HeroStrikeDamage`](src/domain/combat.rs) split (`white` / `yellow` + optional source skill). Heavy / Cleave bonuses count as **yellow**; total damage matches the previous combined hit for unchanged loadouts.
+- **Skill combat styles:** [`SkillCombatStyle`](src/domain/skills.rs) and per-skill [`gcd_ticks`](src/domain/skills.rs) / [`ability_icd_ticks`](src/domain/skills.rs) on [`SkillDefinition`](src/domain/skills.rs). Only **SwingWeave** actives merge into the weapon cadence (`attack_cadence_ticks`); **NextMeleeBuff** and **InstantStrike** do not stretch the heavy wind-up bar.
+- **Empowered Blow** (Heroic Strike–style): queues bonus yellow on the **next** white swing; queuing triggers the ability GCD and a short internal cooldown after consume.
+- **Victory Rush** (instant strike): yellow-only hits on their own initiative passes with shared ability GCD and a **longer ICD** so it cannot be used every GCD.
+- **UI:** combat log captions describe white / ability mix; floating text uses **gold** for lines that mention **ability damage** ([`playback_float_text_color`](src/ui/theme.rs)).
+
+## 0.2.16 — 2026-05-09
+
+### Combat
+
+- **Initiative salt from delves:** `simulate_combat_party` takes `initiative_run_salt` (tests / solo helpers pass **`0`**). [`RunConfig`](src/domain/run.rs) mixes **run seed + room depth** into this salt so encounter initiative can **vary by floor and run** while staying deterministic.
+
 ## 0.2.15 — 2026-05-09
 
 ### Combat

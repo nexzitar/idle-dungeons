@@ -1,3 +1,4 @@
+pub mod buff;
 pub mod combat;
 pub mod combat_round;
 pub mod combat_timing;

@@ -132,6 +132,22 @@ mod tests {
     }
 
     #[test]
+    fn not_all_run_salts_collide_on_initiative_solo() {
+        let first = initiative_ranks(encounter_initiative_seed(0, 0), 1);
+        let mut found_distinct = false;
+        for salt in 1..512u64 {
+            if initiative_ranks(encounter_initiative_seed(salt, 0), 1) != first {
+                found_distinct = true;
+                break;
+            }
+        }
+        assert!(
+            found_distinct,
+            "expected some run salts to change lead/foe initiative order"
+        );
+    }
+
+    #[test]
     fn encounter_initiative_seed_is_deterministic() {
         assert_eq!(
             encounter_initiative_seed(7, 0xABC),

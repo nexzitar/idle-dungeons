@@ -21,6 +21,8 @@ pub enum SkillId {
     BattleFocus,
     CautiousAdvance,
     LuckyStrike,
+    EmpoweredBlow,
+    VictoryRush,
     Predator,
 }
 
@@ -45,6 +47,8 @@ impl SkillId {
         SkillId::BattleFocus,
         SkillId::CautiousAdvance,
         SkillId::LuckyStrike,
+        SkillId::EmpoweredBlow,
+        SkillId::VictoryRush,
         SkillId::Predator,
     ];
 }
@@ -82,6 +86,19 @@ pub enum SkillTrigger {
     PeriodicTick,
 }
 
+/// How a skill interacts with the weapon timeline and the shared ability global cooldown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SkillCombatStyle {
+    /// Passives and actives that do not merge into the heavy-style swing cadence.
+    Passive,
+    /// Heavy / Cleave / … — share one wind-up + post-weapon cooldown channel.
+    SwingWeave,
+    /// Heroic Strike–style: queue bonus damage on the next white swing; queues trigger [`SkillDefinition::gcd_ticks`].
+    NextMeleeBuff,
+    /// Victory Rush–style: instant ability damage; uses GCD + [`SkillDefinition::ability_icd_ticks`].
+    InstantStrike,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SkillDefinition {
     pub id: SkillId,
@@ -96,6 +113,12 @@ pub struct SkillDefinition {
     pub cast_ticks: u8,
     /// Simulated combat ticks after a strike before the next [`SkillTrigger::OnAttack`] cycle starts.
     pub cooldown_ticks: u8,
+    /// Classification for swing merge, instant strikes, and next-melee buffs.
+    pub combat_style: SkillCombatStyle,
+    /// Ability GCD length in combat ticks when this skill uses the shared ability clock (`0` = none).
+    pub gcd_ticks: u8,
+    /// Extra per-skill cooldown after use (e.g. so an instant strike is not spammed every GCD).
+    pub ability_icd_ticks: u8,
 }
 
 pub fn format_skill_tags(tags: &[SkillTag]) -> String {
@@ -140,7 +163,21 @@ pub fn skill_timings(id: SkillId) -> (u8, u8) {
         SkillId::BattleFocus => (0, 0),
         SkillId::CautiousAdvance => (0, 0),
         SkillId::LuckyStrike => (0, 0),
+        SkillId::EmpoweredBlow => (0, 0),
+        SkillId::VictoryRush => (0, 0),
         SkillId::Predator => (0, 0),
+    }
+}
+
+pub fn skill_combat_meta(id: SkillId) -> (SkillCombatStyle, u8, u8) {
+    use SkillCombatStyle::*;
+    match id {
+        SkillId::HeavyStrike | SkillId::Cleave | SkillId::PoisonEdge | SkillId::Taunt => {
+            (SwingWeave, 0, 0)
+        }
+        SkillId::EmpoweredBlow => (NextMeleeBuff, 3, 8),
+        SkillId::VictoryRush => (InstantStrike, 3, 30),
+        _ => (Passive, 0, 0),
     }
 }
 
@@ -174,6 +211,8 @@ pub fn skill_shop_price_gold(id: SkillId) -> Option<u32> {
         SkillId::CautiousAdvance => 45,
         SkillId::LuckyStrike => 35,
         SkillId::Predator => 40,
+        SkillId::EmpoweredBlow => 45,
+        SkillId::VictoryRush => 55,
         SkillId::LifestealStrike | SkillId::Guard | SkillId::HeavyStrike | SkillId::SecondWind => {
             return None;
         }
@@ -191,6 +230,7 @@ pub fn skill_book_pick_order_for(unlocked: &[SkillId]) -> Vec<SkillId> {
 
 pub fn skill_definition(id: SkillId) -> SkillDefinition {
     let (c, d) = skill_timings(id);
+    let (combat_style, gcd_ticks, ability_icd_ticks) = skill_combat_meta(id);
     match id {
         SkillId::LifestealStrike => SkillDefinition {
             id,
@@ -202,6 +242,9 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             synergy_hint: "Pairs with attack speed and damage; Vampiric Aura amplifies sustain.",
             cast_ticks: c,
             cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
         },
         SkillId::Guard => SkillDefinition {
             id,
@@ -213,6 +256,9 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             synergy_hint: "Bastion gear adds flat block when this skill is equipped; armor and healing power still scale the kit.",
             cast_ticks: c,
             cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
         },
         SkillId::HeavyStrike => SkillDefinition {
             id,
@@ -224,6 +270,9 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             synergy_hint: "Heavy weapon affixes further raise burst; avoid pairing with extreme attack speed for now.",
             cast_ticks: c,
             cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
         },
         SkillId::PoisonEdge => SkillDefinition {
             id,
@@ -235,6 +284,9 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             synergy_hint: "Toxic Mastery and Virulent gear deepen stacks faster for stronger poison ticks.",
             cast_ticks: c,
             cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
         },
         SkillId::ThornSkin => SkillDefinition {
             id,
@@ -246,6 +298,9 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             synergy_hint: "Spiked affix and high inbound hit volume increase reflect value.",
             cast_ticks: c,
             cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
         },
         SkillId::BarrierPulse => SkillDefinition {
             id,
@@ -257,6 +312,9 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             synergy_hint: "Scales with healing power; later item effects may convert or reflect barrier.",
             cast_ticks: c,
             cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
         },
         SkillId::Cleave => SkillDefinition {
             id,
@@ -268,6 +326,9 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             synergy_hint: "Placeholder for future multi-foe rooms; build like Heavy Strike today.",
             cast_ticks: c,
             cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
         },
         SkillId::Taunt => SkillDefinition {
             id,
@@ -279,6 +340,9 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             synergy_hint: "Will pair with tank items and passive threat auras (Phase 3).",
             cast_ticks: c,
             cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
         },
         SkillId::SecondWind => SkillDefinition {
             id,
@@ -290,6 +354,9 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             synergy_hint: "Stronger on high max-health builds; complements Barrier Pulse.",
             cast_ticks: c,
             cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
         },
         SkillId::ToxicMastery => SkillDefinition {
             id,
@@ -301,6 +368,9 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             synergy_hint: "Requires Poison Edge or another poison applicator to shine.",
             cast_ticks: c,
             cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
         },
         SkillId::VampiricAura => SkillDefinition {
             id,
@@ -312,6 +382,9 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             synergy_hint: "Stacks with Lifesteal Strike and healing power.",
             cast_ticks: c,
             cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
         },
         SkillId::ThickHide => SkillDefinition {
             id,
@@ -323,6 +396,9 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             synergy_hint: "Flat mitigation layer before Guard reductions.",
             cast_ticks: c,
             cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
         },
         SkillId::ArcaneOverflow => SkillDefinition {
             id,
@@ -334,6 +410,9 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             synergy_hint: "Synergises with Barrier Pulse and Guard.",
             cast_ticks: c,
             cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
         },
         SkillId::Berserker => SkillDefinition {
             id,
@@ -345,6 +424,9 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             synergy_hint: "Offset with Thick Hide or Barrier Pulse.",
             cast_ticks: c,
             cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
         },
         SkillId::SwiftStrikes => SkillDefinition {
             id,
@@ -356,6 +438,9 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             synergy_hint: "Multiplies poison applications and lifesteal cadence.",
             cast_ticks: c,
             cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
         },
         SkillId::IronWill => SkillDefinition {
             id,
@@ -367,6 +452,9 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             synergy_hint: "Pairs with percentage-based heals like Second Wind.",
             cast_ticks: c,
             cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
         },
         SkillId::BattleFocus => SkillDefinition {
             id,
@@ -378,6 +466,9 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             synergy_hint: "Builds toward armor-shred encounters; combine with Cleave/Heavy cadence.",
             cast_ticks: c,
             cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
         },
         SkillId::CautiousAdvance => SkillDefinition {
             id,
@@ -389,6 +480,9 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             synergy_hint: "Future threat kit will reward this profile.",
             cast_ticks: c,
             cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
         },
         SkillId::LuckyStrike => SkillDefinition {
             id,
@@ -400,6 +494,37 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             synergy_hint: "Awaiting crit pipelines and telemetry (Phase 5).",
             cast_ticks: c,
             cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
+        },
+        SkillId::EmpoweredBlow => SkillDefinition {
+            id,
+            kind: SkillKind::Active,
+            name: "Empowered Blow",
+            trigger: SkillTrigger::OnAttack,
+            tags: &[SkillTag::Attack, SkillTag::Melee],
+            description: "Queue bonus ability damage on your next white swing—costs a global cooldown to line up.",
+            synergy_hint: "Weaves between instant strikes; pairs with fast autos and heavy hitters.",
+            cast_ticks: c,
+            cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
+        },
+        SkillId::VictoryRush => SkillDefinition {
+            id,
+            kind: SkillKind::Active,
+            name: "Victory Rush",
+            trigger: SkillTrigger::OnAttack,
+            tags: &[SkillTag::Attack, SkillTag::Melee, SkillTag::Sustain],
+            description: "Instant ability strike—hits for yellow damage on its own beat, respects GCD and a longer cooldown.",
+            synergy_hint: "Strong opener filler; track ICD so it does not collide with Empowered Blow timing.",
+            cast_ticks: c,
+            cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
         },
         SkillId::Predator => SkillDefinition {
             id,
@@ -411,6 +536,9 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
             synergy_hint: "Will hook into encounter metadata when multi-enemy packs arrive.",
             cast_ticks: c,
             cooldown_ticks: d,
+            combat_style,
+            gcd_ticks,
+            ability_icd_ticks,
         },
     }
 }
