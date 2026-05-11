@@ -631,6 +631,15 @@ fn apply_lifesteal(
     });
 }
 
+fn push_empowered_blow_buff_expired(events: &mut Vec<CombatEvent>, max_events: usize) {
+    if events.len() < max_events {
+        events.push(CombatEvent::BuffExpired {
+            target: 0,
+            buff_id: BuffId::EmpoweredBlow,
+        });
+    }
+}
+
 /// Party enemy target: highest threat wins; on a tie, reuse [`last_enemy_target`] when still valid,
 /// otherwise [`deterministic_tie_break_target`].
 pub fn pick_party_enemy_target(
@@ -749,6 +758,7 @@ fn lead_weapon_pass(
             if consume {
                 *h0_empower_queued = false;
                 *h0_empower_icd_left = p0.empower_icd_ticks.max(1) as u32;
+                push_empowered_blow_buff_expired(events, max_events);
             }
             let strike = hero_strike_damage(p0, enemy, *h0, p0.max_h, consume);
             let hero_damage = strike.total();
@@ -788,6 +798,7 @@ fn lead_weapon_pass(
                 if consume {
                     *h0_empower_queued = false;
                     *h0_empower_icd_left = p0.empower_icd_ticks.max(1) as u32;
+                    push_empowered_blow_buff_expired(events, max_events);
                 }
                 let strike = hero_strike_damage(p0, enemy, *h0, p0.max_h, consume);
                 let hero_damage = strike.total();
@@ -829,6 +840,7 @@ fn lead_weapon_pass(
                 if consume {
                     *h0_empower_queued = false;
                     *h0_empower_icd_left = p0.empower_icd_ticks.max(1) as u32;
+                    push_empowered_blow_buff_expired(events, max_events);
                 }
                 let strike = hero_strike_damage(p0, enemy, *h0, p0.max_h, consume);
                 let hero_damage = strike.total();
@@ -1525,6 +1537,14 @@ pub fn simulate_combat_party_with_initial_buffs(
         {
             h0_empower_queued = true;
             h0_skill_gcd_left = p0.empower_gcd_ticks.max(1) as u32;
+            if events.len() < MAX_EVENTS {
+                events.push(CombatEvent::BuffApplied {
+                    target: 0,
+                    buff_id: BuffId::EmpoweredBlow,
+                    stacks: 1,
+                    duration_ticks: None,
+                });
+            }
         }
 
         let enc_seed = crate::domain::combat_timing::encounter_initiative_seed(
@@ -2046,6 +2066,7 @@ pub fn combat_playback_frames(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::buff::BuffId;
     use crate::domain::dungeon::Enemy;
     use crate::domain::hero::HeroProfile;
     use crate::domain::items::{GearSlot, ItemAffix, ItemInstance};
@@ -2476,6 +2497,26 @@ mod tests {
         assert!(
             empowered_swing.is_some(),
             "expected Empowered Blow on a white+yellow melee hit"
+        );
+        assert!(
+            r.events.iter().any(|e| matches!(
+                e,
+                CombatEvent::BuffApplied {
+                    buff_id: BuffId::EmpoweredBlow,
+                    ..
+                }
+            )),
+            "Empowered Blow queue should emit BuffApplied"
+        );
+        assert!(
+            r.events.iter().any(|e| matches!(
+                e,
+                CombatEvent::BuffExpired {
+                    buff_id: BuffId::EmpoweredBlow,
+                    ..
+                }
+            )),
+            "consuming the queue should emit BuffExpired"
         );
     }
 

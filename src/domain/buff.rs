@@ -7,11 +7,14 @@
 pub enum BuffId {
     /// Test / extension hook; future skills map here.
     InnerStrength,
+    /// Queued next-swing damage from the Empowered Blow skill (expires when the swing lands).
+    EmpoweredBlow,
 }
 
 pub fn buff_display_name(id: BuffId) -> &'static str {
     match id {
         BuffId::InnerStrength => "Inner Strength",
+        BuffId::EmpoweredBlow => "Empowered Blow",
     }
 }
 

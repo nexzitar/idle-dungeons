@@ -2,6 +2,12 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.19 — 2026-05-11
+
+### Combat
+
+- **Empowered Blow → buff runtime:** queueing the next-swing buff emits **`BuffApplied`** (`BuffId::EmpoweredBlow`); landing the charged swing emits **`BuffExpired`**.
+
 ## 0.2.18 — 2026-05-11
 
 ### Combat (Phase 3 — buff runtime)
