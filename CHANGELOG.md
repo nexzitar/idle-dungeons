@@ -2,6 +2,15 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.18 — 2026-05-11
+
+### Combat (Phase 3 — buff runtime)
+
+- New [`domain::buff`](src/domain/buff.rs): [`BuffId`](src/domain/buff.rs), [`BuffApplication`](src/domain/buff.rs), tick-based expiry helper.
+- [`CombatEvent`](src/domain/combat.rs): **`BuffApplied`**, **`BuffExpired`**, **`BuffTick`**, **`BuffChargeConsumed`** (latter two ready for HoT/charge hooks).
+- Party buff state in [`combat.rs`](src/domain/combat.rs): [`simulate_combat_party_with_initial_buffs`](src/domain/combat.rs) seeds buffs at encounter clock **0**; each tick end removes expired buffs. [`simulate_combat_party`](src/domain/combat.rs) unchanged for callers (`[]`).
+- Playback captions and floating anchors for buff lines.
+
 ## 0.2.17 — 2026-05-09
 
 ### Combat

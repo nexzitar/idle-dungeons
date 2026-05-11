@@ -1,9 +1,11 @@
+use crate::domain::buff::{buff_display_name, buff_expires_at_clock, BuffApplication, BuffId};
 use crate::domain::dungeon::Enemy;
 use crate::domain::hero::HeroProfile;
 use crate::domain::items::ItemAffix;
 use crate::domain::skills::{
     skill_definition, skill_timings, SkillCombatStyle, SkillId, SkillKind, SkillTrigger,
 };
+use crate::domain::stats::Stats;
 
 /// Split between auto-attack ("white") and ability ("yellow") contribution on one combat hit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,7 +21,6 @@ impl HeroStrikeDamage {
         self.white.saturating_add(self.yellow)
     }
 }
-use crate::domain::stats::Stats;
 
 /// Early exit from multi-pass swing resolution inside `simulate_combat_party`.
 #[derive(Debug, Clone, Copy)]
@@ -80,6 +81,28 @@ pub enum CombatEvent {
         party_index: u8,
     },
     HeroDefeated,
+    /// Phase 3: duration / stack buff applied (`combat_clock` at grant is encoded via tick order).
+    BuffApplied {
+        target: u8,
+        buff_id: BuffId,
+        stacks: u32,
+        duration_ticks: Option<u32>,
+    },
+    BuffExpired {
+        target: u8,
+        buff_id: BuffId,
+    },
+    /// Periodic buff pulse (HoT DoT hooks); reserved until content uses it.
+    BuffTick {
+        target: u8,
+        buff_id: BuffId,
+        stacks: u32,
+    },
+    BuffChargeConsumed {
+        target: u8,
+        buff_id: BuffId,
+        charges_remaining: u32,
+    },
 }
 
 fn combat_event_caption(event: &CombatEvent, partner_name: Option<&str>) -> String {
@@ -161,6 +184,63 @@ fn combat_event_caption(event: &CombatEvent, partner_name: Option<&str>) -> Stri
             }
         }
         CombatEvent::HeroDefeated => "You collapse...".to_string(),
+        CombatEvent::BuffApplied {
+            target,
+            buff_id,
+            stacks,
+            duration_ticks,
+        } => {
+            let name = buff_display_name(*buff_id);
+            let dur = match duration_ticks {
+                None => " (no expiry)".to_string(),
+                Some(t) => format!(" ({t} ticks)"),
+            };
+            if *target == 0 {
+                format!("You gain {name} ×{stacks}{dur}.")
+            } else if let Some(n) = partner_name {
+                format!("{n} gains {name} ×{stacks}{dur}.")
+            } else {
+                format!("Ally gains {name} ×{stacks}{dur}.")
+            }
+        }
+        CombatEvent::BuffExpired { target, buff_id } => {
+            let name = buff_display_name(*buff_id);
+            if *target == 0 {
+                format!("{name} fades from you.")
+            } else if let Some(n) = partner_name {
+                format!("{name} fades from {n}.")
+            } else {
+                format!("{name} fades from your ally.")
+            }
+        }
+        CombatEvent::BuffTick {
+            target,
+            buff_id,
+            stacks,
+        } => {
+            let name = buff_display_name(*buff_id);
+            if *target == 0 {
+                format!("{name} ticks on you (×{stacks}).")
+            } else if let Some(n) = partner_name {
+                format!("{name} ticks on {n} (×{stacks}).")
+            } else {
+                format!("{name} ticks (×{stacks}).")
+            }
+        }
+        CombatEvent::BuffChargeConsumed {
+            target,
+            buff_id,
+            charges_remaining,
+        } => {
+            let name = buff_display_name(*buff_id);
+            if *target == 0 {
+                format!("{name} consumes a charge ({charges_remaining} left).")
+            } else if let Some(n) = partner_name {
+                format!("{name}: {n} consumes a charge ({charges_remaining} left).")
+            } else {
+                format!("{name}: ally consumes a charge ({charges_remaining} left).")
+            }
+        }
     }
 }
 
@@ -191,6 +271,14 @@ fn sfx_anchor_for_event(event: &CombatEvent) -> CombatSfxAnchor {
         CombatEvent::EnemyDefeated => CombatSfxAnchor::Enemy,
         CombatEvent::PartyMemberDown { .. } => CombatSfxAnchor::Ally,
         CombatEvent::HeroDefeated => CombatSfxAnchor::Lead,
+        CombatEvent::BuffApplied { target: 0, .. } => CombatSfxAnchor::Lead,
+        CombatEvent::BuffApplied { .. } => CombatSfxAnchor::Ally,
+        CombatEvent::BuffExpired { target: 0, .. } => CombatSfxAnchor::Lead,
+        CombatEvent::BuffExpired { .. } => CombatSfxAnchor::Ally,
+        CombatEvent::BuffTick { target: 0, .. } => CombatSfxAnchor::Lead,
+        CombatEvent::BuffTick { .. } => CombatSfxAnchor::Ally,
+        CombatEvent::BuffChargeConsumed { target: 0, .. } => CombatSfxAnchor::Lead,
+        CombatEvent::BuffChargeConsumed { .. } => CombatSfxAnchor::Ally,
     }
 }
 
@@ -1131,6 +1219,91 @@ fn foe_weapon_pass(
     }
 }
 
+#[derive(Debug, Clone, Default)]
+struct PartyBuffState {
+    slot0: Vec<ActivePartyBuff>,
+    slot1: Vec<ActivePartyBuff>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ActivePartyBuff {
+    id: BuffId,
+    stacks: u32,
+    expires_at: Option<u32>,
+    charges: Option<u32>,
+}
+
+impl PartyBuffState {
+    fn apply_encounter_start(
+        &mut self,
+        items: &[(u8, BuffApplication)],
+        combat_clock: u32,
+        events: &mut Vec<CombatEvent>,
+        max_events: usize,
+    ) {
+        for &(target, app) in items {
+            if events.len() >= max_events {
+                break;
+            }
+            let expires_at = buff_expires_at_clock(combat_clock, app.duration_ticks);
+            let buff = ActivePartyBuff {
+                id: app.buff_id,
+                stacks: app.stacks,
+                expires_at,
+                charges: app.charges,
+            };
+            match target {
+                0 => self.slot0.push(buff),
+                1 => self.slot1.push(buff),
+                _ => continue,
+            }
+            events.push(CombatEvent::BuffApplied {
+                target,
+                buff_id: app.buff_id,
+                stacks: app.stacks,
+                duration_ticks: app.duration_ticks,
+            });
+        }
+    }
+
+    fn tick_end(
+        &mut self,
+        combat_clock: u32,
+        events: &mut Vec<CombatEvent>,
+        max_events: usize,
+    ) {
+        Self::expire_slot(&mut self.slot0, 0, combat_clock, events, max_events);
+        Self::expire_slot(&mut self.slot1, 1, combat_clock, events, max_events);
+    }
+
+    fn expire_slot(
+        slot: &mut Vec<ActivePartyBuff>,
+        target: u8,
+        combat_clock: u32,
+        events: &mut Vec<CombatEvent>,
+        max_events: usize,
+    ) {
+        let mut i = 0usize;
+        while i < slot.len() {
+            let drop = slot[i]
+                .expires_at
+                .is_some_and(|ex| combat_clock >= ex);
+            if drop {
+                let id = slot[i].id;
+                slot.remove(i);
+                if events.len() < max_events {
+                    events.push(CombatEvent::BuffExpired {
+                        target,
+                        buff_id: id,
+                    });
+                }
+            } else {
+                i += 1;
+            }
+        }
+    }
+}
+
 /// `max_clock_ticks` — upper bound on combat time steps (each step adds attack speed to both
 /// sides' action meters; extra hero or enemy swings in one step when speed is higher).
 ///
@@ -1146,6 +1319,27 @@ pub fn simulate_combat_party(
     lead_health_start: i32,
     partner: Option<(&HeroProfile, i32)>,
     initiative_run_salt: u64,
+) -> CombatResult {
+    simulate_combat_party_with_initial_buffs(
+        lead,
+        enemy,
+        max_clock_ticks,
+        lead_health_start,
+        partner,
+        initiative_run_salt,
+        &[],
+    )
+}
+
+/// Like [`simulate_combat_party`], but applies [`BuffApplication`] entries at encounter clock **0**.
+pub fn simulate_combat_party_with_initial_buffs(
+    lead: &HeroProfile,
+    enemy: &Enemy,
+    max_clock_ticks: u32,
+    lead_health_start: i32,
+    partner: Option<(&HeroProfile, i32)>,
+    initiative_run_salt: u64,
+    initial_party_buffs: &[(u8, BuffApplication)],
 ) -> CombatResult {
     let p0 = prepare_hero_combat(lead);
     let p1 = partner.map(|(h, hp)| (prepare_hero_combat(h), h, hp));
@@ -1244,6 +1438,9 @@ pub fn simulate_combat_party(
     }
 
     const MAX_EVENTS: usize = 1200;
+
+    let mut party_buffs = PartyBuffState::default();
+    party_buffs.apply_encounter_start(initial_party_buffs, 0, &mut events, MAX_EVENTS);
 
     macro_rules! hero_win {
         ($cc:expr) => {
@@ -1526,6 +1723,7 @@ pub fn simulate_combat_party(
                 hero_win!(combat_clock);
             }
         }
+        party_buffs.tick_end(combat_clock, &mut events, MAX_EVENTS);
     }
 
     let outcome = if h0 <= 0 {
@@ -1743,6 +1941,10 @@ pub fn combat_playback_frames_from_result(
                     foe_cast_b = *fc;
                     foe_cd_bar = *fcdn;
                 }
+                CombatEvent::BuffApplied { .. }
+                | CombatEvent::BuffExpired { .. }
+                | CombatEvent::BuffTick { .. }
+                | CombatEvent::BuffChargeConsumed { .. } => {}
                 CombatEvent::PartyMemberDown { .. } => {}
                 CombatEvent::EnemyDefeated | CombatEvent::HeroDefeated => {}
             },
@@ -2275,6 +2477,48 @@ mod tests {
             empowered_swing.is_some(),
             "expected Empowered Blow on a white+yellow melee hit"
         );
+    }
+
+    #[test]
+    fn phase3_initial_buff_applies_and_expires() {
+        use crate::domain::buff::{BuffApplication, BuffId};
+
+        let hero = HeroProfile::default();
+        let enemy = Enemy {
+            name: "Dummy".into(),
+            max_health: 999,
+            damage: 0,
+            armor: 0,
+            attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
+        };
+        let initial = [(
+            0_u8,
+            BuffApplication {
+                buff_id: BuffId::InnerStrength,
+                stacks: 1,
+                duration_ticks: Some(2),
+                charges: None,
+            },
+        )];
+        let r = simulate_combat_party_with_initial_buffs(
+            &hero,
+            &enemy,
+            8,
+            100,
+            None,
+            0,
+            &initial,
+        );
+        assert!(r.events.iter().any(|e| matches!(
+            e,
+            CombatEvent::BuffApplied { buff_id, .. } if *buff_id == BuffId::InnerStrength
+        )));
+        assert!(r.events.iter().any(|e| matches!(
+            e,
+            CombatEvent::BuffExpired { buff_id, .. } if *buff_id == BuffId::InnerStrength
+        )));
     }
 
     #[test]
