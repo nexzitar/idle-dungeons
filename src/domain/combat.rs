@@ -6,6 +6,7 @@ use crate::domain::skills::{
     skill_definition, skill_timings, SkillCombatStyle, SkillId, SkillKind, SkillTrigger,
 };
 use crate::domain::stats::Stats;
+use std::collections::HashMap;
 
 /// Split between auto-attack ("white") and ability ("yellow") contribution on one combat hit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2087,16 +2088,70 @@ fn empty_debuff_slots() -> [String; 4] {
     ]
 }
 
-fn debuff_slots_from_poison(hero_poison: u32, enemy_poison: u32) -> ([String; 4], [String; 4]) {
-    let mut hero = empty_debuff_slots();
+fn enemy_status_slots_from_poison(enemy_poison: u32) -> [String; 4] {
     let mut enemy = empty_debuff_slots();
     if enemy_poison > 0 {
         enemy[0] = format!("Poison ×{}", enemy_poison);
     }
-    if hero_poison > 0 {
-        hero[0] = format!("Poison ×{}", hero_poison);
+    enemy
+}
+
+fn buff_id_playback_order(id: BuffId) -> u8 {
+    match id {
+        BuffId::InnerStrength => 0,
+        BuffId::EmpoweredBlow => 1,
+        BuffId::PoisonVenom => 2,
+        BuffId::VictoryRush => 3,
     }
-    (hero, enemy)
+}
+
+fn buff_chip_label(buff_id: BuffId, stacks: u32) -> String {
+    let name = buff_display_name(buff_id);
+    let st = stacks.max(1);
+    if st > 1 {
+        format!("{name} ×{st}")
+    } else {
+        name.to_string()
+    }
+}
+
+/// Party strip: self-poison (unused today in replay) plus lead buffs, then ally-prefixed buffs (max 4 cells).
+fn hero_party_status_slots_from_buff_maps(
+    hero_self_poison: u32,
+    lead: &HashMap<BuffId, u32>,
+    ally: &HashMap<BuffId, u32>,
+) -> [String; 4] {
+    let mut slots = empty_debuff_slots();
+    let mut i = 0usize;
+    if hero_self_poison > 0 && i < 4 {
+        slots[i] = format!("Poison ×{}", hero_self_poison);
+        i += 1;
+    }
+    let mut lead_entries: Vec<(BuffId, u32)> = lead
+        .iter()
+        .map(|(&k, &v)| (k, v.max(1)))
+        .collect();
+    lead_entries.sort_by_key(|(k, _)| buff_id_playback_order(*k));
+    for (bid, st) in lead_entries {
+        if i >= 4 {
+            break;
+        }
+        slots[i] = buff_chip_label(bid, st);
+        i += 1;
+    }
+    let mut ally_entries: Vec<(BuffId, u32)> = ally
+        .iter()
+        .map(|(&k, &v)| (k, v.max(1)))
+        .collect();
+    ally_entries.sort_by_key(|(k, _)| buff_id_playback_order(*k));
+    for (bid, st) in ally_entries {
+        if i >= 4 {
+            break;
+        }
+        slots[i] = format!("Ally {}", buff_chip_label(bid, st));
+        i += 1;
+    }
+    slots
 }
 
 pub fn combat_playback_frames_from_result(
@@ -2131,7 +2186,15 @@ pub fn combat_playback_frames_from_result(
     let mut threat_slot0: Option<i32> = None;
     let mut threat_slot1: Option<i32> = None;
 
-    let (h0, e0) = debuff_slots_from_poison(hero_poison_stacks, enemy_poison_stacks);
+    let mut lead_buff_chips: HashMap<BuffId, u32> = HashMap::new();
+    let mut ally_buff_chips: HashMap<BuffId, u32> = HashMap::new();
+
+    let h0 = hero_party_status_slots_from_buff_maps(
+        hero_poison_stacks,
+        &lead_buff_chips,
+        &ally_buff_chips,
+    );
+    let e0 = enemy_status_slots_from_poison(enemy_poison_stacks);
 
     let mut d0 = 0u32;
     let mut d1 = 0u32;
@@ -2244,10 +2307,28 @@ pub fn combat_playback_frames_from_result(
                     foe_cast_b = *fc;
                     foe_cd_bar = *fcdn;
                 }
-                CombatEvent::BuffApplied { .. }
-                | CombatEvent::BuffExpired { .. }
-                | CombatEvent::BuffTick { .. }
-                | CombatEvent::BuffChargeConsumed { .. } => {}
+                CombatEvent::BuffApplied {
+                    target,
+                    buff_id,
+                    stacks,
+                    ..
+                } => {
+                    let map = if *target == 0 {
+                        &mut lead_buff_chips
+                    } else {
+                        &mut ally_buff_chips
+                    };
+                    map.insert(*buff_id, (*stacks).max(1));
+                }
+                CombatEvent::BuffExpired { target, buff_id } => {
+                    let map = if *target == 0 {
+                        &mut lead_buff_chips
+                    } else {
+                        &mut ally_buff_chips
+                    };
+                    map.remove(buff_id);
+                }
+                CombatEvent::BuffTick { .. } | CombatEvent::BuffChargeConsumed { .. } => {}
                 CombatEvent::PartyMemberDown { .. } => {}
                 CombatEvent::EnemyDefeated | CombatEvent::HeroDefeated => {}
             },
@@ -2267,7 +2348,12 @@ pub fn combat_playback_frames_from_result(
             (Some(h), Some(m)) => Some(h.clamp(0, m)),
             _ => None,
         };
-        let (hd, ed) = debuff_slots_from_poison(hero_poison_stacks, enemy_poison_stacks);
+        let hd = hero_party_status_slots_from_buff_maps(
+            hero_poison_stacks,
+            &lead_buff_chips,
+            &ally_buff_chips,
+        );
+        let ed = enemy_status_slots_from_poison(enemy_poison_stacks);
 
         let (caption, sfx_anchor) = match &step {
             PlaybackStep::Event(CombatEvent::TimingPulse { .. }) => {
@@ -2887,6 +2973,49 @@ mod tests {
             count_victory_rush_hits(&r) >= 3,
             "two spends then one recharge pulse should allow a third Rush (GCD permitting), got {}",
             count_victory_rush_hits(&r)
+        );
+    }
+
+    #[test]
+    fn playback_party_status_row_reflects_buff_applied_and_expired() {
+        let mut hero = HeroProfile::default();
+        hero.unlock_skill_slots(1);
+        hero.equip_skill(0, SkillId::EmpoweredBlow).unwrap();
+        let enemy = Enemy {
+            name: "Dummy".into(),
+            max_health: 999,
+            damage: 0,
+            armor: 0,
+            attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
+        };
+        let max_h = hero.derived_stats().max_health;
+        let result = simulate_combat(&hero, &enemy, 12, max_h);
+        let frames = combat_playback_frames_from_result(
+            &hero,
+            None,
+            &result,
+            &enemy.name,
+            max_h,
+            enemy.max_health,
+            max_h,
+            None,
+            None,
+            0,
+            0,
+            0,
+            0,
+        );
+        let has_empower_chip = frames.iter().any(|f| {
+            f.hero_debuff_slots
+                .iter()
+                .any(|s| s.contains("Empowered"))
+        });
+        assert!(
+            has_empower_chip,
+            "expected Empowered Blow chip in hero status row: {:?}",
+            frames.iter().map(|f| &f.hero_debuff_slots).collect::<Vec<_>>()
         );
     }
 

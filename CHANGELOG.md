@@ -2,6 +2,12 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.23 — 2026-05-09
+
+### UI / playback
+
+- **Party status strip:** [`combat_playback_frames_from_result`](src/domain/combat.rs) now fills [`CombatPlaybackFrame::hero_debuff_slots`](src/domain/combat.rs) from **lead** and **ally** [`BuffApplied`](src/domain/combat.rs) / [`BuffExpired`](src/domain/combat.rs) (plus existing enemy poison on the foe row).
+
 ## 0.2.22 — 2026-05-09
 
 ### Combat
