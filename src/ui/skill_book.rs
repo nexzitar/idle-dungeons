@@ -13,7 +13,7 @@ use crate::ui::components::{
     UiScrollContent, UiScrollRegion, UiScrollState, UiTooltip,
 };
 use crate::ui::placeholder_graphics::UiPlaceholderImages;
-use crate::ui::theme::{caption_text, headline_text, section_title, UiTheme};
+use crate::ui::theme::{caption_text, headline_text, section_title, skill_category_chip_colors, UiTheme};
 
 pub fn spawn_skill_book_modal(
     parent: &mut ChildSpawnerCommands<'_>,
@@ -258,6 +258,38 @@ fn spawn_pick_row(
                     ..default()
             })
             .with_children(|row| {
+                if let Some(id) = skill {
+                    let cat = skill_category(id);
+                    let (chip_bg, chip_fg) = skill_category_chip_colors(cat);
+                    row.spawn((
+                        Node {
+                            box_sizing: BoxSizing::BorderBox,
+                            min_width: Val::Px(30.0),
+                            padding: UiRect::axes(Val::Px(4.0), Val::Px(1.0)),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            flex_shrink: 0.0,
+                            border: UiRect::all(Val::Px(1.0)),
+                            ..default()
+                        },
+                        BackgroundColor(chip_bg.into()),
+                        BorderColor::from(UiTheme::panel_border_inner()),
+                    ))
+                    .with_children(|c| {
+                        c.spawn((
+                            Text::new(cat.category_abbr()),
+                            TextFont::from_font_size(UiTheme::FONT_MICRO),
+                            TextColor(chip_fg),
+                        ));
+                    });
+                } else {
+                    row.spawn((Node {
+                        box_sizing: BoxSizing::BorderBox,
+                            width: Val::Px(30.0),
+                            flex_shrink: 0.0,
+                            ..default()
+                    },));
+                }
                 row.spawn((
                     Node {
                         box_sizing: BoxSizing::BorderBox,

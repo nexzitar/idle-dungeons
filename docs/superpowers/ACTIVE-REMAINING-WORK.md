@@ -14,7 +14,7 @@
 | Initiative ordering                         | `[combat_timing](../../src/domain/combat_timing.rs)`, `[sorted_strike_actors](../../src/domain/combat_round.rs)`         |
 | Fixed-point weapon swing meters             | `[combat_meter](../../src/domain/combat_meter.rs)` + party/foe meters in `[simulate_combat_party](../../src/domain/combat.rs)` |
 | Nine-slot gear + loot budgets               | `[GearSlot](../../src/domain/items.rs)`, `[loot](../../src/domain/loot.rs)`                                              |
-| Playback timing bars                        | `[CombatPlaybackFrame](../../src/domain/combat.rs)`, theater stacks in `[mockup_layout](../../src/ui/mockup_layout.rs)`  |
+| Playback timing bars                        | `[CombatPlaybackFrame](../../src/domain/combat.rs)`, theater stacks in `[mockup_layout](../../src/ui/mockup_layout.rs)`; pack off-target foe timing row when encounter lists multiple foes (`" · "` in playback) |
 | Multi-foe pack combat (`Vec` HP, cleave)   | `[simulate_combat_party_foes](../../src/domain/combat.rs)`, `[initiative_ranks_pack](../../src/domain/combat_timing.rs)`, `[sorted_strike_pack_order](../../src/domain/combat_round.rs)`; cap `MAX_COMBAT_FOES` in `[combat.rs](../../src/domain/combat.rs)` |
 | Archetype hints (loot bias)                 | `[combat_archetype](../../src/domain/combat_archetype.rs)`, affix weights in `[loot](../../src/domain/loot.rs)`                                                                         |
 | Party threat decay / taunt pulse            | `[tick_party_threat_routing](../../src/domain/party.rs)` + calls in `[combat.rs](../../src/domain/combat.rs)`                                                                              |
@@ -28,13 +28,15 @@ Use this as a **sequence**, not parallel pillars—later waves assume earlier on
 - [x] **Wave 2 — Skill layering rules** — [`skill_layering`](../../src/domain/skill_layering.rs): layer slots + loadout warnings (Heavy vs Cleave today); tests; build panel surfaces notices. Extend the table as new mutually exclusive pairs land (§A skill layering).
 - [x] **Wave 3 — Engine hardening** — Fixed-point meters; poison scheduling decision + tests; scheduler stress / same-tick lethal tests (§B).
 - [x] **Wave 4 — Itemization & progression curve** — Nine-slot gear spread + compressed loot budgets; **Rhythm** affix (weave recovery); **encounter score** on `RunSummary`; legacy save slot aliases; §C/D alignment.
-- [x] **Wave 5 — Roles, multi-foe MVP & archetype hints** — Party **threat decay** + **taunt pulse** (transfer + burst) when partner is in tank stance; **multi-foe** packs + cleave (incl. elite **twin** rooms); **[`combat_archetype`](../../src/domain/combat_archetype.rs)** hints + **loot affix nudges** from lead loadout; treasure / guided drops use hints. *Deferred (still §E):* focus-fire-only foe targeting for heroes; multi-foe cast/CD UI for non-primary foes; symmetric lead/partner API rename.
+- [x] **Wave 5 — Roles, multi-foe MVP & archetype hints** — Party **threat decay** + **taunt pulse** (transfer + burst) when partner is in tank stance; **multi-foe** packs + cleave (incl. elite **twin** rooms); **[`combat_archetype`](../../src/domain/combat_archetype.rs)** hints + **loot affix nudges** from lead loadout; treasure / guided drops use hints. *Deferred (still §E):* focus-fire-only foe targeting for heroes; symmetric lead/partner API rename. *(§E pack cast/CD UI for non-primary foes: Wave 7.)*
 - [x] **Wave 6 — Telemetry slice** — [`RunSummary`](../../src/domain/run.rs) **strike** totals (weapon vs ability) from [`CombatEvent::HeroAttacked`](../../src/domain/combat.rs); rewards digest + modal (§F).
 
 > **Wave 6 is complete** — shipped **`idle_dungeons` v0.2.30** ([`CHANGELOG.md`](../../CHANGELOG.md)); merged as [PR #41](https://github.com/nexzitar/idle-dungeons/pull/41). If you still see an unchecked box, refresh from **`master`** — look for the **`[x]`** on the Wave 6 line above.
 
-- [ ] **Wave 7 — Presentation slice (§G, first tranche)** — **Readability-first combat UI:** stronger floating-text hierarchy (white vs ability vs crit) and less spam where [`playback_float_text_color`](../../src/ui/theme.rs) / theater captions allow; **multi-foe:** surface cast/CD or telegraph for **non-primary** foes where pack fights need it (extends §E deferral); **skill category** affordance in book/build (reuse `SkillCategory` colors or chips). *Out of Wave 7 scope:* new art assets, full animation pass, audio bank.
+- [x] **Wave 7 — Presentation slice (§G, first tranche)** — **Readability-first combat UI:** stronger floating-text hierarchy (white vs ability vs crit) and less spam where [`playback_float_text_color`](../../src/ui/theme.rs) / theater captions allow; **multi-foe:** surface cast/CD or telegraph for **non-primary** foes where pack fights need it (extends §E deferral); **skill category** affordance in book/build (reuse `SkillCategory` colors or chips). *Out of Wave 7 scope:* new art assets, full animation pass, audio bank.
 - [ ] **Wave 8+ — Audio, motion, and art** — Impact/crit/buff SFX, cadence-driven audio, pixel-art swap, anticipation/impact timing (remaining §G).
+
+> **Wave 7 is complete** — shipped **`idle_dungeons` v0.2.31** ([`CHANGELOG.md`](../../CHANGELOG.md)).
 
 **Design sections §A–§H** below remain intent-only; scope above is what ships first.
 

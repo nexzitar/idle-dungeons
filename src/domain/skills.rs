@@ -132,6 +132,19 @@ impl SkillCategory {
             SkillCategory::Proc => "Proc",
         }
     }
+
+    /// Short tag for build / skill-book chips (Wave 7).
+    pub const fn category_abbr(self) -> &'static str {
+        match self {
+            SkillCategory::BasicAttack => "Bas",
+            SkillCategory::AttackSkill => "Atk",
+            SkillCategory::Buff => "Buf",
+            SkillCategory::Reactive => "Rxn",
+            SkillCategory::Passive => "Pas",
+            SkillCategory::Channel => "Chn",
+            SkillCategory::Proc => "Prc",
+        }
+    }
 }
 
 /// Category for build UI and layering policy; derived from id + catalog fields.

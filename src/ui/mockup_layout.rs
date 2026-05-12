@@ -21,7 +21,8 @@ use crate::ui::components::{
     PlaybackDepthText, PlaybackDmgMeterEnemyFill, PlaybackDmgMeterEnemyValue,
     PlaybackDmgMeterLeadFill, PlaybackDmgMeterLeadValue, PlaybackDmgMeterPartnerFill,
     PlaybackDmgMeterPartnerRow, PlaybackDmgMeterPartnerValue, PlaybackEnemyBarFill,
-    PlaybackEnemyDebuffLine, PlaybackEnemyNameText, PlaybackEnemyPortraitBlock, PlaybackFoeCastFill,
+    PlaybackEnemyDebuffLine, PlaybackEnemyNameText, PlaybackEnemyPortraitBlock, PlaybackFoeAltCastFill,
+    PlaybackFoeAltCdFill, PlaybackFoeAltTimingRow, PlaybackFoeCastFill,
     PlaybackFoeCdFill, PlaybackHeroBarFill, PlaybackHeroDebuffLine, PlaybackLeadCastFill,
     PlaybackLeadCdFill, PlaybackLeadInstantRechargeFill, PlaybackLeadPortraitBlock,
     PlaybackLeadSkillGcdFill, PlaybackLogScrollRegion, PlaybackLogText,
@@ -1416,6 +1417,69 @@ fn playback_cast_cd_stack_ally(parent: &mut ChildSpawnerCommands<'_>) {
         });
 }
 
+fn playback_cast_cd_stack_foe_alt(parent: &mut ChildSpawnerCommands<'_>) {
+    parent
+        .spawn(Node {
+            box_sizing: BoxSizing::BorderBox,
+            width: Val::Percent(100.0),
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(2.0),
+            ..default()
+        })
+        .with_children(|col| {
+            col.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    width: Val::Percent(100.0),
+                    height: Val::Px(4.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(UiTheme::void_black().into()),
+                BorderColor::from(UiTheme::panel_border()),
+            ))
+            .with_children(|track| {
+                track.spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        width: Val::Percent(0.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(
+                        UiTheme::body_dim()
+                            .mix(&UiTheme::danger(), 0.35)
+                            .into(),
+                    ),
+                    PlaybackFoeAltCastFill,
+                ));
+            });
+            col.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    width: Val::Percent(100.0),
+                    height: Val::Px(4.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(UiTheme::void_black().into()),
+                BorderColor::from(UiTheme::panel_border()),
+            ))
+            .with_children(|track| {
+                track.spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        width: Val::Percent(0.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(UiTheme::stone_highlight().into()),
+                    PlaybackFoeAltCdFill,
+                ));
+            });
+        });
+}
+
 fn playback_cast_cd_stack_foe(parent: &mut ChildSpawnerCommands<'_>) {
     parent
         .spawn(Node {
@@ -1601,6 +1665,26 @@ fn spawn_playback_enemy_plate(parent: &mut ChildSpawnerCommands<'_>) {
             ));
             playback_enemy_bar(plate, 1.0);
             playback_cast_cd_stack_foe(plate);
+            plate
+                .spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(2.0),
+                        align_items: AlignItems::FlexEnd,
+                        ..default()
+                    },
+                    Visibility::Hidden,
+                    PlaybackFoeAltTimingRow,
+                ))
+                .with_children(|alt| {
+                    alt.spawn((
+                        Text::new("Flank"),
+                        TextFont::from_font_size(UiTheme::FONT_MICRO),
+                        TextColor(UiTheme::body_dim()),
+                    ));
+                    playback_cast_cd_stack_foe_alt(alt);
+                });
             plate.spawn((
                 crate::ui::theme::playback_debuff_line_bundle("—  ·  —  ·  —  ·  —"),
                 PlaybackEnemyDebuffLine,
