@@ -30,11 +30,25 @@ Use this as a **sequence**, not parallel pillars—later waves assume earlier on
 - [x] **Wave 4 — Itemization & progression curve** — Nine-slot gear spread + compressed loot budgets; **Rhythm** affix (weave recovery); **encounter score** on `RunSummary`; legacy save slot aliases; §C/D alignment.
 - [x] **Wave 5 — Roles, multi-foe MVP & archetype hints** — Party **threat decay** + **taunt pulse** (transfer + burst) when partner is in tank stance; **multi-foe** packs + cleave (incl. elite **twin** rooms); **[`combat_archetype`](../../src/domain/combat_archetype.rs)** hints + **loot affix nudges** from lead loadout; treasure / guided drops use hints. *Deferred (still §E):* focus-fire-only foe targeting for heroes; multi-foe cast/CD UI for non-primary foes; symmetric lead/partner API rename.
 - [x] **Wave 6 — Telemetry slice** — [`RunSummary`](../../src/domain/run.rs) **strike** totals (weapon vs ability) from [`CombatEvent::HeroAttacked`](../../src/domain/combat.rs); rewards digest + modal (§F).
-- [ ] **Wave 7+ — Presentation / audio / art** — After combat language is stable (§G).
+
+> **Wave 6 is complete** — shipped **`idle_dungeons` v0.2.30** ([`CHANGELOG.md`](../../CHANGELOG.md)); merged as [PR #41](https://github.com/nexzitar/idle-dungeons/pull/41). If you still see an unchecked box, refresh from **`master`** — look for the **`[x]`** on the Wave 6 line above.
+
+- [ ] **Wave 7 — Presentation slice (§G, first tranche)** — **Readability-first combat UI:** stronger floating-text hierarchy (white vs ability vs crit) and less spam where [`playback_float_text_color`](../../src/ui/theme.rs) / theater captions allow; **multi-foe:** surface cast/CD or telegraph for **non-primary** foes where pack fights need it (extends §E deferral); **skill category** affordance in book/build (reuse `SkillCategory` colors or chips). *Out of Wave 7 scope:* new art assets, full animation pass, audio bank.
+- [ ] **Wave 8+ — Audio, motion, and art** — Impact/crit/buff SFX, cadence-driven audio, pixel-art swap, anticipation/impact timing (remaining §G).
 
 **Design sections §A–§H** below remain intent-only; scope above is what ships first.
 
 Sections **A–G** below stay as **design intent**; track delivery with the waves above.
+
+### Wave 7 — suggested execution order (draft)
+
+1. **Trace playback → float text** — Follow combat events into the theater (e.g. [`mockup_layout`](../../src/ui/mockup_layout.rs)), [`playback_float_text_color`](../../src/ui/theme.rs), and any caption/float spawn helpers; list all code paths that emit floats today.
+2. **Floating combat text pass** — Align with §A / §G: clearer hierarchy (weapon vs ability vs crit vs DoT), optional merge/cap for spam; add or extend tests only where behavior is easy to lock (e.g. color mapping).
+3. **Multi-foe cast/CD parity** — If [`CombatPlaybackFrame`](../../src/domain/combat.rs) / timing pulses only drive one foe row, extend data + UI so secondary living foes show wind-up/recovery when it affects readability (per §E “Playback / UI parity for packs”); respect existing Bevy `Query` disjointness notes in UI code.
+4. **Skill category affordance** — Reuse [`SkillCategory`](../../src/domain/skills.rs): tint, chip, or icon column in [`skill_book`](../../src/ui/skill_book.rs) and/or [`build_panel`](../../src/ui/build_panel.rs) so taxonomy is visible at a glance.
+5. **Verify** — `cargo test`, manual playback on a seed that hits **multi-foe** (e.g. elite twin) and a long single-target fight.
+
+*(Steps 2–4 can be separate PRs; order 2 → 4 → 3 is fine if multi-foe work needs more design time.)*
 
 ---
 
