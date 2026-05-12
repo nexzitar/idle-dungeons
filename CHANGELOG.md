@@ -2,6 +2,13 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.24 — 2026-05-09
+
+### Combat / playback
+
+- **Opening frame buffs:** Pre-clock bookkeeping (`HeroHealed` / encounter [`BuffApplied`](src/domain/combat.rs) / [`BuffExpired`](src/domain/combat.rs)) is merged into the first [`CombatPlaybackFrame`](src/domain/combat.rs) and skipped in the stepped replay so encounter-seeded chips (e.g. Inner Strength) appear immediately without double-applying.
+- **Ability pacing bars:** Each [`CombatEvent::TimingPulse`](src/domain/combat.rs) and playback frame now carries **shared ability GCD** fill (Empowered Blow queue + Victory Rush lockout), **instant-strike recharge** fill, and per-slot charge counts. The run playback theater adds two thin tracks under lead and ally cast/CD stacks; foe bars use a separate sync system to satisfy Bevy `Query` disjointness.
+
 ## 0.2.23 — 2026-05-09
 
 ### UI / playback

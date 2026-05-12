@@ -16,13 +16,15 @@ use crate::save::StashSortOrder;
 use crate::ui::components::{
     GearHubOpenButton, HeroNameDisplayText,
     HeroNameEditButton, PlaybackAggroArrowLine, PlaybackAggroArrowText, PlaybackAllyCastFill,
-    PlaybackAllyCdFill, PlaybackAllyPortraitBlock, PlaybackCaptionText, PlaybackCombatLogPanel,
+    PlaybackAllyCdFill, PlaybackAllyInstantRechargeFill, PlaybackAllyPortraitBlock,
+    PlaybackAllySkillGcdFill, PlaybackCaptionText, PlaybackCombatLogPanel,
     PlaybackDepthText, PlaybackDmgMeterEnemyFill, PlaybackDmgMeterEnemyValue,
     PlaybackDmgMeterLeadFill, PlaybackDmgMeterLeadValue, PlaybackDmgMeterPartnerFill,
     PlaybackDmgMeterPartnerRow, PlaybackDmgMeterPartnerValue, PlaybackEnemyBarFill,
     PlaybackEnemyDebuffLine, PlaybackEnemyNameText, PlaybackEnemyPortraitBlock, PlaybackFoeCastFill,
     PlaybackFoeCdFill, PlaybackHeroBarFill, PlaybackHeroDebuffLine, PlaybackLeadCastFill,
-    PlaybackLeadCdFill, PlaybackLeadPortraitBlock, PlaybackLogScrollRegion, PlaybackLogText,
+    PlaybackLeadCdFill, PlaybackLeadInstantRechargeFill, PlaybackLeadPortraitBlock,
+    PlaybackLeadSkillGcdFill, PlaybackLogScrollRegion, PlaybackLogText,
     PlaybackAllyBarFill, PlaybackProgressBarFill, PlaybackProgressLabel, PlaybackRoomKindText,
     PlaybackTheaterFloatLayer, PlaybackSpeedDecButton, PlaybackSpeedIncButton,
     PlaybackSpeedValueText, SkillShopOpenButton,
@@ -1274,6 +1276,52 @@ fn playback_cast_cd_stack_lead(parent: &mut ChildSpawnerCommands<'_>) {
                     PlaybackLeadCdFill,
                 ));
             });
+            col.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    width: Val::Percent(100.0),
+                    height: Val::Px(4.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(UiTheme::void_black().into()),
+                BorderColor::from(UiTheme::panel_border()),
+            ))
+            .with_children(|track| {
+                track.spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        width: Val::Percent(0.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.52, 0.38, 0.62).into()),
+                    PlaybackLeadSkillGcdFill,
+                ));
+            });
+            col.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    width: Val::Percent(100.0),
+                    height: Val::Px(4.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(UiTheme::void_black().into()),
+                BorderColor::from(UiTheme::panel_border()),
+            ))
+            .with_children(|track| {
+                track.spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        width: Val::Percent(0.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.34, 0.52, 0.40).into()),
+                    PlaybackLeadInstantRechargeFill,
+                ));
+            });
         });
 }
 
@@ -1332,6 +1380,52 @@ fn playback_cast_cd_stack_ally(parent: &mut ChildSpawnerCommands<'_>) {
                     },
                     BackgroundColor(Color::srgb(0.22, 0.36, 0.48).into()),
                     PlaybackAllyCdFill,
+                ));
+            });
+            col.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    width: Val::Percent(100.0),
+                    height: Val::Px(4.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(UiTheme::void_black().into()),
+                BorderColor::from(UiTheme::panel_border()),
+            ))
+            .with_children(|track| {
+                track.spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        width: Val::Percent(0.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.32, 0.48, 0.62).into()),
+                    PlaybackAllySkillGcdFill,
+                ));
+            });
+            col.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    width: Val::Percent(100.0),
+                    height: Val::Px(4.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(UiTheme::void_black().into()),
+                BorderColor::from(UiTheme::panel_border()),
+            ))
+            .with_children(|track| {
+                track.spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        width: Val::Percent(0.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.28, 0.55, 0.45).into()),
+                    PlaybackAllyInstantRechargeFill,
                 ));
             });
         });
