@@ -18,6 +18,7 @@
 | Multi-foe pack combat (`Vec` HP, cleave)   | `[simulate_combat_party_foes](../../src/domain/combat.rs)`, `[initiative_ranks_pack](../../src/domain/combat_timing.rs)`, `[sorted_strike_pack_order](../../src/domain/combat_round.rs)`; cap `MAX_COMBAT_FOES` in `[combat.rs](../../src/domain/combat.rs)` |
 | Archetype hints (loot bias)                 | `[combat_archetype](../../src/domain/combat_archetype.rs)`, affix weights in `[loot](../../src/domain/loot.rs)`                                                                         |
 | Party threat decay / taunt pulse            | `[tick_party_threat_routing](../../src/domain/party.rs)` + calls in `[combat.rs](../../src/domain/combat.rs)`                                                                              |
+| Run strike telemetry (white vs ability)     | `[party_strike_damage_white_yellow](../../src/domain/combat.rs)` on [`RunSummary`](../../src/domain/run.rs) |
 
 ## Prioritized execution waves (check off in PRs)
 
@@ -28,7 +29,7 @@ Use this as a **sequence**, not parallel pillars—later waves assume earlier on
 - [x] **Wave 3 — Engine hardening** — Fixed-point meters; poison scheduling decision + tests; scheduler stress / same-tick lethal tests (§B).
 - [x] **Wave 4 — Itemization & progression curve** — Nine-slot gear spread + compressed loot budgets; **Rhythm** affix (weave recovery); **encounter score** on `RunSummary`; legacy save slot aliases; §C/D alignment.
 - [x] **Wave 5 — Roles, multi-foe MVP & archetype hints** — Party **threat decay** + **taunt pulse** (transfer + burst) when partner is in tank stance; **multi-foe** packs + cleave (incl. elite **twin** rooms); **[`combat_archetype`](../../src/domain/combat_archetype.rs)** hints + **loot affix nudges** from lead loadout; treasure / guided drops use hints. *Deferred (still §E):* focus-fire-only foe targeting for heroes; multi-foe cast/CD UI for non-primary foes; symmetric lead/partner API rename.
-- [ ] **Wave 6 — Telemetry slice** — One run summary metric (e.g. white vs ability damage %) from existing events (§F).
+- [x] **Wave 6 — Telemetry slice** — [`RunSummary`](../../src/domain/run.rs) **strike** totals (weapon vs ability) from [`CombatEvent::HeroAttacked`](../../src/domain/combat.rs); rewards digest + modal (§F).
 - [ ] **Wave 7+ — Presentation / audio / art** — After combat language is stable (§G).
 
 **Design sections §A–§H** below remain intent-only; scope above is what ships first.

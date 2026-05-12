@@ -29,6 +29,32 @@ impl HeroStrikeDamage {
     }
 }
 
+/// Sums white (weapon/basic) vs yellow (ability) damage from party [`CombatEvent::HeroAttacked`]
+/// primary hits and cleave splashes. Ignores DoT, thorns, and other non-strike events.
+pub fn party_strike_damage_white_yellow(events: &[CombatEvent]) -> (u64, u64) {
+    let mut white = 0u64;
+    let mut yellow = 0u64;
+    for e in events {
+        let CombatEvent::HeroAttacked {
+            strike,
+            cleave_strikes,
+            ..
+        } = e
+        else {
+            continue;
+        };
+        let w = strike.white.max(0) as u64;
+        let y = strike.yellow.max(0) as u64;
+        white = white.saturating_add(w);
+        yellow = yellow.saturating_add(y);
+        for (_, c) in cleave_strikes {
+            white = white.saturating_add(c.white.max(0) as u64);
+            yellow = yellow.saturating_add(c.yellow.max(0) as u64);
+        }
+    }
+    (white, yellow)
+}
+
 /// Early exit from multi-pass swing resolution inside `simulate_combat_party`.
 #[derive(Debug, Clone, Copy)]
 enum CombatBreak {
@@ -4262,6 +4288,28 @@ mod tests {
     use crate::domain::items::{GearSlot, ItemAffix, ItemInstance};
     use crate::domain::skills::SkillId;
     use crate::domain::stats::Stats;
+
+    #[test]
+    fn party_strike_damage_white_yellow_sums_primary_and_cleave() {
+        let events = vec![CombatEvent::HeroAttacked {
+            attacker: 0,
+            strike: HeroStrikeDamage {
+                white: 10,
+                yellow: 5,
+                yellow_source_skill: None,
+            },
+            foe_primary: 0,
+            cleave_strikes: vec![(
+                1,
+                HeroStrikeDamage {
+                    white: 2,
+                    yellow: 3,
+                    yellow_source_skill: None,
+                },
+            )],
+        }];
+        assert_eq!(party_strike_damage_white_yellow(&events), (12, 8));
+    }
 
     #[test]
     fn pick_party_enemy_no_partner_is_always_lead() {

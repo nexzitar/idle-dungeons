@@ -1,6 +1,6 @@
 use crate::domain::combat::{
-    combat_playback_frames_from_result, simulate_party_vs_encounter_foes, CombatOutcome,
-    CombatPlaybackFrame, CombatSimOptions,
+    combat_playback_frames_from_result, party_strike_damage_white_yellow,
+    simulate_party_vs_encounter_foes, CombatOutcome, CombatPlaybackFrame, CombatSimOptions,
 };
 use crate::domain::combat_timing::encounter_initiative_seed;
 use crate::domain::dungeon::{
@@ -68,6 +68,32 @@ pub struct RunSummary {
     /// Weighted progression score from encounters cleared (Wave 4 experiment; not yet spendable currency).
     #[serde(default)]
     pub encounter_score: u64,
+    /// Party **strike** damage to foes: weapon/basic (white) from [`crate::domain::combat::CombatEvent::HeroAttacked`].
+    #[serde(default)]
+    pub party_strike_damage_white: u64,
+    /// Party **strike** damage to foes: ability (yellow) from [`crate::domain::combat::CombatEvent::HeroAttacked`].
+    #[serde(default)]
+    pub party_strike_damage_yellow: u64,
+}
+
+impl RunSummary {
+    /// Percent of strike damage that was ability (yellow), **0–100**. `None` if there was no strike damage.
+    pub fn strike_ability_share_percent(&self) -> Option<u32> {
+        let den = self
+            .party_strike_damage_white
+            .saturating_add(self.party_strike_damage_yellow);
+        if den == 0 {
+            None
+        } else {
+            Some(
+                (self
+                    .party_strike_damage_yellow
+                    .saturating_mul(100)
+                    / den)
+                .min(100) as u32,
+            )
+        }
+    }
 }
 
 fn default_summary_dungeon_cap() -> u32 {
@@ -183,6 +209,8 @@ fn simulate_run_with_playback_for_rooms(
     let mut run_dmg_meter_1 = 0u32;
     let mut run_dmg_meter_foe = 0u32;
     let mut run_sim_ticks_total = 0u32;
+    let mut run_strike_white = 0u64;
+    let mut run_strike_yellow = 0u64;
     let lead_archetype_hints = hints_for_hero(lead);
 
     for room in rooms {
@@ -213,6 +241,8 @@ fn simulate_run_with_playback_for_rooms(
                             guided_early_combat_drop_granted:
                                 guided_early_combat_drop_granted_this_run,
                             encounter_score,
+                            party_strike_damage_white: run_strike_white,
+                            party_strike_damage_yellow: run_strike_yellow,
                         },
                         playback,
                     };
@@ -239,6 +269,9 @@ fn simulate_run_with_playback_for_rooms(
                     &[],
                     CombatSimOptions::default(),
                 );
+                let (w_add, y_add) = party_strike_damage_white_yellow(&combat.events);
+                run_strike_white = run_strike_white.saturating_add(w_add);
+                run_strike_yellow = run_strike_yellow.saturating_add(y_add);
                 for frame in combat_playback_frames_from_result(
                     lead,
                     party_partner,
@@ -342,6 +375,8 @@ fn simulate_run_with_playback_for_rooms(
                                     guided_early_combat_drop_granted:
                                         guided_early_combat_drop_granted_this_run,
                                     encounter_score,
+                                    party_strike_damage_white: run_strike_white,
+                                    party_strike_damage_yellow: run_strike_yellow,
                                 },
                                 playback,
                             };
@@ -364,6 +399,8 @@ fn simulate_run_with_playback_for_rooms(
                                 guided_early_combat_drop_granted:
                                     guided_early_combat_drop_granted_this_run,
                                 encounter_score,
+                                party_strike_damage_white: run_strike_white,
+                                party_strike_damage_yellow: run_strike_yellow,
                             },
                             playback,
                         };
@@ -426,6 +463,8 @@ fn simulate_run_with_playback_for_rooms(
             peak_risk_note: peak_risk_note(peak_risk_rank),
             guided_early_combat_drop_granted: guided_early_combat_drop_granted_this_run,
             encounter_score,
+            party_strike_damage_white: run_strike_white,
+            party_strike_damage_yellow: run_strike_yellow,
         },
         playback,
     }
@@ -468,5 +507,30 @@ mod tests {
             .log
             .iter()
             .any(|line| line.contains("aborted") && line.contains("encounter")));
+    }
+
+    #[test]
+    fn strike_damage_totals_accumulate_and_are_deterministic() {
+        let hero = HeroProfile::default();
+        let config = RunConfig::new(5, 12);
+        let a = simulate_run_with_playback(&hero, None, config);
+        let b = simulate_run_with_playback(&hero, None, config);
+        assert_eq!(
+            (
+                a.summary.party_strike_damage_white,
+                a.summary.party_strike_damage_yellow
+            ),
+            (
+                b.summary.party_strike_damage_white,
+                b.summary.party_strike_damage_yellow
+            )
+        );
+        assert!(
+            a.summary.party_strike_damage_white > 0
+                || a.summary.party_strike_damage_yellow > 0,
+            "expected some strike damage over a multi-room run"
+        );
+        let pct = a.summary.strike_ability_share_percent().expect("share");
+        assert!(pct <= 100);
     }
 }
