@@ -34,8 +34,9 @@ use crate::ui::components::{
     PlaybackDmgMeterLeadValue, PlaybackDmgMeterPartnerFill, PlaybackDmgMeterPartnerRow,
     PlaybackDmgMeterPartnerValue, PlaybackEnemyBarFill, PlaybackEnemyDebuffLine,
     PlaybackEnemyNameText, PlaybackEnemyPortraitBlock, PlaybackHeroBarFill, PlaybackAllyBarFill,
-    PlaybackAllyCastFill, PlaybackAllyCdFill, PlaybackLeadCastFill, PlaybackLeadCdFill,
-    PlaybackFoeCastFill, PlaybackFoeCdFill,
+    PlaybackAllyCastFill, PlaybackAllyCdFill, PlaybackAllyInstantRechargeFill,
+    PlaybackAllySkillGcdFill, PlaybackLeadCastFill, PlaybackLeadCdFill,
+    PlaybackLeadInstantRechargeFill, PlaybackLeadSkillGcdFill, PlaybackFoeCastFill, PlaybackFoeCdFill,
     PlaybackHeroDebuffLine, PlaybackLogScrollRegion, PlaybackLogText, PlaybackProgressBarFill,
     PlaybackProgressLabel, PlaybackRoomKindText, PlaybackTheaterFloatLayer, ResetProgressButton,
     RunPlaybackScreen, SalvageItemButton, SettingsButton, SettingsModalBackdrop,
@@ -173,7 +174,10 @@ impl Plugin for UiPlugin {
                     tick_campfire_flames.run_if(in_state(GameState::Title)),
                     sync_hero_name_labels,
                     sync_run_playback_ui.run_if(in_state(GameState::Running)),
-                    sync_playback_cast_bars
+                    sync_playback_cast_bars_party
+                        .run_if(in_state(GameState::Running))
+                        .after(sync_run_playback_ui),
+                    sync_playback_cast_bars_foe
                         .run_if(in_state(GameState::Running))
                         .after(sync_run_playback_ui),
                     sync_run_playback_party_bars
@@ -1774,15 +1778,17 @@ fn sync_run_playback_ui(
     }
 }
 
-fn sync_playback_cast_bars(
+fn sync_playback_cast_bars_party(
     playback: Res<ActiveRunPlayback>,
     mut params: ParamSet<(
         Query<&mut Node, With<PlaybackLeadCastFill>>,
         Query<&mut Node, With<PlaybackLeadCdFill>>,
+        Query<&mut Node, With<PlaybackLeadSkillGcdFill>>,
+        Query<&mut Node, With<PlaybackLeadInstantRechargeFill>>,
         Query<&mut Node, With<PlaybackAllyCastFill>>,
         Query<&mut Node, With<PlaybackAllyCdFill>>,
-        Query<&mut Node, With<PlaybackFoeCastFill>>,
-        Query<&mut Node, With<PlaybackFoeCdFill>>,
+        Query<&mut Node, With<PlaybackAllySkillGcdFill>>,
+        Query<&mut Node, With<PlaybackAllyInstantRechargeFill>>,
     )>,
 ) {
     if playback.frames.is_empty() {
@@ -1795,10 +1801,12 @@ fn sync_playback_cast_bars(
     };
     let lc = Val::Percent((c.lead_cast * 100.0).clamp(0.0, 100.0));
     let lcdn = Val::Percent((c.lead_cd * 100.0).clamp(0.0, 100.0));
+    let lsg = Val::Percent((c.lead_skill_gcd * 100.0).clamp(0.0, 100.0));
+    let lir = Val::Percent((c.lead_instant_recharge * 100.0).clamp(0.0, 100.0));
     let ac = Val::Percent((c.ally_cast * 100.0).clamp(0.0, 100.0));
     let acdn = Val::Percent((c.ally_cd * 100.0).clamp(0.0, 100.0));
-    let fc = Val::Percent((c.foe_cast * 100.0).clamp(0.0, 100.0));
-    let fcdn = Val::Percent((c.foe_cd * 100.0).clamp(0.0, 100.0));
+    let asg = Val::Percent((c.ally_skill_gcd * 100.0).clamp(0.0, 100.0));
+    let air = Val::Percent((c.ally_instant_recharge * 100.0).clamp(0.0, 100.0));
     for mut n in params.p0().iter_mut() {
         n.width = lc;
     }
@@ -1806,15 +1814,46 @@ fn sync_playback_cast_bars(
         n.width = lcdn;
     }
     for mut n in params.p2().iter_mut() {
-        n.width = ac;
+        n.width = lsg;
     }
     for mut n in params.p3().iter_mut() {
-        n.width = acdn;
+        n.width = lir;
     }
     for mut n in params.p4().iter_mut() {
-        n.width = fc;
+        n.width = ac;
     }
     for mut n in params.p5().iter_mut() {
+        n.width = acdn;
+    }
+    for mut n in params.p6().iter_mut() {
+        n.width = asg;
+    }
+    for mut n in params.p7().iter_mut() {
+        n.width = air;
+    }
+}
+
+fn sync_playback_cast_bars_foe(
+    playback: Res<ActiveRunPlayback>,
+    mut params: ParamSet<(
+        Query<&mut Node, With<PlaybackFoeCastFill>>,
+        Query<&mut Node, With<PlaybackFoeCdFill>>,
+    )>,
+) {
+    if playback.frames.is_empty() {
+        return;
+    }
+    let idx = playback.display_index.min(playback.frames.len() - 1);
+    let f = &playback.frames[idx];
+    let crate::domain::run::RunPlaybackFrameKind::Combat(c) = &f.kind else {
+        return;
+    };
+    let fc = Val::Percent((c.foe_cast * 100.0).clamp(0.0, 100.0));
+    let fcdn = Val::Percent((c.foe_cd * 100.0).clamp(0.0, 100.0));
+    for mut n in params.p0().iter_mut() {
+        n.width = fc;
+    }
+    for mut n in params.p1().iter_mut() {
         n.width = fcdn;
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "idle_dungeons"
-version = "0.2.22"
+version = "0.2.24"
 edition = "2021"
 
 [dependencies]

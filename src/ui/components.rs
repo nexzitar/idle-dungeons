@@ -212,10 +212,22 @@ pub struct PlaybackLeadCastFill;
 pub struct PlaybackLeadCdFill;
 
 #[derive(Component)]
+pub struct PlaybackLeadSkillGcdFill;
+
+#[derive(Component)]
+pub struct PlaybackLeadInstantRechargeFill;
+
+#[derive(Component)]
 pub struct PlaybackAllyCastFill;
 
 #[derive(Component)]
 pub struct PlaybackAllyCdFill;
+
+#[derive(Component)]
+pub struct PlaybackAllySkillGcdFill;
+
+#[derive(Component)]
+pub struct PlaybackAllyInstantRechargeFill;
 
 #[derive(Component)]
 pub struct PlaybackFoeCastFill;

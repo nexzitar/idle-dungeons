@@ -135,6 +135,7 @@ Introduce **`SkillCategory`** (names indicative):
 ## Phase 5 — Combat readability
 
 - **UI:** skill highlight, CD overlay, buff row, status icons — fed by **events** + **final state snapshots** per tick.
+- **Playback row:** the run status strip merges **enemy poison** plus **lead / ally** buff chips reconstructed from [`BuffApplied`](../../../src/domain/combat.rs) / [`BuffExpired`](../../../src/domain/combat.rs) (see [`combat_playback_frames_from_result`](../../../src/domain/combat.rs)).
 - Logs supplement visuals, not replace them.
 
 ---
