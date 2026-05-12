@@ -9,6 +9,11 @@ use crate::domain::skills::{
 use crate::domain::stats::Stats;
 use std::collections::HashMap;
 
+/// Max foe HP pools (and foe initiative actors) in one engagement.
+pub const MAX_COMBAT_FOES: usize = 16;
+/// Max party heroes in one engagement (future API: only 1–2 wired today).
+pub const MAX_COMBAT_PARTY: usize = 4;
+
 /// Split between auto-attack ("white") and ability ("yellow") contribution on one combat hit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HeroStrikeDamage {
@@ -44,11 +49,17 @@ pub enum CombatEvent {
     HeroAttacked {
         attacker: u8,
         strike: HeroStrikeDamage,
+        /// Foe index (`0` = primary pack member) that received [`Self::HeroAttacked::strike`].
+        foe_primary: u8,
+        /// [`SkillId::Cleave`] (and similar) splash damage per additional living foe: `(foe_index, strike)`.
+        cleave_strikes: Vec<(u8, HeroStrikeDamage)>,
     },
     /// Poison at end of clock iteration. `stacks` is potency **before** this tick (and before decrement).
     PoisonTick {
         damage: i32,
         stacks: u32,
+        /// Which enemy HP pool the DoT tick consumes.
+        foe_index: u8,
     },
     /// `target` 0 = lead hero, 1 = party partner ([`HeroProfile`]).
     EnemyAttacked {
@@ -57,6 +68,8 @@ pub enum CombatEvent {
     },
     ThornsReflect {
         damage: i32,
+        /// Foe that took thorns damage (the one that struck).
+        foe_index: u8,
     },
     /// `target` 0 = lead, 1 = partner.
     HeroHealed {
@@ -87,7 +100,10 @@ pub enum CombatEvent {
         ally_instant_charges: u8,
         ally_instant_max_charges: u8,
     },
-    EnemyDefeated,
+    EnemyDefeated {
+        /// `0` = first foe, `1` = second foe when applicable.
+        foe_index: u8,
+    },
     /// Party member defeated (currently slot `1` = partner). Lead uses [`HeroDefeated`].
     PartyMemberDown {
         party_index: u8,
@@ -119,9 +135,14 @@ pub enum CombatEvent {
 
 fn combat_event_caption(event: &CombatEvent, partner_name: Option<&str>) -> String {
     match event {
-        CombatEvent::HeroAttacked { attacker, strike } => {
+        CombatEvent::HeroAttacked {
+            attacker,
+            strike,
+            cleave_strikes,
+            ..
+        } => {
             let total = strike.total();
-            if strike.yellow == 0 {
+            let mut base = if strike.yellow == 0 {
                 if *attacker == 0 {
                     format!("You strike for {total} damage.")
                 } else if let Some(n) = partner_name {
@@ -152,10 +173,16 @@ fn combat_event_caption(event: &CombatEvent, partner_name: Option<&str>) -> Stri
                     "Partner strikes for {} white and {} ability ({} total).",
                     strike.white, strike.yellow, total
                 )
+            };
+            for (fi, c) in cleave_strikes {
+                let ct = c.total();
+                base.push_str(&format!(" Cleave hits foe {} for {ct}.", *fi + 1));
             }
+            base
         }
-        CombatEvent::PoisonTick { damage, stacks } => {
-            format!("Poison deals {} damage ({} stacks).", damage, stacks)
+        CombatEvent::PoisonTick { damage, stacks, foe_index } => {
+            let tag = if *foe_index == 1 { " (flank)" } else { "" };
+            format!("Poison deals {} damage ({} stacks){tag}.", damage, stacks)
         }
         CombatEvent::EnemyAttacked { target, damage } => {
             if *target == 0 {
@@ -166,7 +193,7 @@ fn combat_event_caption(event: &CombatEvent, partner_name: Option<&str>) -> Stri
                 format!("The foe hits your partner for {damage} damage.")
             }
         }
-        CombatEvent::ThornsReflect { damage } => {
+        CombatEvent::ThornsReflect { damage, .. } => {
             format!("Thorns bite back for {} damage.", damage)
         }
         CombatEvent::HeroHealed { target, amount } => {
@@ -183,7 +210,13 @@ fn combat_event_caption(event: &CombatEvent, partner_name: Option<&str>) -> Stri
             format!("Threat · You {slot0} · {p1} {slot1}")
         }
         CombatEvent::TimingPulse { .. } => String::new(),
-        CombatEvent::EnemyDefeated => "Enemy defeated.".to_string(),
+        CombatEvent::EnemyDefeated { foe_index } => {
+            if *foe_index == 1 {
+                "A second foe falls.".to_string()
+            } else {
+                "Enemy defeated.".to_string()
+            }
+        }
         CombatEvent::PartyMemberDown { party_index } => {
             if *party_index == 1 {
                 if let Some(n) = partner_name {
@@ -283,7 +316,7 @@ fn sfx_anchor_for_event(event: &CombatEvent) -> CombatSfxAnchor {
         CombatEvent::HeroHealed { .. } => CombatSfxAnchor::Lead,
         CombatEvent::ThreatSnapshot { .. } => CombatSfxAnchor::Neutral,
         CombatEvent::TimingPulse { .. } => CombatSfxAnchor::Neutral,
-        CombatEvent::EnemyDefeated => CombatSfxAnchor::Enemy,
+        CombatEvent::EnemyDefeated { .. } => CombatSfxAnchor::Enemy,
         CombatEvent::PartyMemberDown { .. } => CombatSfxAnchor::Ally,
         CombatEvent::HeroDefeated => CombatSfxAnchor::Lead,
         CombatEvent::BuffApplied { target: 0, .. } => CombatSfxAnchor::Lead,
@@ -323,6 +356,7 @@ enum PlaybackStep {
         total_damage: i32,
         tick_count: u32,
         stacks_before_last: u32,
+        foe_index: u8,
     },
 }
 
@@ -416,17 +450,27 @@ fn flatten_playback_steps(events: &[CombatEvent]) -> Vec<PlaybackStep> {
     let mut out = Vec::new();
     let mut i = 0usize;
     while i < events.len() {
-        if let CombatEvent::PoisonTick { damage, stacks } = events[i] {
+        if let CombatEvent::PoisonTick {
+            damage,
+            stacks,
+            foe_index,
+        } = events[i]
+        {
             let mut total_damage = damage;
             let mut tick_count = 1u32;
             let mut stacks_before_last = stacks;
+            let merge_foe = foe_index;
             i += 1;
             while i < events.len() {
                 if let CombatEvent::PoisonTick {
                     damage: d2,
                     stacks: s2,
+                    foe_index: fi2,
                 } = events[i]
                 {
+                    if fi2 != merge_foe {
+                        break;
+                    }
                     total_damage += d2;
                     tick_count += 1;
                     stacks_before_last = s2;
@@ -439,6 +483,7 @@ fn flatten_playback_steps(events: &[CombatEvent]) -> Vec<PlaybackStep> {
                 total_damage,
                 tick_count,
                 stacks_before_last,
+                foe_index: merge_foe,
             });
         } else {
             out.push(PlaybackStep::Event(events[i].clone()));
@@ -505,7 +550,8 @@ pub struct CombatResult {
     /// Second party hero (slot 1) when present.
     pub partner_health: Option<i32>,
     pub partner_max_health: Option<i32>,
-    pub enemy_health: i32,
+    /// Remaining HP per foe index (`0..` during combat), same length as the encounter's foe list.
+    pub foe_healths: Vec<i32>,
     /// Combat-simulation clock steps executed (upper bound slice length in [`simulate_combat_party`]).
     pub clock_ticks: u32,
     pub events: Vec<CombatEvent>,
@@ -897,6 +943,8 @@ fn lead_weapon_pass(
             events.push(CombatEvent::HeroAttacked {
                 attacker: 0,
                 strike,
+                foe_primary: 0,
+                cleave_strikes: vec![],
             });
             *h0_vr_charges = h0_vr_charges.saturating_sub(1);
             if events.len() < max_events {
@@ -919,7 +967,7 @@ fn lead_weapon_pass(
                 h0_vr_recharge_left,
             );
             if *enemy_health <= 0 {
-                events.push(CombatEvent::EnemyDefeated);
+                events.push(CombatEvent::EnemyDefeated { foe_index: 0 });
                 maybe_devourer_heal_on_kill(lead, h0, p0.max_h, events);
                 return (Some(CombatBreak::HeroWin), true);
             }
@@ -950,6 +998,8 @@ fn lead_weapon_pass(
             events.push(CombatEvent::HeroAttacked {
                 attacker: 0,
                 strike,
+                foe_primary: 0,
+                cleave_strikes: vec![],
             });
             if has_partner {
                 threat[0] = threat[0].saturating_add(hero_damage);
@@ -960,7 +1010,7 @@ fn lead_weapon_pass(
                 *poison_stacks = (*poison_stacks + inc).min(40);
             }
             if *enemy_health <= 0 {
-                events.push(CombatEvent::EnemyDefeated);
+                events.push(CombatEvent::EnemyDefeated { foe_index: 0 });
                 maybe_devourer_heal_on_kill(lead, h0, p0.max_h, events);
                 return (Some(CombatBreak::HeroWin), true);
             }
@@ -990,6 +1040,8 @@ fn lead_weapon_pass(
                 events.push(CombatEvent::HeroAttacked {
                     attacker: 0,
                     strike,
+                    foe_primary: 0,
+                    cleave_strikes: vec![],
                 });
                 if has_partner {
                     threat[0] = threat[0].saturating_add(hero_damage);
@@ -1001,7 +1053,7 @@ fn lead_weapon_pass(
                 }
                 *h0_cd_left = p0.attack_cd_total;
                 if *enemy_health <= 0 {
-                    events.push(CombatEvent::EnemyDefeated);
+                    events.push(CombatEvent::EnemyDefeated { foe_index: 0 });
                     maybe_devourer_heal_on_kill(lead, h0, p0.max_h, events);
                     return (Some(CombatBreak::HeroWin), true);
                 }
@@ -1031,6 +1083,8 @@ fn lead_weapon_pass(
                 events.push(CombatEvent::HeroAttacked {
                     attacker: 0,
                     strike,
+                    foe_primary: 0,
+                    cleave_strikes: vec![],
                 });
                 if has_partner {
                     threat[0] = threat[0].saturating_add(hero_damage);
@@ -1042,7 +1096,7 @@ fn lead_weapon_pass(
                 }
                 *h0_cd_left = p0.attack_cd_total;
                 if *enemy_health <= 0 {
-                    events.push(CombatEvent::EnemyDefeated);
+                    events.push(CombatEvent::EnemyDefeated { foe_index: 0 });
                     maybe_devourer_heal_on_kill(lead, h0, p0.max_h, events);
                     return (Some(CombatBreak::HeroWin), true);
                 }
@@ -1087,6 +1141,8 @@ fn partner_weapon_pass(
             events.push(CombatEvent::HeroAttacked {
                 attacker: 1,
                 strike,
+                foe_primary: 0,
+                cleave_strikes: vec![],
             });
             *h1_vr_charges = h1_vr_charges.saturating_sub(1);
             if events.len() < max_events {
@@ -1107,7 +1163,7 @@ fn partner_weapon_pass(
                 h1_vr_recharge_left,
             );
             if *enemy_health <= 0 {
-                events.push(CombatEvent::EnemyDefeated);
+                events.push(CombatEvent::EnemyDefeated { foe_index: 0 });
                 maybe_devourer_heal_on_kill(partner, h1, p1prep.max_h, events);
                 return (Some(CombatBreak::HeroWin), true);
             }
@@ -1138,6 +1194,8 @@ fn partner_weapon_pass(
             events.push(CombatEvent::HeroAttacked {
                 attacker: 1,
                 strike,
+                foe_primary: 0,
+                cleave_strikes: vec![],
             });
             threat[1] = threat[1].saturating_add(hero_damage);
             apply_lifesteal(p1prep, hero_damage, h1, p1prep.max_h, 1, events);
@@ -1146,7 +1204,7 @@ fn partner_weapon_pass(
                 *poison_stacks = (*poison_stacks + inc).min(40);
             }
             if *enemy_health <= 0 {
-                events.push(CombatEvent::EnemyDefeated);
+                events.push(CombatEvent::EnemyDefeated { foe_index: 0 });
                 maybe_devourer_heal_on_kill(partner, h1, p1prep.max_h, events);
                 return (Some(CombatBreak::HeroWin), true);
             }
@@ -1176,6 +1234,8 @@ fn partner_weapon_pass(
                 events.push(CombatEvent::HeroAttacked {
                     attacker: 1,
                     strike,
+                    foe_primary: 0,
+                    cleave_strikes: vec![],
                 });
                 threat[1] = threat[1].saturating_add(hero_damage);
                 apply_lifesteal(p1prep, hero_damage, h1, p1prep.max_h, 1, events);
@@ -1185,7 +1245,7 @@ fn partner_weapon_pass(
                 }
                 *h1_cd_left = p1prep.attack_cd_total;
                 if *enemy_health <= 0 {
-                    events.push(CombatEvent::EnemyDefeated);
+                    events.push(CombatEvent::EnemyDefeated { foe_index: 0 });
                     maybe_devourer_heal_on_kill(partner, h1, p1prep.max_h, events);
                     return (Some(CombatBreak::HeroWin), true);
                 }
@@ -1215,6 +1275,8 @@ fn partner_weapon_pass(
                 events.push(CombatEvent::HeroAttacked {
                     attacker: 1,
                     strike,
+                    foe_primary: 0,
+                    cleave_strikes: vec![],
                 });
                 threat[1] = threat[1].saturating_add(hero_damage);
                 apply_lifesteal(p1prep, hero_damage, h1, p1prep.max_h, 1, events);
@@ -1224,7 +1286,7 @@ fn partner_weapon_pass(
                 }
                 *h1_cd_left = p1prep.attack_cd_total;
                 if *enemy_health <= 0 {
-                    events.push(CombatEvent::EnemyDefeated);
+                    events.push(CombatEvent::EnemyDefeated { foe_index: 0 });
                     maybe_devourer_heal_on_kill(partner, h1, p1prep.max_h, events);
                     return (Some(CombatBreak::HeroWin), true);
                 }
@@ -1290,9 +1352,12 @@ fn resolve_foe_melee_hit(
             reflect = (hp_loss / 2).max(1);
         }
         *enemy_health -= reflect;
-        events.push(CombatEvent::ThornsReflect { damage: reflect });
+        events.push(CombatEvent::ThornsReflect {
+            damage: reflect,
+            foe_index: 0,
+        });
         if *enemy_health <= 0 {
-            events.push(CombatEvent::EnemyDefeated);
+            events.push(CombatEvent::EnemyDefeated { foe_index: 0 });
             maybe_devourer_heal_on_kill(lead, h0, p0.max_h, events);
             return Some(CombatBreak::HeroWin);
         }
@@ -1306,6 +1371,864 @@ fn resolve_foe_melee_hit(
         return Some(CombatBreak::EnemyWin);
     }
     None
+}
+
+#[inline]
+fn all_foes_dead(h: &[i32]) -> bool {
+    h.iter().all(|&x| x <= 0)
+}
+
+#[inline]
+fn any_foe_alive_slice(h: &[i32]) -> bool {
+    h.iter().any(|&x| x > 0)
+}
+
+/// Focus fire: lowest index with HP > 0 while any foe lives.
+#[inline]
+fn focus_fire_primary_idx_slice(h: &[i32]) -> usize {
+    h.iter().position(|&x| x > 0).unwrap_or(0)
+}
+
+fn scan_new_foe_deaths(
+    enemy_health: &[i32],
+    foe_slain_logged: &mut [bool],
+    events: &mut Vec<CombatEvent>,
+    max_events: usize,
+    heal_profile: &HeroProfile,
+    heal_hp: &mut i32,
+    heal_max: i32,
+) -> Option<CombatBreak> {
+    for idx in 0..enemy_health.len() {
+        if enemy_health[idx] <= 0 && idx < foe_slain_logged.len() && !foe_slain_logged[idx] {
+            foe_slain_logged[idx] = true;
+            if events.len() < max_events {
+                events.push(CombatEvent::EnemyDefeated {
+                    foe_index: idx as u8,
+                });
+            }
+            maybe_devourer_heal_on_kill(heal_profile, heal_hp, heal_max, events);
+            if all_foes_dead(enemy_health) {
+                return Some(CombatBreak::HeroWin);
+            }
+        }
+    }
+    None
+}
+
+fn resolve_foe_melee_hit_dual(
+    enemy: &Enemy,
+    foe_index: u8,
+    target: u8,
+    p0: &PreparedHero,
+    p1prep: Option<&PreparedHero>,
+    h0: &mut i32,
+    h1: &mut i32,
+    enemy_health: &mut [i32],
+    threat: &mut [i32; 2],
+    barrier: &mut [i32; 2],
+    last_enemy_target: &mut Option<u8>,
+    has_partner: bool,
+    events: &mut Vec<CombatEvent>,
+    max_events: usize,
+    lead: &HeroProfile,
+    foe_slain_logged: &mut [bool],
+) -> Option<CombatBreak> {
+    *last_enemy_target = Some(target);
+    let prep_t = match target {
+        0 => p0,
+        _ => p1prep.expect("foe targeted partner without partner"),
+    };
+    let mut enemy_damage = (enemy.damage - prep_t.stats.armor).max(1);
+    if prep_t.has_guard {
+        enemy_damage = (enemy_damage - prep_t.guard_flat).max(1);
+    }
+    let bi = target as usize;
+    let absorbed = enemy_damage.min(barrier[bi]);
+    barrier[bi] -= absorbed;
+    let hp_loss = enemy_damage - absorbed;
+    if target == 0 {
+        *h0 -= hp_loss;
+    } else {
+        *h1 -= hp_loss;
+    }
+    threat[target as usize] = threat[target as usize].saturating_add(hp_loss);
+    events.push(CombatEvent::EnemyAttacked {
+        target,
+        damage: hp_loss,
+    });
+    if has_partner && *h0 > 0 && *h1 > 0 && events.len() < max_events {
+        events.push(CombatEvent::ThreatSnapshot {
+            slot0: threat[0],
+            slot1: threat[1],
+        });
+    }
+    let fi = foe_index as usize;
+    if prep_t.has_thorns && hp_loss > 0 {
+        let mut reflect = (hp_loss / 3).max(1);
+        if prep_t.affix_spiked {
+            reflect = (hp_loss / 2).max(1);
+        }
+        enemy_health[fi] -= reflect;
+        events.push(CombatEvent::ThornsReflect {
+            damage: reflect,
+            foe_index,
+        });
+        if enemy_health[fi] <= 0 {
+            if !foe_slain_logged[fi] {
+                foe_slain_logged[fi] = true;
+                if events.len() < max_events {
+                    events.push(CombatEvent::EnemyDefeated { foe_index });
+                }
+                maybe_devourer_heal_on_kill(lead, h0, p0.max_h, events);
+            }
+            if all_foes_dead(enemy_health) {
+                return Some(CombatBreak::HeroWin);
+            }
+        }
+    }
+    if target == 0 && *h0 <= 0 {
+        events.push(CombatEvent::HeroDefeated);
+        return Some(CombatBreak::EnemyWin);
+    }
+    if target == 1 && *h1 <= 0 {
+        events.push(CombatEvent::PartyMemberDown { party_index: 1 });
+        return Some(CombatBreak::EnemyWin);
+    }
+    None
+}
+
+fn pack_apply_lead_victory_rush(
+    p0: &PreparedHero,
+    lead: &HeroProfile,
+    foes: &[Enemy],
+    enemy_health: &mut [i32],
+    h0: &mut i32,
+    has_partner: bool,
+    threat: &mut [i32; 2],
+    events: &mut Vec<CombatEvent>,
+    max_events: usize,
+    h0_vr_charges: &mut u8,
+    h0_skill_gcd_left: &mut u32,
+    h0_skill_gcd_denom: &mut u32,
+    h0_vr_recharge_left: &mut u32,
+    foe_slain_logged: &mut [bool],
+) -> Option<CombatBreak> {
+    let pri = focus_fire_primary_idx_slice(enemy_health);
+    let strike = victory_rush_strike(p0, &foes[pri]);
+    let hero_damage = strike.total();
+    enemy_health[pri] -= hero_damage;
+    events.push(CombatEvent::HeroAttacked {
+        attacker: 0,
+        strike,
+        foe_primary: pri as u8,
+        cleave_strikes: vec![],
+    });
+    *h0_vr_charges = h0_vr_charges.saturating_sub(1);
+    if events.len() < max_events {
+        events.push(CombatEvent::BuffChargeConsumed {
+            target: 0,
+            buff_id: BuffId::VictoryRush,
+            charges_remaining: *h0_vr_charges as u32,
+        });
+    }
+    if has_partner {
+        threat[0] = threat[0].saturating_add(hero_damage);
+    }
+    apply_lifesteal(p0, hero_damage, h0, p0.max_h, 0, events);
+    *h0_skill_gcd_left = p0.vr_gcd_ticks.max(1) as u32;
+    *h0_skill_gcd_denom = *h0_skill_gcd_left;
+    note_instant_strike_charge_spent(
+        p0.vr_max_charges,
+        *h0_vr_charges,
+        p0.vr_icd_ticks,
+        h0_vr_recharge_left,
+    );
+    scan_new_foe_deaths(
+        enemy_health,
+        foe_slain_logged,
+        events,
+        max_events,
+        lead,
+        h0,
+        p0.max_h,
+    )
+}
+
+fn pack_apply_lead_weapon_melee(
+    p0: &PreparedHero,
+    lead: &HeroProfile,
+    foes: &[Enemy],
+    enemy_health: &mut [i32],
+    h0: &mut i32,
+    consume: bool,
+    has_partner: bool,
+    threat: &mut [i32; 2],
+    poison_stacks: &mut [u32],
+    events: &mut Vec<CombatEvent>,
+    max_events: usize,
+    foe_slain_logged: &mut [bool],
+) -> Option<CombatBreak> {
+    let pri = focus_fire_primary_idx_slice(enemy_health);
+    let strike = hero_strike_damage(p0, &foes[pri], *h0, p0.max_h, consume);
+    let hero_damage = strike.total();
+    enemy_health[pri] -= hero_damage;
+
+    let mut cleave_strikes: Vec<(u8, HeroStrikeDamage)> = Vec::new();
+    if p0.heavy_skill == Some(SkillId::Cleave) {
+        for oth in 0..enemy_health.len() {
+            if oth != pri && enemy_health[oth] > 0 {
+                let cs = hero_strike_damage(p0, &foes[oth], *h0, p0.max_h, consume);
+                let cd = cs.total();
+                enemy_health[oth] -= cd;
+                cleave_strikes.push((oth as u8, cs));
+            }
+        }
+    }
+
+    let cleave_dmg: i32 = cleave_strikes.iter().map(|(_, c)| c.total()).sum();
+    if has_partner {
+        threat[0] = threat[0].saturating_add(hero_damage.saturating_add(cleave_dmg));
+    }
+    apply_lifesteal(
+        p0,
+        hero_damage.saturating_add(cleave_dmg),
+        h0,
+        p0.max_h,
+        0,
+        events,
+    );
+    if p0.has_poison && strike.white > 0 && pri < poison_stacks.len() {
+        let inc = if p0.affix_virulent { 3 } else { 2 };
+        poison_stacks[pri] = (poison_stacks[pri] + inc).min(40);
+    }
+    if events.len() < max_events {
+        events.push(CombatEvent::HeroAttacked {
+            attacker: 0,
+            strike,
+            foe_primary: pri as u8,
+            cleave_strikes,
+        });
+    }
+    scan_new_foe_deaths(
+        enemy_health,
+        foe_slain_logged,
+        events,
+        max_events,
+        lead,
+        h0,
+        p0.max_h,
+    )
+}
+
+fn pack_apply_partner_victory_rush(
+    p1prep: &PreparedHero,
+    partner: &HeroProfile,
+    foes: &[Enemy],
+    enemy_health: &mut [i32],
+    h1: &mut i32,
+    threat: &mut [i32; 2],
+    events: &mut Vec<CombatEvent>,
+    max_events: usize,
+    h1_vr_charges: &mut u8,
+    h1_skill_gcd_left: &mut u32,
+    h1_skill_gcd_denom: &mut u32,
+    h1_vr_recharge_left: &mut u32,
+    foe_slain_logged: &mut [bool],
+) -> Option<CombatBreak> {
+    let pri = focus_fire_primary_idx_slice(enemy_health);
+    let strike = victory_rush_strike(p1prep, &foes[pri]);
+    let hero_damage = strike.total();
+    enemy_health[pri] -= hero_damage;
+    events.push(CombatEvent::HeroAttacked {
+        attacker: 1,
+        strike,
+        foe_primary: pri as u8,
+        cleave_strikes: vec![],
+    });
+    *h1_vr_charges = h1_vr_charges.saturating_sub(1);
+    if events.len() < max_events {
+        events.push(CombatEvent::BuffChargeConsumed {
+            target: 1,
+            buff_id: BuffId::VictoryRush,
+            charges_remaining: *h1_vr_charges as u32,
+        });
+    }
+    threat[1] = threat[1].saturating_add(hero_damage);
+    apply_lifesteal(p1prep, hero_damage, h1, p1prep.max_h, 1, events);
+    *h1_skill_gcd_left = p1prep.vr_gcd_ticks.max(1) as u32;
+    *h1_skill_gcd_denom = *h1_skill_gcd_left;
+    note_instant_strike_charge_spent(
+        p1prep.vr_max_charges,
+        *h1_vr_charges,
+        p1prep.vr_icd_ticks,
+        h1_vr_recharge_left,
+    );
+    scan_new_foe_deaths(
+        enemy_health,
+        foe_slain_logged,
+        events,
+        max_events,
+        partner,
+        h1,
+        p1prep.max_h,
+    )
+}
+
+fn pack_apply_partner_weapon_melee(
+    p1prep: &PreparedHero,
+    partner: &HeroProfile,
+    foes: &[Enemy],
+    enemy_health: &mut [i32],
+    h1: &mut i32,
+    consume: bool,
+    threat: &mut [i32; 2],
+    poison_stacks: &mut [u32],
+    events: &mut Vec<CombatEvent>,
+    max_events: usize,
+    foe_slain_logged: &mut [bool],
+) -> Option<CombatBreak> {
+    let pri = focus_fire_primary_idx_slice(enemy_health);
+    let strike = hero_strike_damage(p1prep, &foes[pri], *h1, p1prep.max_h, consume);
+    let hero_damage = strike.total();
+    enemy_health[pri] -= hero_damage;
+
+    let mut cleave_strikes: Vec<(u8, HeroStrikeDamage)> = Vec::new();
+    if p1prep.heavy_skill == Some(SkillId::Cleave) {
+        for oth in 0..enemy_health.len() {
+            if oth != pri && enemy_health[oth] > 0 {
+                let cs = hero_strike_damage(p1prep, &foes[oth], *h1, p1prep.max_h, consume);
+                let cd = cs.total();
+                enemy_health[oth] -= cd;
+                cleave_strikes.push((oth as u8, cs));
+            }
+        }
+    }
+
+    let cleave_dmg: i32 = cleave_strikes.iter().map(|(_, c)| c.total()).sum();
+    threat[1] = threat[1].saturating_add(hero_damage.saturating_add(cleave_dmg));
+    apply_lifesteal(
+        p1prep,
+        hero_damage.saturating_add(cleave_dmg),
+        h1,
+        p1prep.max_h,
+        1,
+        events,
+    );
+    if p1prep.has_poison && strike.white > 0 && pri < poison_stacks.len() {
+        let inc = if p1prep.affix_virulent { 3 } else { 2 };
+        poison_stacks[pri] = (poison_stacks[pri] + inc).min(40);
+    }
+    if events.len() < max_events {
+        events.push(CombatEvent::HeroAttacked {
+            attacker: 1,
+            strike,
+            foe_primary: pri as u8,
+            cleave_strikes,
+        });
+    }
+    scan_new_foe_deaths(
+        enemy_health,
+        foe_slain_logged,
+        events,
+        max_events,
+        partner,
+        h1,
+        p1prep.max_h,
+    )
+}
+
+fn dual_lead_weapon_pass(
+    p0: &PreparedHero,
+    lead: &HeroProfile,
+    foes: &[Enemy],
+    meters: &mut [u64; 2],
+    h0_cd_left: &mut u32,
+    h0_cast_left: &mut u32,
+    as_applied: &mut [bool],
+    h0: &mut i32,
+    enemy_health: &mut [i32],
+    has_partner: bool,
+    poison_stacks: &mut [u32],
+    threat: &mut [i32; 2],
+    events: &mut Vec<CombatEvent>,
+    max_events: usize,
+    h0_skill_gcd_left: &mut u32,
+    h0_skill_gcd_denom: &mut u32,
+    h0_vr_charges: &mut u8,
+    h0_vr_recharge_left: &mut u32,
+    h0_empower_queued: &mut bool,
+    h0_empower_icd_left: &mut u32,
+    foe_slain_logged: &mut [bool],
+) -> (Option<CombatBreak>, bool) {
+    if *h0 > 0 && any_foe_alive_slice(enemy_health) && p0.has_victory_rush {
+        if *h0_skill_gcd_left == 0 && *h0_vr_charges > 0 {
+            if events.len() >= max_events {
+                return (None, true);
+            }
+            if let Some(br) = pack_apply_lead_victory_rush(
+                p0,
+                lead,
+                foes,
+                enemy_health,
+                h0,
+                has_partner,
+                threat,
+                events,
+                max_events,
+                h0_vr_charges,
+                h0_skill_gcd_left,
+                h0_skill_gcd_denom,
+                h0_vr_recharge_left,
+                foe_slain_logged,
+            ) {
+                return (Some(br), true);
+            }
+            return (None, true);
+        }
+    }
+    if p0.attack_cast_total == 0 && p0.attack_cd_total == 0 {
+        if *h0 <= 0 || !any_foe_alive_slice(enemy_health) {
+            return (None, false);
+        }
+        if !as_applied[0] {
+            meter_add_attack_speed(&mut meters[0], p0.attack_speed);
+            as_applied[0] = true;
+        }
+        if *h0 > 0 && any_foe_alive_slice(enemy_health) && meter_try_consume_swing(&mut meters[0]) {
+            if events.len() >= max_events {
+                return (None, true);
+            }
+            let consume = *h0_empower_queued;
+            if consume {
+                *h0_empower_queued = false;
+                *h0_empower_icd_left = p0.empower_icd_ticks.max(1) as u32;
+                push_empowered_blow_buff_expired(events, max_events, 0);
+            }
+            if let Some(br) = pack_apply_lead_weapon_melee(
+                p0,
+                lead,
+                foes,
+                enemy_health,
+                h0,
+                consume,
+                has_partner,
+                threat,
+                poison_stacks,
+                events,
+                max_events,
+                foe_slain_logged,
+            ) {
+                return (Some(br), true);
+            }
+            return (None, true);
+        }
+        (None, false)
+    } else if *h0 > 0 && any_foe_alive_slice(enemy_health) {
+        if *h0_cd_left > 0 {
+            *h0_cd_left -= 1;
+            return (None, true);
+        }
+        if *h0_cast_left > 0 {
+            *h0_cast_left -= 1;
+            if *h0_cast_left == 0 {
+                if events.len() >= max_events {
+                    return (None, true);
+                }
+                let consume = *h0_empower_queued;
+                if consume {
+                    *h0_empower_queued = false;
+                    *h0_empower_icd_left = p0.empower_icd_ticks.max(1) as u32;
+                    push_empowered_blow_buff_expired(events, max_events, 0);
+                }
+                if let Some(br) = pack_apply_lead_weapon_melee(
+                    p0,
+                    lead,
+                    foes,
+                    enemy_health,
+                    h0,
+                    consume,
+                    has_partner,
+                    threat,
+                    poison_stacks,
+                    events,
+                    max_events,
+                    foe_slain_logged,
+                ) {
+                    return (Some(br), true);
+                }
+                *h0_cd_left = p0.attack_cd_total;
+                return (None, true);
+            }
+            return (None, true);
+        }
+        if !as_applied[0] {
+            meter_add_attack_speed(&mut meters[0], p0.attack_speed);
+            as_applied[0] = true;
+        }
+        if *h0 > 0 && any_foe_alive_slice(enemy_health) && meter_try_consume_swing(&mut meters[0]) {
+            if p0.attack_cast_total > 0 {
+                *h0_cast_left = p0.attack_cast_total;
+                return (None, true);
+            }
+            if events.len() < max_events {
+                let consume = *h0_empower_queued;
+                if consume {
+                    *h0_empower_queued = false;
+                    *h0_empower_icd_left = p0.empower_icd_ticks.max(1) as u32;
+                    push_empowered_blow_buff_expired(events, max_events, 0);
+                }
+                if let Some(br) = pack_apply_lead_weapon_melee(
+                    p0,
+                    lead,
+                    foes,
+                    enemy_health,
+                    h0,
+                    consume,
+                    has_partner,
+                    threat,
+                    poison_stacks,
+                    events,
+                    max_events,
+                    foe_slain_logged,
+                ) {
+                    return (Some(br), true);
+                }
+                *h0_cd_left = p0.attack_cd_total;
+                return (None, true);
+            }
+        }
+        (None, false)
+    } else {
+        (None, false)
+    }
+}
+
+fn dual_partner_weapon_pass(
+    p1prep: &PreparedHero,
+    partner: &HeroProfile,
+    foes: &[Enemy],
+    meters: &mut [u64; 2],
+    h1_cd_left: &mut u32,
+    h1_cast_left: &mut u32,
+    as_applied: &mut [bool],
+    h1: &mut i32,
+    enemy_health: &mut [i32],
+    poison_stacks: &mut [u32],
+    threat: &mut [i32; 2],
+    events: &mut Vec<CombatEvent>,
+    max_events: usize,
+    h1_skill_gcd_left: &mut u32,
+    h1_skill_gcd_denom: &mut u32,
+    h1_vr_charges: &mut u8,
+    h1_vr_recharge_left: &mut u32,
+    h1_empower_queued: &mut bool,
+    h1_empower_icd_left: &mut u32,
+    foe_slain_logged: &mut [bool],
+) -> (Option<CombatBreak>, bool) {
+    if *h1 > 0 && any_foe_alive_slice(enemy_health) && p1prep.has_victory_rush {
+        if *h1_skill_gcd_left == 0 && *h1_vr_charges > 0 {
+            if events.len() >= max_events {
+                return (None, true);
+            }
+            if let Some(br) = pack_apply_partner_victory_rush(
+                p1prep,
+                partner,
+                foes,
+                enemy_health,
+                h1,
+                threat,
+                events,
+                max_events,
+                h1_vr_charges,
+                h1_skill_gcd_left,
+                h1_skill_gcd_denom,
+                h1_vr_recharge_left,
+                foe_slain_logged,
+            ) {
+                return (Some(br), true);
+            }
+            return (None, true);
+        }
+    }
+    if p1prep.attack_cast_total == 0 && p1prep.attack_cd_total == 0 {
+        if *h1 <= 0 || !any_foe_alive_slice(enemy_health) {
+            return (None, false);
+        }
+        if !as_applied[1] {
+            meter_add_attack_speed(&mut meters[1], p1prep.attack_speed);
+            as_applied[1] = true;
+        }
+        if *h1 > 0 && any_foe_alive_slice(enemy_health) && meter_try_consume_swing(&mut meters[1]) {
+            if events.len() >= max_events {
+                return (None, true);
+            }
+            let consume = *h1_empower_queued;
+            if consume {
+                *h1_empower_queued = false;
+                *h1_empower_icd_left = p1prep.empower_icd_ticks.max(1) as u32;
+                push_empowered_blow_buff_expired(events, max_events, 1);
+            }
+            if let Some(br) = pack_apply_partner_weapon_melee(
+                p1prep,
+                partner,
+                foes,
+                enemy_health,
+                h1,
+                consume,
+                threat,
+                poison_stacks,
+                events,
+                max_events,
+                foe_slain_logged,
+            ) {
+                return (Some(br), true);
+            }
+            return (None, true);
+        }
+        (None, false)
+    } else if *h1 > 0 && any_foe_alive_slice(enemy_health) {
+        if *h1_cd_left > 0 {
+            *h1_cd_left -= 1;
+            return (None, true);
+        }
+        if *h1_cast_left > 0 {
+            *h1_cast_left -= 1;
+            if *h1_cast_left == 0 {
+                if events.len() >= max_events {
+                    return (None, true);
+                }
+                let consume = *h1_empower_queued;
+                if consume {
+                    *h1_empower_queued = false;
+                    *h1_empower_icd_left = p1prep.empower_icd_ticks.max(1) as u32;
+                    push_empowered_blow_buff_expired(events, max_events, 1);
+                }
+                if let Some(br) = pack_apply_partner_weapon_melee(
+                    p1prep,
+                    partner,
+                    foes,
+                    enemy_health,
+                    h1,
+                    consume,
+                    threat,
+                    poison_stacks,
+                    events,
+                    max_events,
+                    foe_slain_logged,
+                ) {
+                    return (Some(br), true);
+                }
+                *h1_cd_left = p1prep.attack_cd_total;
+                return (None, true);
+            }
+            return (None, true);
+        }
+        if !as_applied[1] {
+            meter_add_attack_speed(&mut meters[1], p1prep.attack_speed);
+            as_applied[1] = true;
+        }
+        if *h1 > 0 && any_foe_alive_slice(enemy_health) && meter_try_consume_swing(&mut meters[1]) {
+            if p1prep.attack_cast_total > 0 {
+                *h1_cast_left = p1prep.attack_cast_total;
+                return (None, true);
+            }
+            if events.len() < max_events {
+                let consume = *h1_empower_queued;
+                if consume {
+                    *h1_empower_queued = false;
+                    *h1_empower_icd_left = p1prep.empower_icd_ticks.max(1) as u32;
+                    push_empowered_blow_buff_expired(events, max_events, 1);
+                }
+                if let Some(br) = pack_apply_partner_weapon_melee(
+                    p1prep,
+                    partner,
+                    foes,
+                    enemy_health,
+                    h1,
+                    consume,
+                    threat,
+                    poison_stacks,
+                    events,
+                    max_events,
+                    foe_slain_logged,
+                ) {
+                    return (Some(br), true);
+                }
+                *h1_cd_left = p1prep.attack_cd_total;
+                return (None, true);
+            }
+        }
+        (None, false)
+    } else {
+        (None, false)
+    }
+}
+
+fn foe_weapon_pass_pack_slot(
+    foe_slot: u8,
+    enemy: &Enemy,
+    p0: &PreparedHero,
+    p1prep: Option<&PreparedHero>,
+    enemy_meter: &mut [u64],
+    enemy_as: f32,
+    foe_cast_left: &mut [u32],
+    foe_cd_left: &mut [u32],
+    foe_ct: u32,
+    foe_dt: u32,
+    h0: &mut i32,
+    h1: &mut i32,
+    has_partner: bool,
+    enemy_health: &mut [i32],
+    threat: &mut [i32; 2],
+    barrier: &mut [i32; 2],
+    last_enemy_target: &mut Option<u8>,
+    as_applied: &mut [bool],
+    as_idx: usize,
+    tick: u32,
+    events: &mut Vec<CombatEvent>,
+    max_events: usize,
+    lead: &HeroProfile,
+    foe_slain_logged: &mut [bool],
+) -> (Option<CombatBreak>, bool) {
+    let i = foe_slot as usize;
+    if enemy_health[i] <= 0 {
+        return (None, false);
+    }
+    if foe_ct == 0 && foe_dt == 0 {
+        if !(*h0 > 0 && (!has_partner || *h1 > 0)) {
+            return (None, false);
+        }
+        if !as_applied[as_idx] {
+            meter_add_attack_speed(&mut enemy_meter[i], enemy_as);
+            as_applied[as_idx] = true;
+        }
+        if enemy_health[i] > 0
+            && *h0 > 0
+            && (!has_partner || *h1 > 0)
+            && meter_try_consume_swing(&mut enemy_meter[i])
+        {
+            if events.len() >= max_events {
+                return (None, true);
+            }
+            let target: u8 =
+                pick_party_enemy_target(tick, *threat, *h0, *h1, has_partner, *last_enemy_target);
+            if let Some(br) = resolve_foe_melee_hit_dual(
+                enemy,
+                foe_slot,
+                target,
+                p0,
+                p1prep,
+                h0,
+                h1,
+                enemy_health,
+                threat,
+                barrier,
+                last_enemy_target,
+                has_partner,
+                events,
+                max_events,
+                lead,
+                foe_slain_logged,
+            ) {
+                return (Some(br), true);
+            }
+            return (None, true);
+        }
+        (None, false)
+    } else if enemy_health[i] > 0 && *h0 > 0 && (!has_partner || *h1 > 0) {
+        if foe_cd_left[i] > 0 {
+            foe_cd_left[i] -= 1;
+            return (None, true);
+        }
+        if foe_cast_left[i] > 0 {
+            foe_cast_left[i] -= 1;
+            if foe_cast_left[i] == 0 {
+                if events.len() >= max_events {
+                    return (None, true);
+                }
+                let target: u8 = pick_party_enemy_target(
+                    tick,
+                    *threat,
+                    *h0,
+                    *h1,
+                    has_partner,
+                    *last_enemy_target,
+                );
+                if let Some(br) = resolve_foe_melee_hit_dual(
+                    enemy,
+                    foe_slot,
+                    target,
+                    p0,
+                    p1prep,
+                    h0,
+                    h1,
+                    enemy_health,
+                    threat,
+                    barrier,
+                    last_enemy_target,
+                    has_partner,
+                    events,
+                    max_events,
+                    lead,
+                    foe_slain_logged,
+                ) {
+                    return (Some(br), true);
+                }
+                foe_cd_left[i] = foe_dt;
+                return (None, true);
+            }
+            return (None, true);
+        }
+        if !as_applied[as_idx] {
+            meter_add_attack_speed(&mut enemy_meter[i], enemy_as);
+            as_applied[as_idx] = true;
+        }
+        if enemy_health[i] > 0
+            && *h0 > 0
+            && (!has_partner || *h1 > 0)
+            && meter_try_consume_swing(&mut enemy_meter[i])
+        {
+            if foe_ct > 0 {
+                foe_cast_left[i] = foe_ct;
+                return (None, true);
+            }
+            if events.len() < max_events {
+                let target: u8 = pick_party_enemy_target(
+                    tick,
+                    *threat,
+                    *h0,
+                    *h1,
+                    has_partner,
+                    *last_enemy_target,
+                );
+                if let Some(br) = resolve_foe_melee_hit_dual(
+                    enemy,
+                    foe_slot,
+                    target,
+                    p0,
+                    p1prep,
+                    h0,
+                    h1,
+                    enemy_health,
+                    threat,
+                    barrier,
+                    last_enemy_target,
+                    has_partner,
+                    events,
+                    max_events,
+                    lead,
+                    foe_slain_logged,
+                ) {
+                    return (Some(br), true);
+                }
+                foe_cd_left[i] = foe_dt;
+                return (None, true);
+            }
+        }
+        (None, false)
+    } else {
+        (None, false)
+    }
 }
 
 /// One foe swing / cast tick / GCD tick (matches legacy `simulate_combat_party` branch ordering).
@@ -1366,7 +2289,7 @@ fn foe_weapon_pass(
                 return (Some(br), true);
             }
             if *enemy_health <= 0 {
-                events.push(CombatEvent::EnemyDefeated);
+                events.push(CombatEvent::EnemyDefeated { foe_index: 0 });
                 maybe_devourer_heal_on_kill(lead, h0, p0.max_h, events);
                 return (Some(CombatBreak::HeroWin), true);
             }
@@ -1411,7 +2334,7 @@ fn foe_weapon_pass(
                     return (Some(br), true);
                 }
                 if *enemy_health <= 0 {
-                    events.push(CombatEvent::EnemyDefeated);
+                    events.push(CombatEvent::EnemyDefeated { foe_index: 0 });
                     maybe_devourer_heal_on_kill(lead, h0, p0.max_h, events);
                     return (Some(CombatBreak::HeroWin), true);
                 }
@@ -1458,7 +2381,7 @@ fn foe_weapon_pass(
                     return (Some(br), true);
                 }
                 if *enemy_health <= 0 {
-                    events.push(CombatEvent::EnemyDefeated);
+                    events.push(CombatEvent::EnemyDefeated { foe_index: 0 });
                     maybe_devourer_heal_on_kill(lead, h0, p0.max_h, events);
                     return (Some(CombatBreak::HeroWin), true);
                 }
@@ -1672,7 +2595,7 @@ pub fn simulate_combat_party_with_options(
             hero_health: 0,
             partner_health: if has_partner { Some(h1) } else { None },
             partner_max_health: if has_partner { Some(partner_max) } else { None },
-            enemy_health: enemy.max_health,
+            foe_healths: vec![enemy.max_health],
             clock_ticks: 0,
             events: vec![CombatEvent::HeroDefeated],
         };
@@ -1683,7 +2606,7 @@ pub fn simulate_combat_party_with_options(
             hero_health: h0,
             partner_health: Some(h1),
             partner_max_health: Some(partner_max),
-            enemy_health: enemy.max_health,
+            foe_healths: vec![enemy.max_health],
             clock_ticks: 0,
             events: vec![CombatEvent::PartyMemberDown { party_index: 1 }],
         };
@@ -1763,7 +2686,7 @@ pub fn simulate_combat_party_with_options(
                 hero_health: h0,
                 partner_health: if has_partner { Some(h1) } else { None },
                 partner_max_health: if has_partner { Some(partner_max) } else { None },
-                enemy_health,
+                foe_healths: vec![enemy_health],
                 clock_ticks: $cc,
                 events,
             };
@@ -1776,7 +2699,7 @@ pub fn simulate_combat_party_with_options(
                 hero_health: h0,
                 partner_health: if has_partner { Some(h1) } else { None },
                 partner_max_health: if has_partner { Some(partner_max) } else { None },
-                enemy_health,
+                foe_healths: vec![enemy_health],
                 clock_ticks: $cc,
                 events,
             };
@@ -1820,12 +2743,22 @@ pub fn simulate_combat_party_with_options(
         }
 
         if let Some((_, h1hero, _)) = &p1 {
-            if h0 > 0
-                && h1 > 0
-                && enemy_health > 0
-                && crate::domain::party::threat_stance_tick_drip(h1hero)
-            {
-                threat[1] = threat[1].saturating_add(1);
+            if h0 > 0 && h1 > 0 && enemy_health > 0 {
+                let partner_tank = crate::domain::party::threat_stance_tick_drip(h1hero);
+                if crate::domain::party::tick_party_threat_routing(
+                    &mut threat,
+                    partner_tank,
+                    combat_clock,
+                ) && events.len() < MAX_EVENTS
+                {
+                    events.push(CombatEvent::ThreatSnapshot {
+                        slot0: threat[0],
+                        slot1: threat[1],
+                    });
+                }
+                if partner_tank {
+                    threat[1] = threat[1].saturating_add(1);
+                }
             }
         }
 
@@ -2162,6 +3095,7 @@ pub fn simulate_combat_party_with_options(
             events.push(CombatEvent::PoisonTick {
                 damage: d,
                 stacks: poison_stacks,
+                foe_index: 0,
             });
             if events.len() < MAX_EVENTS {
                 events.push(CombatEvent::BuffTick {
@@ -2173,7 +3107,7 @@ pub fn simulate_combat_party_with_options(
             poison_stacks -= 1;
             enemy_health -= d;
             if enemy_health <= 0 {
-                events.push(CombatEvent::EnemyDefeated);
+                events.push(CombatEvent::EnemyDefeated { foe_index: 0 });
                 maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
                 hero_win!(combat_clock);
             }
@@ -2194,10 +3128,666 @@ pub fn simulate_combat_party_with_options(
         hero_health: h0,
         partner_health: if has_partner { Some(h1) } else { None },
         partner_max_health: if has_partner { Some(partner_max) } else { None },
-        enemy_health,
+        foe_healths: vec![enemy_health],
         clock_ticks: combat_clock,
         events,
     }
+}
+
+/// Multi-foe engagement: shared clock, per-foe meters/poison, [`SkillId::Cleave`] splashes every
+/// **other** living foe on the same swing. Initiative uses [`initiative_ranks_pack`] (slots `0..party-1`
+/// heroes, then foes in encounter order).
+fn simulate_combat_party_foes(
+    lead: &HeroProfile,
+    foes: &[Enemy],
+    max_clock_ticks: u32,
+    lead_health_start: i32,
+    partner: Option<(&HeroProfile, i32)>,
+    initiative_run_salt: u64,
+    initial_party_buffs: &[(u8, BuffApplication)],
+    options: CombatSimOptions,
+) -> CombatResult {
+    assert!(
+        !foes.is_empty() && foes.len() <= MAX_COMBAT_FOES,
+        "simulate_combat_party_foes: foe count must be 1..={MAX_COMBAT_FOES}"
+    );
+    let foe_hp_start: Vec<i32> = foes.iter().map(|e| e.max_health).collect();
+
+    let mut p0 = prepare_hero_combat(lead);
+    if let Some(n) = options.lead_instant_strike_max_charges {
+        if p0.has_victory_rush {
+            p0.vr_max_charges = n.max(1);
+        }
+    }
+    let mut p1 = partner.map(|(h, hp)| (prepare_hero_combat(h), h, hp));
+    if let Some(n) = options.partner_instant_strike_max_charges {
+        if let Some((ref mut prep, _, _)) = p1 {
+            if prep.has_victory_rush {
+                prep.vr_max_charges = n.max(1);
+            }
+        }
+    }
+    let has_partner = p1.is_some();
+    let partner_max = p1.as_ref().map(|(p, _, _)| p.max_h).unwrap_or(0);
+    let mut h0 = lead_health_start.clamp(0, p0.max_h);
+    let mut h1 = p1
+        .as_ref()
+        .map(|(prep, _, hp)| (*hp).clamp(0, prep.max_h))
+        .unwrap_or(0);
+
+    if h0 <= 0 {
+        return CombatResult {
+            outcome: CombatOutcome::EnemyWon,
+            hero_health: 0,
+            partner_health: if has_partner { Some(h1) } else { None },
+            partner_max_health: if has_partner { Some(partner_max) } else { None },
+            foe_healths: foe_hp_start.clone(),
+            clock_ticks: 0,
+            events: vec![CombatEvent::HeroDefeated],
+        };
+    }
+    if has_partner && h1 <= 0 {
+        return CombatResult {
+            outcome: CombatOutcome::EnemyWon,
+            hero_health: h0,
+            partner_health: Some(h1),
+            partner_max_health: Some(partner_max),
+            foe_healths: foe_hp_start.clone(),
+            clock_ticks: 0,
+            events: vec![CombatEvent::PartyMemberDown { party_index: 1 }],
+        };
+    }
+
+    let party_count: u8 = if has_partner { 2 } else { 1 };
+    let foe_count: u8 = foes.len() as u8;
+
+    let mut enemy_health = foe_hp_start;
+    let mut foe_slain_logged: Vec<bool> = vec![false; foes.len()];
+    let poison_heal = |p: &PreparedHero| {
+        if p.has_poison {
+            p.stats.healing_power.max(0)
+        } else {
+            0
+        }
+    };
+    let poison_tick = (3 + poison_heal(&p0).max(
+        p1.as_ref()
+            .map(|(prep, _, _)| poison_heal(prep))
+            .unwrap_or(0),
+    ) / 2)
+        .clamp(1, 25);
+    let has_poison_any = p0.has_poison || p1.as_ref().is_some_and(|(prep, _, _)| prep.has_poison);
+    let has_toxic_any = p0.has_toxic_mastery
+        || p1
+            .as_ref()
+            .is_some_and(|(prep, _, _)| prep.has_toxic_mastery);
+
+    let mut barrier = [
+        p0.barrier,
+        p1.as_ref().map(|(p, _, _)| p.barrier).unwrap_or(0),
+    ];
+
+    let enemy_as: Vec<f32> = foes.iter().map(|e| e.attack_speed.max(0.12)).collect();
+    let foe_ct: Vec<u32> = foes.iter().map(|e| e.cast_ticks).collect();
+    let foe_dt: Vec<u32> = foes.iter().map(|e| e.cooldown_ticks).collect();
+
+    let mut meters = [0u64, 0u64];
+    let mut enemy_meter: Vec<u64> = vec![0u64; foes.len()];
+
+    let mut poison_stacks: Vec<u32> = vec![0u32; foes.len()];
+    const POISON_DAMAGE_STACK_CAP: u32 = 12;
+
+    let mut threat = [0i32; 2];
+    if let Some((_, h1hero, _)) = &p1 {
+        threat[1] = crate::domain::party::threat_stance_seed(h1hero);
+    }
+
+    let mut events = Vec::new();
+
+    if p0.has_second_wind && h0 > 0 {
+        let h = (p0.max_h / 20).max(1).min(8);
+        if h > 0 && h0 < p0.max_h {
+            h0 = (h0 + h).min(p0.max_h);
+            events.push(CombatEvent::HeroHealed {
+                target: 0,
+                amount: h,
+            });
+        }
+    }
+    if let Some((p1prep, _, _)) = &p1 {
+        if p1prep.has_second_wind && h1 > 0 {
+            let h = (p1prep.max_h / 20).max(1).min(8);
+            if h > 0 && h1 < p1prep.max_h {
+                h1 = (h1 + h).min(p1prep.max_h);
+                events.push(CombatEvent::HeroHealed {
+                    target: 1,
+                    amount: h,
+                });
+            }
+        }
+    }
+
+    const MAX_EVENTS: usize = 1200;
+
+    let mut party_buffs = PartyBuffState::default();
+    party_buffs.apply_encounter_start(initial_party_buffs, 0, &mut events, MAX_EVENTS);
+
+    macro_rules! hero_win_pack {
+        ($cc:expr) => {
+            return CombatResult {
+                outcome: CombatOutcome::HeroWon,
+                hero_health: h0,
+                partner_health: if has_partner { Some(h1) } else { None },
+                partner_max_health: if has_partner { Some(partner_max) } else { None },
+                foe_healths: vec![0i32; enemy_health.len()],
+                clock_ticks: $cc,
+                events,
+            };
+        };
+    }
+    macro_rules! enemy_win_pack {
+        ($cc:expr) => {
+            return CombatResult {
+                outcome: CombatOutcome::EnemyWon,
+                hero_health: h0,
+                partner_health: if has_partner { Some(h1) } else { None },
+                partner_max_health: if has_partner { Some(partner_max) } else { None },
+                foe_healths: enemy_health.clone(),
+                clock_ticks: $cc,
+                events,
+            };
+        };
+    }
+
+    let mut last_enemy_target: Option<u8> = None;
+
+    let mut h0_cast_left = 0u32;
+    let mut h0_cd_left = 0u32;
+    let mut h0_skill_gcd_left = 0u32;
+    let mut h0_skill_gcd_denom = 0u32;
+    let mut h0_vr_recharge_left = 0u32;
+    let mut h0_vr_charges = p0.vr_max_charges;
+    let mut h0_empower_queued = false;
+    let mut h0_empower_icd_left = 0u32;
+    let mut h1_cast_left = 0u32;
+    let mut h1_cd_left = 0u32;
+    let mut h1_skill_gcd_left = 0u32;
+    let mut h1_skill_gcd_denom = 0u32;
+    let mut h1_vr_recharge_left = 0u32;
+    let mut h1_vr_charges = p1
+        .as_ref()
+        .map(|(p, _, _)| p.vr_max_charges)
+        .unwrap_or(0);
+    let mut h1_empower_queued = false;
+    let mut h1_empower_icd_left = 0u32;
+    let mut foe_cast_left: Vec<u32> = vec![0u32; foes.len()];
+    let mut foe_cd_left: Vec<u32> = vec![0u32; foes.len()];
+
+    let enc_mix = foes.iter().enumerate().fold(0u64, |acc, (i, e)| {
+        acc ^ (e.max_health as u64).rotate_left((i * 19 + 3) as u32)
+            ^ ((e.damage as u64).rotate_left((i * 11 + 47) as u32))
+    });
+
+    let mut combat_clock = 0u32;
+    for tick in 0..max_clock_ticks {
+        combat_clock = tick.saturating_add(1);
+        if h0 <= 0 || !any_foe_alive_slice(&enemy_health) || (has_partner && h1 <= 0) {
+            break;
+        }
+        if events.len() >= MAX_EVENTS {
+            break;
+        }
+
+        if let Some((_, h1hero, _)) = &p1 {
+            if h0 > 0 && h1 > 0 && any_foe_alive_slice(&enemy_health) {
+                let partner_tank = crate::domain::party::threat_stance_tick_drip(h1hero);
+                if crate::domain::party::tick_party_threat_routing(
+                    &mut threat,
+                    partner_tank,
+                    combat_clock,
+                ) && events.len() < MAX_EVENTS
+                {
+                    events.push(CombatEvent::ThreatSnapshot {
+                        slot0: threat[0],
+                        slot1: threat[1],
+                    });
+                }
+                if partner_tank {
+                    threat[1] = threat[1].saturating_add(1);
+                }
+            }
+        }
+
+        tick_instant_strike_charge_recharge(
+            p0.has_victory_rush,
+            p0.vr_max_charges,
+            &mut h0_vr_charges,
+            p0.vr_icd_ticks,
+            &mut h0_vr_recharge_left,
+        );
+        if p0.has_empowered_blow && h0_empower_icd_left > 0 {
+            h0_empower_icd_left -= 1;
+        }
+        if has_partner {
+            let p1p = &p1.as_ref().unwrap().0;
+            tick_instant_strike_charge_recharge(
+                p1p.has_victory_rush,
+                p1p.vr_max_charges,
+                &mut h1_vr_charges,
+                p1p.vr_icd_ticks,
+                &mut h1_vr_recharge_left,
+            );
+            if p1p.has_empowered_blow && h1_empower_icd_left > 0 {
+                h1_empower_icd_left -= 1;
+            }
+        }
+        if p0.has_empowered_blow || p0.has_victory_rush {
+            if h0_skill_gcd_left > 0 {
+                h0_skill_gcd_left -= 1;
+                if h0_skill_gcd_left == 0 {
+                    h0_skill_gcd_denom = 0;
+                }
+            }
+        }
+        if has_partner {
+            let p1p = &p1.as_ref().unwrap().0;
+            if p1p.has_empowered_blow || p1p.has_victory_rush {
+                if h1_skill_gcd_left > 0 {
+                    h1_skill_gcd_left -= 1;
+                    if h1_skill_gcd_left == 0 {
+                        h1_skill_gcd_denom = 0;
+                    }
+                }
+            }
+        }
+        let vr_ready =
+            p0.has_victory_rush && h0_skill_gcd_left == 0 && h0_vr_charges > 0;
+        let vr1_ready = has_partner && {
+            let p1p = &p1.as_ref().unwrap().0;
+            p1p.has_victory_rush && h1_skill_gcd_left == 0 && h1_vr_charges > 0
+        };
+        if p0.has_empowered_blow
+            && !h0_empower_queued
+            && h0_skill_gcd_left == 0
+            && h0_empower_icd_left == 0
+            && !vr_ready
+        {
+            h0_empower_queued = true;
+            h0_skill_gcd_left = p0.empower_gcd_ticks.max(1) as u32;
+            h0_skill_gcd_denom = h0_skill_gcd_left;
+            if events.len() < MAX_EVENTS {
+                events.push(CombatEvent::BuffApplied {
+                    target: 0,
+                    buff_id: BuffId::EmpoweredBlow,
+                    stacks: 1,
+                    duration_ticks: None,
+                });
+            }
+        }
+
+        if has_partner {
+            let p1p = &p1.as_ref().unwrap().0;
+            if p1p.has_empowered_blow
+                && !h1_empower_queued
+                && h1_skill_gcd_left == 0
+                && h1_empower_icd_left == 0
+                && !vr1_ready
+            {
+                h1_empower_queued = true;
+                h1_skill_gcd_left = p1p.empower_gcd_ticks.max(1) as u32;
+                h1_skill_gcd_denom = h1_skill_gcd_left;
+                if events.len() < MAX_EVENTS {
+                    events.push(CombatEvent::BuffApplied {
+                        target: 1,
+                        buff_id: BuffId::EmpoweredBlow,
+                        stacks: 1,
+                        duration_ticks: None,
+                    });
+                }
+            }
+        }
+
+        let enc_seed =
+            crate::domain::combat_timing::encounter_initiative_seed(initiative_run_salt, enc_mix);
+        let init_ranks =
+            crate::domain::combat_timing::initiative_ranks_pack(enc_seed, party_count, foe_count);
+        let strike_order = crate::domain::combat_round::sorted_strike_pack_order(
+            party_count,
+            foe_count,
+            &init_ranks,
+        );
+
+        let p1prep_ref = p1.as_ref().map(|(prep, _, _)| prep);
+        let mut as_applied_tick: Vec<bool> = vec![false; party_count as usize + foes.len()];
+        loop {
+            if h0 <= 0 || !any_foe_alive_slice(&enemy_health) || (has_partner && h1 <= 0) {
+                break;
+            }
+            if events.len() >= MAX_EVENTS {
+                break;
+            }
+            let mut progressed = false;
+            for &slot in &strike_order {
+                if h0 <= 0 || !any_foe_alive_slice(&enemy_health) || (has_partner && h1 <= 0) {
+                    break;
+                }
+                if events.len() >= MAX_EVENTS {
+                    break;
+                }
+                let (brk, prog) = if slot == 0 {
+                    dual_lead_weapon_pass(
+                        &p0,
+                        lead,
+                        foes,
+                        &mut meters,
+                        &mut h0_cd_left,
+                        &mut h0_cast_left,
+                        &mut as_applied_tick,
+                        &mut h0,
+                        &mut enemy_health,
+                        has_partner,
+                        &mut poison_stacks,
+                        &mut threat,
+                        &mut events,
+                        MAX_EVENTS,
+                        &mut h0_skill_gcd_left,
+                        &mut h0_skill_gcd_denom,
+                        &mut h0_vr_charges,
+                        &mut h0_vr_recharge_left,
+                        &mut h0_empower_queued,
+                        &mut h0_empower_icd_left,
+                        &mut foe_slain_logged,
+                    )
+                } else if slot == 1 && has_partner {
+                    if let Some((ref p1prep, partner_hero, _)) = p1 {
+                        dual_partner_weapon_pass(
+                            p1prep,
+                            partner_hero,
+                            foes,
+                            &mut meters,
+                            &mut h1_cd_left,
+                            &mut h1_cast_left,
+                            &mut as_applied_tick,
+                            &mut h1,
+                            &mut enemy_health,
+                            &mut poison_stacks,
+                            &mut threat,
+                            &mut events,
+                            MAX_EVENTS,
+                            &mut h1_skill_gcd_left,
+                            &mut h1_skill_gcd_denom,
+                            &mut h1_vr_charges,
+                            &mut h1_vr_recharge_left,
+                            &mut h1_empower_queued,
+                            &mut h1_empower_icd_left,
+                            &mut foe_slain_logged,
+                        )
+                    } else {
+                        (None, false)
+                    }
+                } else if slot >= party_count {
+                    let fi = (slot - party_count) as usize;
+                    if fi < foes.len() {
+                        foe_weapon_pass_pack_slot(
+                            fi as u8,
+                            &foes[fi],
+                            &p0,
+                            p1prep_ref,
+                            &mut enemy_meter,
+                            enemy_as[fi],
+                            &mut foe_cast_left,
+                            &mut foe_cd_left,
+                            foe_ct[fi],
+                            foe_dt[fi],
+                            &mut h0,
+                            &mut h1,
+                            has_partner,
+                            &mut enemy_health,
+                            &mut threat,
+                            &mut barrier,
+                            &mut last_enemy_target,
+                            &mut as_applied_tick,
+                            party_count as usize + fi,
+                            tick,
+                            &mut events,
+                            MAX_EVENTS,
+                            lead,
+                            &mut foe_slain_logged,
+                        )
+                    } else {
+                        (None, false)
+                    }
+                } else {
+                    (None, false)
+                };
+                progressed |= prog;
+                match brk {
+                    Some(CombatBreak::HeroWin) => {
+                        hero_win_pack!(combat_clock);
+                    }
+                    Some(CombatBreak::EnemyWin) => {
+                        enemy_win_pack!(combat_clock);
+                    }
+                    None => {}
+                }
+            }
+            if !progressed {
+                break;
+            }
+        }
+
+        let lead_cast = if p0.attack_cast_total == 0 {
+            0.0
+        } else if h0_cast_left > 0 {
+            1.0 - (h0_cast_left as f32 / p0.attack_cast_total as f32)
+        } else {
+            0.0
+        };
+        let lead_cd = if p0.attack_cd_total == 0 {
+            0.0
+        } else if h0_cd_left > 0 {
+            1.0 - (h0_cd_left as f32 / p0.attack_cd_total as f32)
+        } else {
+            0.0
+        };
+        let ally_cast = if has_partner {
+            if p1.as_ref().unwrap().0.attack_cast_total == 0 {
+                0.0
+            } else if h1_cast_left > 0 {
+                1.0 - (h1_cast_left as f32 / p1.as_ref().unwrap().0.attack_cast_total as f32)
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        };
+        let ally_cd = if has_partner {
+            if p1.as_ref().unwrap().0.attack_cd_total == 0 {
+                0.0
+            } else if h1_cd_left > 0 {
+                1.0 - (h1_cd_left as f32 / p1.as_ref().unwrap().0.attack_cd_total as f32)
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        };
+
+        let fd = focus_fire_primary_idx_slice(&enemy_health);
+        let fd = fd.min(foes.len().saturating_sub(1));
+        let fct = foe_ct[fd];
+        let fdt = foe_dt[fd];
+        let foe_cast = if fct == 0 {
+            0.0
+        } else if foe_cast_left[fd] > 0 {
+            1.0 - (foe_cast_left[fd] as f32 / fct as f32)
+        } else {
+            0.0
+        };
+        let foe_cd_b = if fdt == 0 {
+            0.0
+        } else if foe_cd_left[fd] > 0 {
+            1.0 - (foe_cd_left[fd] as f32 / fdt as f32)
+        } else {
+            0.0
+        };
+        let lead_skill_gcd = ability_gcd_bar_frac(h0_skill_gcd_left, h0_skill_gcd_denom);
+        let lead_instant_recharge = if p0.has_victory_rush {
+            instant_recharge_bar_frac(
+                h0_vr_recharge_left,
+                p0.vr_icd_ticks,
+                h0_vr_charges,
+                p0.vr_max_charges,
+            )
+        } else {
+            0.0
+        };
+        let (lead_instant_charges, lead_instant_max_charges) = if p0.has_victory_rush {
+            (h0_vr_charges, p0.vr_max_charges)
+        } else {
+            (0, 0)
+        };
+        let (ally_skill_gcd, ally_instant_recharge, ally_instant_charges, ally_instant_max_charges) =
+            if has_partner {
+                let p1p = &p1.as_ref().unwrap().0;
+                let g = ability_gcd_bar_frac(h1_skill_gcd_left, h1_skill_gcd_denom);
+                let ir = if p1p.has_victory_rush {
+                    instant_recharge_bar_frac(
+                        h1_vr_recharge_left,
+                        p1p.vr_icd_ticks,
+                        h1_vr_charges,
+                        p1p.vr_max_charges,
+                    )
+                } else {
+                    0.0
+                };
+                let (c, m) = if p1p.has_victory_rush {
+                    (h1_vr_charges, p1p.vr_max_charges)
+                } else {
+                    (0, 0)
+                };
+                (g, ir, c, m)
+            } else {
+                (0.0, 0.0, 0, 0)
+            };
+        if events.len() < MAX_EVENTS {
+            events.push(CombatEvent::TimingPulse {
+                lead_cast,
+                lead_cd,
+                ally_cast,
+                ally_cd,
+                foe_cast,
+                foe_cd: foe_cd_b,
+                lead_skill_gcd,
+                lead_instant_recharge,
+                lead_instant_charges,
+                lead_instant_max_charges,
+                ally_skill_gcd,
+                ally_instant_recharge,
+                ally_instant_charges,
+                ally_instant_max_charges,
+            });
+        }
+
+        if has_poison_any && h0 > 0 && any_foe_alive_slice(&enemy_health) {
+            for foe_i in 0..foes.len() {
+                if events.len() >= MAX_EVENTS {
+                    break;
+                }
+                if poison_stacks[foe_i] == 0 || enemy_health[foe_i] <= 0 {
+                    continue;
+                }
+                let potency = poison_stacks[foe_i].min(POISON_DAMAGE_STACK_CAP);
+                let mult = potency.max(1) as i32;
+                let mut d = poison_tick * mult;
+                if has_toxic_any {
+                    d = (d as i64 * 5 / 4).max(1) as i32;
+                }
+                d = d.min(enemy_health[foe_i]);
+                events.push(CombatEvent::PoisonTick {
+                    damage: d,
+                    stacks: poison_stacks[foe_i],
+                    foe_index: foe_i as u8,
+                });
+                if events.len() < MAX_EVENTS {
+                    events.push(CombatEvent::BuffTick {
+                        target: 0,
+                        buff_id: BuffId::PoisonVenom,
+                        stacks: potency,
+                    });
+                }
+                poison_stacks[foe_i] -= 1;
+                enemy_health[foe_i] -= d;
+                if enemy_health[foe_i] <= 0 && !foe_slain_logged[foe_i] {
+                    foe_slain_logged[foe_i] = true;
+                    if events.len() < MAX_EVENTS {
+                        events.push(CombatEvent::EnemyDefeated {
+                            foe_index: foe_i as u8,
+                        });
+                    }
+                    maybe_devourer_heal_on_kill(lead, &mut h0, p0.max_h, &mut events);
+                    if all_foes_dead(&enemy_health) {
+                        hero_win_pack!(combat_clock);
+                    }
+                }
+            }
+        }
+        party_buffs.tick_end(combat_clock, &mut events, MAX_EVENTS);
+    }
+
+    let outcome = if h0 <= 0 {
+        CombatOutcome::EnemyWon
+    } else if all_foes_dead(&enemy_health) {
+        CombatOutcome::HeroWon
+    } else {
+        CombatOutcome::TimedOut
+    };
+
+    CombatResult {
+        outcome,
+        hero_health: h0,
+        partner_health: if has_partner { Some(h1) } else { None },
+        partner_max_health: if has_partner { Some(partner_max) } else { None },
+        foe_healths: enemy_health,
+        clock_ticks: combat_clock,
+        events,
+    }
+}
+
+/// Multi-foe encounters (`2`..=[`MAX_COMBAT_FOES`]) use [`simulate_combat_party_foes`].
+pub fn simulate_party_vs_encounter_foes(
+    lead: &HeroProfile,
+    foes: &[Enemy],
+    max_clock_ticks: u32,
+    lead_health_start: i32,
+    partner: Option<(&HeroProfile, i32)>,
+    initiative_run_salt: u64,
+    initial_party_buffs: &[(u8, BuffApplication)],
+    options: CombatSimOptions,
+) -> CombatResult {
+    assert!(!foes.is_empty() && foes.len() <= MAX_COMBAT_FOES);
+    if foes.len() == 1 {
+        return simulate_combat_party_with_options(
+            lead,
+            &foes[0],
+            max_clock_ticks,
+            lead_health_start,
+            partner,
+            initiative_run_salt,
+            initial_party_buffs,
+            options,
+        );
+    }
+    simulate_combat_party_foes(
+        lead,
+        foes,
+        max_clock_ticks,
+        lead_health_start,
+        partner,
+        initiative_run_salt,
+        initial_party_buffs,
+        options,
+    )
 }
 
 /// Like [`simulate_combat_party`], but applies [`BuffApplication`] entries at encounter clock **0**.
@@ -2453,8 +4043,12 @@ pub fn combat_playback_frames_from_result(
     for step in steps {
         match &step {
             PlaybackStep::Event(event) => match event {
-                CombatEvent::HeroAttacked { attacker, strike } => {
-                    let total = strike.total();
+                CombatEvent::HeroAttacked { attacker, strike, cleave_strikes, .. } => {
+                    let total = strike.total()
+                        + cleave_strikes
+                            .iter()
+                            .map(|(_, c)| c.total())
+                            .sum::<i32>();
                     if *attacker == 0 {
                         d0 = d0.saturating_add(total as u32);
                     } else {
@@ -2465,12 +4059,12 @@ pub fn combat_playback_frames_from_result(
                         enemy_poison_stacks = (enemy_poison_stacks + 2).min(40);
                     }
                 }
-                CombatEvent::PoisonTick { damage, stacks } => {
+                CombatEvent::PoisonTick { damage, stacks, .. } => {
                     d0 = d0.saturating_add(*damage as u32);
                     enemy_hp -= damage;
                     enemy_poison_stacks = stacks.saturating_sub(1);
                 }
-                CombatEvent::ThornsReflect { damage } => {
+                CombatEvent::ThornsReflect { damage, .. } => {
                     d0 = d0.saturating_add(*damage as u32);
                     enemy_hp -= damage;
                 }
@@ -2548,12 +4142,13 @@ pub fn combat_playback_frames_from_result(
                 }
                 CombatEvent::BuffTick { .. } | CombatEvent::BuffChargeConsumed { .. } => {}
                 CombatEvent::PartyMemberDown { .. } => {}
-                CombatEvent::EnemyDefeated | CombatEvent::HeroDefeated => {}
+                CombatEvent::EnemyDefeated { .. } | CombatEvent::HeroDefeated => {}
             },
             PlaybackStep::MergedPoison {
                 total_damage,
                 tick_count,
                 stacks_before_last,
+                foe_index: _,
             } => {
                 d0 = d0.saturating_add(*total_damage as u32);
                 enemy_hp -= *total_damage;
@@ -2877,7 +4472,7 @@ mod tests {
         assert!(result
             .events
             .iter()
-            .any(|event| matches!(event, CombatEvent::EnemyDefeated)));
+            .any(|event| matches!(event, CombatEvent::EnemyDefeated { .. })));
     }
 
     #[test]
@@ -3097,6 +4692,119 @@ mod tests {
             _ => None,
         });
         assert_eq!(heavy_dmg, cleave_dmg);
+    }
+
+    #[test]
+    fn cleave_splashes_second_foe_while_both_alive_dual_pack() {
+        let mut hero = HeroProfile::default();
+        hero.unlock_skill_slots(1);
+        hero.equip_skill(0, SkillId::Cleave).unwrap();
+        let foes = [
+            Enemy {
+                name: "A".into(),
+                max_health: 9999,
+                damage: 0,
+                armor: 0,
+                attack_speed: 0.01,
+                cast_ticks: 0,
+                cooldown_ticks: 0,
+            },
+            Enemy {
+                name: "B".into(),
+                max_health: 9999,
+                damage: 0,
+                armor: 0,
+                attack_speed: 0.01,
+                cast_ticks: 0,
+                cooldown_ticks: 0,
+            },
+        ];
+        let r = simulate_party_vs_encounter_foes(
+            &hero,
+            &foes,
+            80,
+            100,
+            None,
+            1,
+            &[],
+            CombatSimOptions::default(),
+        );
+        let splashed = r.events.iter().find_map(|e| {
+            if let CombatEvent::HeroAttacked {
+                foe_primary,
+                strike,
+                cleave_strikes,
+                ..
+            } = e
+            {
+                if cleave_strikes.is_empty() {
+                    None
+                } else {
+                    let sp: i32 = cleave_strikes.iter().map(|(_, c)| c.total()).sum();
+                    Some((*foe_primary, strike.total(), sp, cleave_strikes.len()))
+                }
+            } else {
+                None
+            }
+        });
+        let Some((pri, main, sp, n_splash)) = splashed else {
+            panic!(
+                "expected cleave splash event while both foes live, events={:?}",
+                r.events
+            );
+        };
+        assert_eq!(pri, 0);
+        assert_eq!(n_splash, 1, "two foes => one cleave off-target");
+        assert!(main > 0 && sp > 0, "main={main} splash={sp}");
+    }
+
+    #[test]
+    fn cleave_splashes_two_off_targets_with_three_foe_pack() {
+        let mut hero = HeroProfile::default();
+        hero.unlock_skill_slots(1);
+        hero.equip_skill(0, SkillId::Cleave).unwrap();
+        let dummy = Enemy {
+            name: "D".into(),
+            max_health: 9999,
+            damage: 0,
+            armor: 0,
+            attack_speed: 0.01,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
+        };
+        let foes = [dummy.clone(), dummy.clone(), dummy.clone()];
+        let r = simulate_party_vs_encounter_foes(
+            &hero,
+            &foes,
+            120,
+            100,
+            None,
+            42,
+            &[],
+            CombatSimOptions::default(),
+        );
+        let hit = r.events.iter().find_map(|e| {
+            if let CombatEvent::HeroAttacked {
+                cleave_strikes,
+                ..
+            } = e
+            {
+                if cleave_strikes.len() >= 2 {
+                    Some(cleave_strikes.len())
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        });
+        assert_eq!(
+            hit,
+            Some(2),
+            "three living foes => two cleave splashes, events={:?}",
+            r.events
+        );
+        assert_eq!(r.foe_healths.len(), 3);
     }
 
     #[test]
@@ -3788,7 +5496,7 @@ mod tests {
         let result = simulate_combat(&hero, &enemy, 1, 100);
         assert!(result.events.iter().any(|e| matches!(
             e,
-            CombatEvent::ThornsReflect { damage } if *damage > 0
+            CombatEvent::ThornsReflect { damage, .. } if *damage > 0
         )));
     }
 
@@ -3904,14 +5612,14 @@ mod tests {
         assert!(
             r.events.iter().any(|e| matches!(
                 e,
-                CombatEvent::ThornsReflect { damage } if *damage >= 10
+                CombatEvent::ThornsReflect { damage, .. } if *damage >= 10
             )),
             "reflect should kill the low-HP enemy before the hero swings this fight"
         );
         assert!(
             r.events
                 .iter()
-                .any(|e| matches!(e, CombatEvent::EnemyDefeated)),
+                .any(|e| matches!(e, CombatEvent::EnemyDefeated { .. })),
             "defeat should be attributed after thorns damage"
         );
     }
@@ -4302,7 +6010,7 @@ mod tests {
         let mut saw_defeat = false;
         let mut heal_after_defeat = false;
         for e in &r.events {
-            if matches!(e, CombatEvent::EnemyDefeated) {
+            if matches!(e, CombatEvent::EnemyDefeated { .. }) {
                 saw_defeat = true;
                 continue;
             }
@@ -4371,7 +6079,7 @@ mod tests {
         r.events
             .iter()
             .find_map(|e| {
-                if let CombatEvent::ThornsReflect { damage } = e {
+                if let CombatEvent::ThornsReflect { damage, .. } = e {
                     Some(*damage)
                 } else {
                     None

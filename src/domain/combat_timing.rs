@@ -55,21 +55,55 @@ pub enum InitiativeActor {
 }
 
 /// Returns **unique** ranks `0..N-1` for actors in this encounter: **lower = earlier** when `ready_at_tick` ties.
-/// Index: `0` = lead, `1` = partner, `2` = foe. Unused slots stay `255`.
-/// `party_slots`: `1` = solo (lead + foe only), `2` = lead + partner + foe.
-pub fn initiative_ranks(encounter_seed: u64, party_slots: u8) -> [u8; 3] {
-    let mut entries: Vec<(u8, u64)> = Vec::with_capacity(3);
+/// Index: `0` = lead, `1` = partner, `2` = first foe, `3` = second foe (when `foe_count == 2`).
+/// Unused slots stay `255`.
+/// `party_slots`: `1` = solo (lead + foe(s) only), `2` = lead + partner + foe(s).
+/// `foe_count`: `1` or `2`.
+pub fn initiative_ranks_four(encounter_seed: u64, party_slots: u8, foe_count: u8) -> [u8; 4] {
+    debug_assert!(foe_count >= 1 && foe_count <= 2);
+    let mut entries: Vec<(u8, u64)> = Vec::with_capacity(4);
     entries.push((0u8, mix64(encounter_seed, 0x4C454144_u64)));
     if party_slots >= 2 {
         entries.push((1u8, mix64(encounter_seed, 0x50415254_u64)));
     }
     entries.push((2u8, mix64(encounter_seed, 0x464F4520_u64)));
+    if foe_count >= 2 {
+        entries.push((3u8, mix64(encounter_seed, 0x464F4521_u64)));
+    }
     entries.sort_by_key(|&(_, k)| k);
-    let mut out = [255u8; 3];
+    let mut out = [255u8; 4];
     for (rank, (actor_id, _)) in entries.iter().enumerate() {
         out[*actor_id as usize] = rank as u8;
     }
     out
+}
+
+/// Initiative ranks for `party_count` heroes (slots `0..party_count-1`) plus `foe_count` foes.
+/// Returned [`Vec`] length is `party_count + foe_count`; each entry is the rank for that global slot.
+pub fn initiative_ranks_pack(encounter_seed: u64, party_count: u8, foe_count: u8) -> Vec<u8> {
+    let pc = party_count as usize;
+    let fc = foe_count as usize;
+    let n = pc + fc;
+    let mut entries: Vec<(usize, u64)> = Vec::with_capacity(n);
+    for i in 0..pc {
+        entries.push((i, mix64(encounter_seed, 0x4C450000u64.wrapping_add(i as u64))));
+    }
+    for j in 0..fc {
+        let idx = pc + j;
+        entries.push((idx, mix64(encounter_seed, 0x464F4500u64.wrapping_add(j as u64))));
+    }
+    entries.sort_by_key(|&(_, k)| k);
+    let mut out = vec![255u8; n];
+    for (rank, (actor_id, _)) in entries.iter().enumerate() {
+        out[*actor_id] = rank as u8;
+    }
+    out
+}
+
+/// Legacy shape for single-foe encounters (`foe` at index `2`).
+pub fn initiative_ranks(encounter_seed: u64, party_slots: u8) -> [u8; 3] {
+    let four = initiative_ranks_four(encounter_seed, party_slots, 1);
+    [four[0], four[1], four[2]]
 }
 
 #[inline]
@@ -79,7 +113,7 @@ pub fn initiative_rank_for(actor: InitiativeActor, encounter_seed: u64, party_sl
         InitiativeActor::Partner => 1usize,
         InitiativeActor::Foe => 2usize,
     };
-    initiative_ranks(encounter_seed, party_slots)[idx]
+    initiative_ranks_four(encounter_seed, party_slots, 1)[idx]
 }
 
 /// Derives a per-encounter seed for initiative (and future scheduling hooks).

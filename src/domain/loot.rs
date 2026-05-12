@@ -1,3 +1,4 @@
+use crate::domain::combat_archetype::CombatArchetypeHint;
 use crate::domain::items::{GearSlot, ItemAffix, ItemInstance, ItemRarity};
 use crate::domain::stats::Stats;
 use rand::{Rng, SeedableRng};
@@ -113,7 +114,7 @@ fn affix_count_for_rarity(rarity: ItemRarity, rng: &mut ChaCha8Rng) -> usize {
     }
 }
 
-fn affix_slot_weight(affix: ItemAffix, slot: GearSlot) -> u32 {
+fn affix_slot_weight_base(affix: ItemAffix, slot: GearSlot) -> u32 {
     let base = 2u32;
     let family = affix_family_for_slot(slot);
     let bonus = match (family, affix) {
@@ -136,11 +137,38 @@ fn affix_slot_weight(affix: ItemAffix, slot: GearSlot) -> u32 {
     base + bonus
 }
 
-fn affix_pick_table(slot: GearSlot, rarity: ItemRarity) -> Vec<(ItemAffix, u32)> {
+fn archetype_hint_affix_bonus(hint: CombatArchetypeHint, affix: ItemAffix) -> u32 {
+    match (hint, affix) {
+        (CombatArchetypeHint::ThreatAnchor, ItemAffix::Bastion | ItemAffix::Heavy) => 3,
+        (CombatArchetypeHint::WardFocused, ItemAffix::Bastion | ItemAffix::Rhythm) => 2,
+        (CombatArchetypeHint::PoisonRamping, ItemAffix::Virulent) => 4,
+        (CombatArchetypeHint::HeavyWeave, ItemAffix::Heavy | ItemAffix::Rhythm) => 3,
+        (CombatArchetypeHint::CleaveAoE, ItemAffix::Shattering | ItemAffix::Relentless) => 2,
+        (CombatArchetypeHint::ReactiveThorns, ItemAffix::Spiked) => 4,
+        (CombatArchetypeHint::SustainStrike, ItemAffix::Vampiric | ItemAffix::Devourer) => 3,
+        (CombatArchetypeHint::BurstStrike, ItemAffix::Relentless | ItemAffix::TitansFury) => 3,
+        (CombatArchetypeHint::InstantStrike, ItemAffix::Relentless | ItemAffix::Rhythm) => 2,
+        _ => 0,
+    }
+}
+
+fn affix_slot_weight(affix: ItemAffix, slot: GearSlot, hints: &[CombatArchetypeHint]) -> u32 {
+    let mut w = affix_slot_weight_base(affix, slot);
+    for h in hints {
+        w = w.saturating_add(archetype_hint_affix_bonus(*h, affix));
+    }
+    w
+}
+
+fn affix_pick_table(
+    slot: GearSlot,
+    rarity: ItemRarity,
+    hints: &[CombatArchetypeHint],
+) -> Vec<(ItemAffix, u32)> {
     let mut v: Vec<(ItemAffix, u32)> = STANDARD_AFFIXES
         .iter()
         .copied()
-        .map(|a| (a, affix_slot_weight(a, slot)))
+        .map(|a| (a, affix_slot_weight(a, slot, hints)))
         .collect();
     if rarity == ItemRarity::Legendary {
         v.push((ItemAffix::Devourer, 8));
@@ -164,9 +192,14 @@ fn pick_weighted_affix(rng: &mut ChaCha8Rng, table: &[(ItemAffix, u32)]) -> Item
     table[0].0
 }
 
-fn roll_affixes(rng: &mut ChaCha8Rng, slot: GearSlot, rarity: ItemRarity) -> Vec<ItemAffix> {
+fn roll_affixes(
+    rng: &mut ChaCha8Rng,
+    slot: GearSlot,
+    rarity: ItemRarity,
+    hints: &[CombatArchetypeHint],
+) -> Vec<ItemAffix> {
     let want = affix_count_for_rarity(rarity, rng);
-    let table = affix_pick_table(slot, rarity);
+    let table = affix_pick_table(slot, rarity, hints);
     let mut out = Vec::with_capacity(want);
     for _ in 0..64 {
         if out.len() >= want {
@@ -384,7 +417,7 @@ fn slot_lane_seed(slot: GearSlot) -> u64 {
 
 /// Roll loot with a locked gear slot — used for onboarding salvage pacing.
 pub fn roll_loot_for_slot(depth: u32, seed: u64, slot: GearSlot) -> ItemInstance {
-    roll_loot_for_slot_impl(depth, seed, slot, true)
+    roll_loot_for_slot_impl(depth, seed, slot, true, &[])
 }
 
 fn roll_loot_for_slot_impl(
@@ -392,12 +425,13 @@ fn roll_loot_for_slot_impl(
     seed: u64,
     slot: GearSlot,
     allow_two_handed: bool,
+    archetype_hints: &[CombatArchetypeHint],
 ) -> ItemInstance {
     let lane = slot_lane_seed(slot);
     let lane_shift = lane.rotate_left(slot as u32);
     let mut rng = ChaCha8Rng::seed_from_u64(seed.wrapping_add(depth as u64) ^ lane_shift);
     let rarity = roll_rarity_for_depth(depth, &mut rng);
-    let affixes = roll_affixes(&mut rng, slot, rarity);
+    let affixes = roll_affixes(&mut rng, slot, rarity, archetype_hints);
     let id_seed = seed ^ lane_shift;
     item_from_slot_and_affixes(
         depth,
@@ -410,10 +444,19 @@ fn roll_loot_for_slot_impl(
 }
 
 pub fn roll_loot(depth: u32, seed: u64) -> ItemInstance {
+    roll_loot_with_hints(depth, seed, &[])
+}
+
+/// Treasure and similar rolls: nudges affix weights toward [`CombatArchetypeHint`]s from the lead hero loadout (no class lock-in).
+pub fn roll_loot_with_hints(
+    depth: u32,
+    seed: u64,
+    archetype_hints: &[CombatArchetypeHint],
+) -> ItemInstance {
     let mut rng = ChaCha8Rng::seed_from_u64(seed ^ depth as u64);
     let slot = pick_weighted_slot(&mut rng);
     let rarity = roll_rarity_for_depth(depth, &mut rng);
-    let affixes = roll_affixes(&mut rng, slot, rarity);
+    let affixes = roll_affixes(&mut rng, slot, rarity, archetype_hints);
     item_from_slot_and_affixes(depth, seed, slot, rarity, affixes, true)
 }
 
@@ -424,6 +467,7 @@ pub fn roll_profile_guided_early_combat_drop(
     run_seed: u64,
     room_depth: u32,
     profile_claim_count_before_grant: u32,
+    archetype_hints: &[CombatArchetypeHint],
 ) -> ItemInstance {
     let salt = run_seed
         .wrapping_mul(31_337)
@@ -434,9 +478,9 @@ pub fn roll_profile_guided_early_combat_drop(
                 .wrapping_mul(0x9E37_79B97F4A7C15),
         );
     match profile_claim_count_before_grant {
-        0 => roll_loot_for_slot_impl(depth, salt, GearSlot::MainHand, false),
-        1 => roll_loot_for_slot(depth, salt, GearSlot::Chest),
-        _ => roll_loot(depth, salt),
+        0 => roll_loot_for_slot_impl(depth, salt, GearSlot::MainHand, false, archetype_hints),
+        1 => roll_loot_for_slot_impl(depth, salt, GearSlot::Chest, true, archetype_hints),
+        _ => roll_loot_with_hints(depth, salt, archetype_hints),
     }
 }
 
@@ -465,23 +509,23 @@ mod tests {
 
     #[test]
     fn guided_early_combat_first_weapon_second_chest() {
-        let w = roll_profile_guided_early_combat_drop(1, 99, 1, 0);
-        let a = roll_profile_guided_early_combat_drop(1, 99, 1, 1);
+        let w = roll_profile_guided_early_combat_drop(1, 99, 1, 0, &[]);
+        let a = roll_profile_guided_early_combat_drop(1, 99, 1, 1, &[]);
         assert_eq!(w.slot, GearSlot::MainHand);
         assert_eq!(a.slot, GearSlot::Chest);
     }
 
     #[test]
     fn guided_early_first_main_hand_never_two_handed() {
-        let w = roll_profile_guided_early_combat_drop(3, 42, 2, 0);
+        let w = roll_profile_guided_early_combat_drop(3, 42, 2, 0, &[]);
         assert_eq!(w.slot, GearSlot::MainHand);
         assert!(!w.two_handed);
     }
 
     #[test]
     fn guided_early_claim_tiers_are_not_duplicate_items_same_seed() {
-        let first = roll_profile_guided_early_combat_drop(3, 1, 3, 0);
-        let second = roll_profile_guided_early_combat_drop(3, 1, 3, 1);
+        let first = roll_profile_guided_early_combat_drop(3, 1, 3, 0, &[]);
+        let second = roll_profile_guided_early_combat_drop(3, 1, 3, 1, &[]);
         assert_ne!(
             first, second,
             "milestones differ while MVP run seed stays fixed"
@@ -551,14 +595,14 @@ mod tests {
 
     #[test]
     fn legendary_pick_table_includes_devourer_and_titans_fury() {
-        let t = affix_pick_table(GearSlot::MainHand, ItemRarity::Legendary);
+        let t = affix_pick_table(GearSlot::MainHand, ItemRarity::Legendary, &[]);
         assert!(t.iter().any(|(a, _)| *a == ItemAffix::Devourer));
         assert!(t.iter().any(|(a, _)| *a == ItemAffix::TitansFury));
     }
 
     #[test]
     fn non_legendary_table_excludes_legendary_only_affixes() {
-        let t = affix_pick_table(GearSlot::Trinket1, ItemRarity::Epic);
+        let t = affix_pick_table(GearSlot::Trinket1, ItemRarity::Epic, &[]);
         assert!(!t.iter().any(|(a, _)| *a == ItemAffix::Devourer));
         assert!(!t.iter().any(|(a, _)| *a == ItemAffix::TitansFury));
     }

@@ -2,6 +2,18 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.29 — 2026-05-09
+
+### Combat / roles / itemization (Wave 5)
+
+- **Party threat routing:** Per-tick decay on both threat slots; on a fixed interval, when the ally has tank stance (`Guard` + `ThickHide`), threat can **transfer** from lead to partner with an extra burst — wired in [`simulate_combat_party`](src/domain/combat.rs) / [`simulate_combat_party_foes`](src/domain/combat.rs) via [`tick_party_threat_routing`](src/domain/party.rs); pulse may emit [`CombatEvent::ThreatSnapshot`](src/domain/combat.rs).
+- **Archetype hints:** [`combat_archetype`](src/domain/combat_archetype.rs) derives [`CombatArchetypeHint`](src/domain/combat_archetype.rs) from skills/affixes on the **lead**; [`loot`](src/domain/loot.rs) nudges affix roll weights; [`roll_loot`](src/domain/loot.rs) / profile-guided early drops and treasure in [`run`](src/domain/run.rs) use those hints.
+- **Elite twin encounters:** Elite rooms can roll a **twin** pack ([`dungeon`](src/domain/dungeon.rs)) using twin-named bodies.
+
+### Docs
+
+- **Wave 5** checked in [`ACTIVE-REMAINING-WORK.md`](docs/superpowers/ACTIVE-REMAINING-WORK.md); cross-check table links archetype + threat code paths.
+
 ## 0.2.28 — 2026-05-09
 
 ### Itemization / progression (Wave 4)
