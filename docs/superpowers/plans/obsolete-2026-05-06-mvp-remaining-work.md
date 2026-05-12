@@ -1,5 +1,7 @@
 # MVP Remaining Work — Gap Plan
 
+> **OBSOLETE (archived).** Current execution backlog: [`../ACTIVE-REMAINING-WORK.md`](../ACTIVE-REMAINING-WORK.md).
+
 > **For agentic workers:** Use superpowers:subagent-driven-development or superpowers:executing-plans for task-by-task execution. Track with `- [ ]` checkboxes.
 
 **Goal:** Close the gap between “checklist MVP” (tests + loop + persistence) and the playable, build-centric MVP described in README and `docs/superpowers/specs/2026-05-06-roguelike-incremental-bevy-design.md`.

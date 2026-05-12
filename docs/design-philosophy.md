@@ -60,6 +60,6 @@ Visual polish (animation, art pass) is expected to trail **mechanical depth**—
 
 ## Where this can grow
 
-Higher-level specs in `docs/superpowers/specs/` describe **party systems**, richer **dungeon structure**, and **buildcraft** in more detail. This philosophy doc should stay short enough to read once; those files drill into specifics.
+**Active backlog:** `docs/superpowers/ACTIVE-REMAINING-WORK.md` (what is left to implement). Archived strategic specs live under `docs/superpowers/specs/obsolete-*`. This philosophy doc should stay short enough to read once; superpowers docs drill into specifics.
 
 In one line: **Delvers rewards preparation and systems knowledge in a fair, reproducible simulation, with an incremental meta loop that makes every delve matter.**

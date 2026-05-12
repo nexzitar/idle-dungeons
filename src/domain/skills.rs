@@ -100,6 +100,55 @@ pub enum SkillCombatStyle {
     InstantStrike,
 }
 
+/// Player-facing **combat taxonomy** for UI, tooltips, and future layering rules.
+/// Orthogonal to [`SkillCombatStyle`] (sim scheduler) and [`SkillKind`] (active/passive).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SkillCategory {
+    /// Weapon white swings only (not a [`SkillId`]); kept for legends / future hooks.
+    BasicAttack,
+    /// Actives that ride the weapon swing cadence or fire as dedicated attack abilities (incl. instant strikes).
+    AttackSkill,
+    /// Protective windows, next-hit queues, room shields.
+    Buff,
+    /// Mitigation / reflect tied to inbound hits (actives).
+    Reactive,
+    /// Always-on or periodic modifiers.
+    Passive,
+    /// Reserved for channeled skills (none equipped yet).
+    Channel,
+    /// Crit / proc-style passives (may be stubs until pipelines land).
+    Proc,
+}
+
+impl SkillCategory {
+    pub const fn display_label(self) -> &'static str {
+        match self {
+            SkillCategory::BasicAttack => "Basic attack",
+            SkillCategory::AttackSkill => "Attack skill",
+            SkillCategory::Buff => "Buff",
+            SkillCategory::Reactive => "Reactive",
+            SkillCategory::Passive => "Passive",
+            SkillCategory::Channel => "Channel",
+            SkillCategory::Proc => "Proc",
+        }
+    }
+}
+
+/// Category for build UI and layering policy; derived from id + catalog fields.
+pub fn skill_category(id: SkillId) -> SkillCategory {
+    use SkillId::*;
+    match id {
+        LuckyStrike | Predator => SkillCategory::Proc,
+        Guard | ThornSkin => SkillCategory::Reactive,
+        BarrierPulse | EmpoweredBlow => SkillCategory::Buff,
+        HeavyStrike | Cleave | PoisonEdge | Taunt | LifestealStrike | VictoryRush => {
+            SkillCategory::AttackSkill
+        }
+        SecondWind | ToxicMastery | VampiricAura | ThickHide | ArcaneOverflow | Berserker
+        | SwiftStrikes | IronWill | BattleFocus | CautiousAdvance => SkillCategory::Passive,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SkillDefinition {
     pub id: SkillId,
@@ -583,7 +632,29 @@ pub fn skill_definition(id: SkillId) -> SkillDefinition {
 
 #[cfg(test)]
 mod combat_style_tests {
-    use super::{skill_combat_meta, skill_definition, skill_triggers_shared_ability_gcd, SkillId};
+    use super::{
+        skill_category, skill_combat_meta, skill_definition, skill_triggers_shared_ability_gcd,
+        SkillCategory, SkillId,
+    };
+
+    #[test]
+    fn skill_category_maps_every_id_consistently() {
+        for id in SkillId::ALL {
+            let c = skill_category(*id);
+            let d = skill_definition(*id);
+            match c {
+                SkillCategory::Passive | SkillCategory::Proc => {
+                    assert_eq!(d.kind, super::SkillKind::Passive);
+                }
+                SkillCategory::AttackSkill | SkillCategory::Buff | SkillCategory::Reactive => {
+                    assert_eq!(d.kind, super::SkillKind::Active);
+                }
+                SkillCategory::BasicAttack | SkillCategory::Channel => {
+                    panic!("unused category on SkillId");
+                }
+            }
+        }
+    }
 
     #[test]
     fn shared_ability_gcd_only_on_instant_and_next_melee_buff() {

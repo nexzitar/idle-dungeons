@@ -1,5 +1,7 @@
 # Roadmap Implementation Plan
 
+> **OBSOLETE (archived).** Current execution backlog: [`../ACTIVE-REMAINING-WORK.md`](../ACTIVE-REMAINING-WORK.md). Phases A–D.1 described here are largely complete.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Execute the README roadmap: deepen combat/skill parity and clarity, make stash UI honest or functional, add run/world variety and briefing clarity, then presentation polish—without breaking the simulation-as-source-of-truth architecture.

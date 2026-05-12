@@ -1,5 +1,7 @@
 # MVP Implementation Plan
 
+> **OBSOLETE (archived).** Historical bootstrap checklist; current work: [`../ACTIVE-REMAINING-WORK.md`](../ACTIVE-REMAINING-WORK.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the first playable Bevy MVP for Idle Dungeons: one automated hero, skill slots, gear synergy, deterministic dungeon runs, loot, meta-progression, save/load, and a functional UI.

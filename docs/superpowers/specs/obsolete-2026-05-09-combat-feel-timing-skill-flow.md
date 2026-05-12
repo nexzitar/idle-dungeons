@@ -1,5 +1,7 @@
 # Combat feel, timing & skill flow — design spec
 
+> **OBSOLETE (archived).** Current execution backlog: [`../ACTIVE-REMAINING-WORK.md`](../ACTIVE-REMAINING-WORK.md). This file is kept for design history.
+
 **Status:** draft for review  
 **Anchors:** simulation-first (`src/domain/combat.rs`), deterministic playback, Bevy UI consumes events only.
 
@@ -163,4 +165,4 @@ After this spec is reviewed, use **writing-plans** to break Phase 1 into PR-size
 
 ## Implementation
 
-- **Phase 1 plan:** [combat-scheduler-phase1.md](../plans/2026-05-09-combat-scheduler-phase1.md)
+- **Phase 1 plan:** [obsolete-2026-05-09-combat-scheduler-phase1.md](../plans/obsolete-2026-05-09-combat-scheduler-phase1.md)

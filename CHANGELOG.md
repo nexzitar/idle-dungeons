@@ -2,6 +2,34 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.27 — 2026-05-09
+
+### Combat / hardening
+
+- **Fixed-point weapon meters:** Party and foe swing buildup uses [`combat_meter`](src/domain/combat_meter.rs) (`u64` sub-units) instead of float meters in [`simulate_combat_party`](src/domain/combat.rs); unit tests cover consume semantics and long-run add/consume balance.
+- **Poison scheduling:** Documented batched end-of-tick [`PoisonTick`](src/domain/combat.rs) (after proactive strikes and [`TimingPulse`](src/domain/combat.rs)); regression test locks event ordering vs [`ActionLane::Dot`](src/domain/combat_timing.rs).
+- **Scheduler tests:** Extreme `attack_speed` determinism (`scheduler_extreme_attack_speed_is_deterministic`); solo mutual OHKO outcome follows initiative (`mutual_ohko_outcome_follows_initiative_order_solo`).
+
+### Docs
+
+- **Waves:** [`ACTIVE-REMAINING-WORK.md`](docs/superpowers/ACTIVE-REMAINING-WORK.md) Wave 3 marked complete.
+
+## 0.2.26 — 2026-05-12
+
+### Domain / UX
+
+- **Skill layering:** [`skill_layering`](src/domain/skill_layering.rs) module with [`layering_warnings`](src/domain/skill_layering.rs) (Heavy + Cleave today); build panel appends notices under core stats.
+- **Docs:** [`ACTIVE-REMAINING-WORK.md`](docs/superpowers/ACTIVE-REMAINING-WORK.md) waves updated for §D encounter score / equipment slots and §E archetype framework; Waves 1–2 marked done for taxonomy + layering.
+
+## 0.2.25 — 2026-05-09
+
+### Docs / combat readability
+
+- **Backlog:** [`ACTIVE-REMAINING-WORK.md`](docs/superpowers/ACTIVE-REMAINING-WORK.md) adds execution waves + code cross-links atop the A–H design sections.
+- **Skills:** [`SkillCategory`](src/domain/skills.rs) (BasicAttack … Proc taxonomy) and [`skill_category`](src/domain/skills.rs) for every [`SkillId`](src/domain/skills.rs); skill book rows show category beside active/passive.
+- **Playback float text:** [`playback_float_text_color`](src/ui/theme.rs) takes [`CombatSfxAnchor`](src/domain/combat.rs) so party outbound strikes read as cream/gold instead of foe-red.
+- **Timing docs:** Module rustdoc on [`combat_timing`](src/domain/combat_timing.rs) summarizes tick length, GCD vs weapon cadence, and initiative.
+
 ## 0.2.24 — 2026-05-09
 
 ### Combat / playback

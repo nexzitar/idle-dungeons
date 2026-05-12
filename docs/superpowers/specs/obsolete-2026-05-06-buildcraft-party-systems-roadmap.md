@@ -1,5 +1,7 @@
 # Idle Dungeons — Buildcraft & Party Systems Roadmap
 
+> **OBSOLETE (archived).** Strategic vision only; active tasks: [`../ACTIVE-REMAINING-WORK.md`](../ACTIVE-REMAINING-WORK.md).
+
 **Goal:** Expand Idle Dungeons from a single-hero stat-driven MVP into a deeper buildcraft-focused automated RPG with meaningful roles, party composition, skill identity, threat systems, and build-defining equipment.
 
 This roadmap intentionally moves away from:

@@ -2150,7 +2150,7 @@ fn spawn_playback_floating_combat_text(
     let Ok(parent) = float_layer.single() else {
         return;
     };
-    let color = crate::ui::theme::playback_float_text_color(&caption);
+    let color = crate::ui::theme::playback_float_text_color(&caption, anchor);
     let font_size = UiTheme::FONT_COMPACT;
     let mut pos = Node {
                 box_sizing: BoxSizing::BorderBox,
