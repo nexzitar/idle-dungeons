@@ -2,6 +2,17 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.30 — 2026-05-09
+
+### Telemetry (Wave 6)
+
+- **Strike damage totals:** [`RunSummary`](src/domain/run.rs) carries cumulative **white** (weapon/basic) vs **yellow** (ability) damage from party [`HeroAttacked`](src/domain/combat.rs) events (primary + cleave); [`party_strike_damage_white_yellow`](src/domain/combat.rs) aggregates the event stream. [`RunSummary::strike_ability_share_percent`](src/domain/run.rs) exposes **0–100** ability share for display.
+- **UI:** Run rewards digest and rewards modal show the strike mix when there was strike damage ([`summary_panel`](src/ui/summary_panel.rs), [`mockup_layout`](src/ui/mockup_layout.rs)).
+
+### Docs
+
+- **Wave 6** checked in [`ACTIVE-REMAINING-WORK.md`](docs/superpowers/ACTIVE-REMAINING-WORK.md); cross-check table links strike telemetry.
+
 ## 0.2.29 — 2026-05-09
 
 ### Combat / roles / itemization (Wave 5)

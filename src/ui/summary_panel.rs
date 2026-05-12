@@ -14,6 +14,8 @@ pub fn empty_run_summary() -> RunSummary {
         peak_risk_note: String::new(),
         guided_early_combat_drop_granted: false,
         encounter_score: 0,
+        party_strike_damage_white: 0,
+        party_strike_damage_yellow: 0,
     }
 }
 
@@ -59,13 +61,24 @@ pub fn outcome_headline(summary: &RunSummary) -> String {
 }
 
 pub fn reward_digest(summary: &RunSummary) -> String {
-    format!(
+    let mut out = format!(
         "Rewards pending - Gold +{} · Salvage +{} · Encounter score {} · Loot pieces: {}",
         summary.gold_earned,
         summary.salvage_earned,
         summary.encounter_score,
         summary.loot.len()
-    )
+    );
+    if let Some(pct) = summary.strike_ability_share_percent() {
+        use std::fmt::Write;
+        let _ = write!(
+            &mut out,
+            "\nStrike damage: {}% abilities · {} white · {} yellow",
+            pct,
+            summary.party_strike_damage_white,
+            summary.party_strike_damage_yellow
+        );
+    }
+    out
 }
 
 /// Curated beats for scan-friendly storytelling (subset of the run log).
@@ -109,6 +122,8 @@ mod tests {
             peak_risk_note: "Peak room risk: moderate (standard combat).".into(),
             guided_early_combat_drop_granted: false,
             encounter_score: 0,
+            party_strike_damage_white: 60,
+            party_strike_damage_yellow: 40,
         };
 
         let text = summary_panel_text(&summary);
@@ -116,6 +131,9 @@ mod tests {
         assert!(text.contains("depth 8"));
         assert!(text.contains("Gold +30"));
         assert!(text.contains("Encounter score"));
+        assert!(text.contains("40% abilities"));
+        assert!(text.contains("60 white"));
+        assert!(text.contains("40 yellow"));
         assert!(text.contains("Defeated by Hollow"));
         assert!(text.contains("Peak room risk"));
     }

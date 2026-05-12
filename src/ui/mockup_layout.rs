@@ -2387,6 +2387,14 @@ pub fn spawn_summary_rewards_modal(
                         "Gold +{} · Salvage +{} · Depth {}",
                         summary.gold_earned, summary.salvage_earned, summary.deepest_depth
                     )));
+                    if let Some(pct) = summary.strike_ability_share_percent() {
+                        dialog.spawn(caption_text(format!(
+                            "Strikes: {}% ability · {} weapon / {} ability",
+                            pct,
+                            summary.party_strike_damage_white,
+                            summary.party_strike_damage_yellow
+                        )));
+                    }
                     if summary.loot.is_empty() {
                         dialog.spawn(body_text(
                             "No gear dropped this run—gold and salvage still apply.",
