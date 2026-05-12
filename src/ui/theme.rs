@@ -264,6 +264,36 @@ pub fn format_item_affix_lines(item: &crate::domain::items::ItemInstance) -> Str
         .join("\n")
 }
 
+pub fn skill_category_chip_colors(
+    cat: crate::domain::skills::SkillCategory,
+) -> (Color, Color) {
+    use crate::domain::skills::SkillCategory;
+    match cat {
+        SkillCategory::BasicAttack => (UiTheme::stone_mid(), UiTheme::muted_cream()),
+        SkillCategory::AttackSkill => (
+            UiTheme::elite().mix(&UiTheme::void_black(), 0.5),
+            UiTheme::muted_gold(),
+        ),
+        SkillCategory::Buff => (
+            Color::srgb(0.22, 0.38, 0.42).mix(&UiTheme::void_black(), 0.35),
+            UiTheme::healing(),
+        ),
+        SkillCategory::Reactive => (
+            Color::srgb(0.28, 0.36, 0.55).mix(&UiTheme::void_black(), 0.35),
+            Color::srgb(0.65, 0.74, 0.92),
+        ),
+        SkillCategory::Passive => (UiTheme::stone_deep(), UiTheme::body_dim()),
+        SkillCategory::Channel => (
+            Color::srgb(0.42, 0.3, 0.52).mix(&UiTheme::void_black(), 0.35),
+            Color::srgb(0.82, 0.72, 0.92),
+        ),
+        SkillCategory::Proc => (
+            UiTheme::treasure().mix(&UiTheme::void_black(), 0.55),
+            UiTheme::treasure(),
+        ),
+    }
+}
+
 pub fn playback_float_text_color(
     caption: &str,
     anchor: crate::domain::combat::CombatSfxAnchor,
@@ -272,36 +302,72 @@ pub fn playback_float_text_color(
     if lower.contains("recover") || lower.contains("recovers") {
         return UiTheme::healing();
     }
-    // Outbound party damage: avoid blood-red (reserved for incoming pain / foe effects).
-    if matches!(
-        anchor,
-        crate::domain::combat::CombatSfxAnchor::Lead | crate::domain::combat::CombatSfxAnchor::Ally
-    ) {
-        if lower.contains("ability") || lower.contains(" white and ") {
-            return UiTheme::muted_gold();
+
+    match anchor {
+        crate::domain::combat::CombatSfxAnchor::Enemy => {
+            if lower.contains("poison deals") || lower.contains("poison corrodes") {
+                return UiTheme::status_poison();
+            }
+            if lower.contains("thorns bite") {
+                return UiTheme::muted_gold();
+            }
+            if lower.contains("defeated") {
+                return UiTheme::treasure();
+            }
+            if lower.contains("ability") || lower.contains("cleave hits") {
+                return UiTheme::muted_gold();
+            }
+            if lower.contains("strike for") || lower.contains("hits foe") {
+                return UiTheme::muted_cream();
+            }
+            if lower.contains("strike") && lower.contains("white") {
+                return UiTheme::muted_cream();
+            }
+            UiTheme::muted_cream()
         }
-        if lower.contains("strike")
-            || lower.contains("hits")
-            || lower.contains("thorns bite")
-        {
-            return UiTheme::muted_cream();
+        crate::domain::combat::CombatSfxAnchor::Lead | crate::domain::combat::CombatSfxAnchor::Ally => {
+            if lower.contains("the foe hits")
+                || lower.contains("collapse")
+                || lower.contains(" is down")
+            {
+                return UiTheme::danger();
+            }
+            if lower.contains("ability") || lower.contains(" white and ") {
+                return UiTheme::muted_gold();
+            }
+            if lower.contains("strike")
+                || lower.contains("hits you")
+                || lower.contains("hits your")
+                || lower.contains("thorns bite")
+            {
+                return UiTheme::muted_cream();
+            }
+            if lower.contains("poison") {
+                return UiTheme::status_poison();
+            }
+            if lower.contains("damage") || lower.contains("hits") {
+                return UiTheme::danger();
+            }
+            UiTheme::muted_cream()
         }
+        crate::domain::combat::CombatSfxAnchor::Neutral => UiTheme::muted_cream(),
     }
-    if lower.contains("ability") {
-        return UiTheme::muted_gold();
+}
+
+#[cfg(test)]
+mod playback_float_tests {
+    use super::*;
+    use crate::domain::combat::CombatSfxAnchor;
+
+    #[test]
+    fn float_poison_tick_uses_venom_green_on_foe_anchor() {
+        let c = playback_float_text_color("Poison deals 3 damage (2 stacks).", CombatSfxAnchor::Enemy);
+        assert_eq!(c, UiTheme::status_poison());
     }
-    if lower.contains("poison") {
-        return UiTheme::danger();
+
+    #[test]
+    fn float_cleave_splash_is_ability_gold_on_foe_anchor() {
+        let c = playback_float_text_color("… Cleave hits foe 2 for 5.", CombatSfxAnchor::Enemy);
+        assert_eq!(c, UiTheme::muted_gold());
     }
-    if lower.contains("strike")
-        || lower.contains("damage")
-        || lower.contains("hits")
-        || lower.contains("thorns")
-        || lower.contains("defeated")
-        || lower.contains("collapse")
-        || lower.contains("down")
-    {
-        return UiTheme::danger();
-    }
-    UiTheme::muted_cream()
 }

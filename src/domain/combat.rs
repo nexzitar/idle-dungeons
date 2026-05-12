@@ -115,6 +115,9 @@ pub enum CombatEvent {
         ally_cd: f32,
         foe_cast: f32,
         foe_cd: f32,
+        /// When **≥2** living foes, cast/CD for a **non-primary** pack member (off-focus timeline).
+        foe_alt_cast: f32,
+        foe_alt_cd: f32,
         /// Shared ability GCD (Victory Rush, Empowered Blow queue): fill **during** lockout (`0` when ready).
         lead_skill_gcd: f32,
         /// Per-charge Victory Rush recharge progress (`0` when idle at max charges or skill absent).
@@ -382,6 +385,7 @@ enum PlaybackStep {
         total_damage: i32,
         tick_count: u32,
         stacks_before_last: u32,
+        #[allow(dead_code)]
         foe_index: u8,
     },
 }
@@ -558,6 +562,9 @@ pub struct CombatPlaybackFrame {
     pub ally_cd: f32,
     pub foe_cast: f32,
     pub foe_cd: f32,
+    /// Pack off-target foe cast/CD fills (zeros in solo or when only one foe lives).
+    pub foe_alt_cast: f32,
+    pub foe_alt_cd: f32,
     /// Ability GCD bar (`0` = ready), same semantics as [`CombatEvent::TimingPulse::lead_skill_gcd`].
     pub lead_skill_gcd: f32,
     pub lead_instant_recharge: f32,
@@ -3092,6 +3099,8 @@ pub fn simulate_combat_party_with_options(
                 ally_cd,
                 foe_cast,
                 foe_cd: foe_cd_b,
+                foe_alt_cast: 0.0,
+                foe_alt_cd: 0.0,
                 lead_skill_gcd,
                 lead_instant_recharge,
                 lead_instant_charges,
@@ -3696,6 +3705,34 @@ fn simulate_combat_party_foes(
             } else {
                 (0.0, 0.0, 0, 0)
             };
+        let mut foe_alt_idx = None;
+        for ai in 0..foes.len() {
+            if ai != fd && enemy_health[ai] > 0 {
+                foe_alt_idx = Some(ai);
+                break;
+            }
+        }
+        let (foe_alt_cast, foe_alt_cd) = if let Some(ai) = foe_alt_idx {
+            let fct_a = foe_ct[ai];
+            let fdt_a = foe_dt[ai];
+            let fc_a = if fct_a == 0 {
+                0.0
+            } else if foe_cast_left[ai] > 0 {
+                1.0 - (foe_cast_left[ai] as f32 / fct_a as f32)
+            } else {
+                0.0
+            };
+            let cd_a = if fdt_a == 0 {
+                0.0
+            } else if foe_cd_left[ai] > 0 {
+                1.0 - (foe_cd_left[ai] as f32 / fdt_a as f32)
+            } else {
+                0.0
+            };
+            (fc_a, cd_a)
+        } else {
+            (0.0, 0.0)
+        };
         if events.len() < MAX_EVENTS {
             events.push(CombatEvent::TimingPulse {
                 lead_cast,
@@ -3704,6 +3741,8 @@ fn simulate_combat_party_foes(
                 ally_cd,
                 foe_cast,
                 foe_cd: foe_cd_b,
+                foe_alt_cast,
+                foe_alt_cd,
                 lead_skill_gcd,
                 lead_instant_recharge,
                 lead_instant_charges,
@@ -4041,6 +4080,8 @@ pub fn combat_playback_frames_from_result(
         ally_cd: 0.0,
         foe_cast: 0.0,
         foe_cd: 0.0,
+        foe_alt_cast: 0.0,
+        foe_alt_cd: 0.0,
         lead_skill_gcd: 0.0,
         lead_instant_recharge: 0.0,
         lead_instant_charges: 0,
@@ -4057,6 +4098,8 @@ pub fn combat_playback_frames_from_result(
     let mut ally_cd = 0.0f32;
     let mut foe_cast_b = 0.0f32;
     let mut foe_cd_bar = 0.0f32;
+    let mut foe_alt_cast_b = 0.0f32;
+    let mut foe_alt_cd_bar = 0.0f32;
     let mut lead_skill_gcd = 0.0f32;
     let mut lead_instant_recharge = 0.0f32;
     let mut lead_instant_charges = 0u8;
@@ -4121,6 +4164,8 @@ pub fn combat_playback_frames_from_result(
                     ally_cd: acdn,
                     foe_cast: fc,
                     foe_cd: fcdn,
+                    foe_alt_cast: fac,
+                    foe_alt_cd: facd,
                     lead_skill_gcd: lsg,
                     lead_instant_recharge: lir,
                     lead_instant_charges: lic,
@@ -4136,6 +4181,8 @@ pub fn combat_playback_frames_from_result(
                     ally_cd = *acdn;
                     foe_cast_b = *fc;
                     foe_cd_bar = *fcdn;
+                    foe_alt_cast_b = *fac;
+                    foe_alt_cd_bar = *facd;
                     lead_skill_gcd = *lsg;
                     lead_instant_recharge = *lir;
                     lead_instant_charges = *lic;
@@ -4240,6 +4287,8 @@ pub fn combat_playback_frames_from_result(
             ally_cd,
             foe_cast: foe_cast_b,
             foe_cd: foe_cd_bar,
+            foe_alt_cast: foe_alt_cast_b,
+            foe_alt_cd: foe_alt_cd_bar,
             lead_skill_gcd,
             lead_instant_recharge,
             lead_instant_charges,
@@ -4804,6 +4853,81 @@ mod tests {
         assert_eq!(pri, 0);
         assert_eq!(n_splash, 1, "two foes => one cleave off-target");
         assert!(main > 0 && sp > 0, "main={main} splash={sp}");
+    }
+
+    #[test]
+    fn pack_timing_pulse_carries_alt_foe_meters_when_two_foes_alive() {
+        let mut hero = HeroProfile::default();
+        hero.unlock_skill_slots(1);
+        hero.equip_skill(0, SkillId::Cleave).unwrap();
+        let foes = [
+            Enemy {
+                name: "A".into(),
+                max_health: 9999,
+                damage: 0,
+                armor: 0,
+                attack_speed: 0.01,
+                cast_ticks: 6,
+                cooldown_ticks: 6,
+            },
+            Enemy {
+                name: "B".into(),
+                max_health: 9999,
+                damage: 0,
+                armor: 0,
+                attack_speed: 0.01,
+                cast_ticks: 6,
+                cooldown_ticks: 6,
+            },
+        ];
+        let r = simulate_party_vs_encounter_foes(
+            &hero,
+            &foes,
+            2000,
+            100,
+            None,
+            3,
+            &[],
+            CombatSimOptions::default(),
+        );
+        // Pack combat drains foe cast/CD to quiescence inside each clock tick before emitting
+        // TimingPulse, so foe_alt fills are usually 0 alongside primary foe bars. Instead,
+        // assert parity between primary (focus-fire) and off-target meters when both foes share
+        // identical timing parameters (always synchronized when mid-tick state were visible).
+        let pulses: Vec<(f32, f32, f32, f32)> = r
+            .events
+            .iter()
+            .filter_map(|e| {
+                if let CombatEvent::TimingPulse {
+                    foe_cast,
+                    foe_cd,
+                    foe_alt_cast,
+                    foe_alt_cd,
+                    ..
+                } = e
+                {
+                    Some((
+                        *foe_cast,
+                        *foe_cd,
+                        *foe_alt_cast,
+                        *foe_alt_cd,
+                    ))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert!(
+            !pulses.is_empty(),
+            "expected TimingPulse stream in pack combat, events_len={}",
+            r.events.len()
+        );
+        for (fc, cd, fa, ca) in &pulses {
+            assert!(
+                (fc - fa).abs() < 1e-4 && (cd - ca).abs() < 1e-4,
+                "pack pulse: primary ({fc},{cd}) should match off-target ({fa},{ca}) for mirrored foes"
+            );
+        }
     }
 
     #[test]

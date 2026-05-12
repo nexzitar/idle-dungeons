@@ -2,6 +2,18 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.31 — 2026-05-09
+
+### Presentation (Wave 7)
+
+- **Floating combat text:** Stronger caption hierarchy and popup de-spam (`FloatingCombatPopup` sequencing, TTL, cap) in [`mod.rs`](src/ui/mod.rs); [`playback_float_text_color`](src/ui/theme.rs) maps anchors (e.g. cleave/ability gold, poison venom on foe).
+- **Pack timing UI:** [`CombatEvent::TimingPulse`](src/domain/combat.rs) and [`CombatPlaybackFrame`](src/domain/combat.rs) carry **off-target** foe cast/CD fills when multiple foes live; theater adds a **Flank** row and alt bars in [`mockup_layout`](src/ui/mockup_layout.rs) / [`components`](src/ui/components.rs), synced in [`sync_playback_cast_bars_foe`](src/ui/mod.rs).
+- **Skill category chips:** [`SkillCategory::category_abbr`](src/domain/skills.rs) plus [`skill_category_chip_colors`](src/ui/theme.rs); loadout and skill book show category affordance in [`build_panel`](src/ui/build_panel.rs) and [`skill_book`](src/ui/skill_book.rs).
+
+### Docs
+
+- **Wave 7** checked in [`ACTIVE-REMAINING-WORK.md`](docs/superpowers/ACTIVE-REMAINING-WORK.md).
+
 ## 0.2.30 — 2026-05-09
 
 ### Telemetry (Wave 6)

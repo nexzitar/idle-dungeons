@@ -37,6 +37,7 @@ use crate::ui::components::{
     PlaybackAllyCastFill, PlaybackAllyCdFill, PlaybackAllyInstantRechargeFill,
     PlaybackAllySkillGcdFill, PlaybackLeadCastFill, PlaybackLeadCdFill,
     PlaybackLeadInstantRechargeFill, PlaybackLeadSkillGcdFill, PlaybackFoeCastFill, PlaybackFoeCdFill,
+    PlaybackFoeAltCastFill, PlaybackFoeAltCdFill, PlaybackFoeAltTimingRow,
     PlaybackHeroDebuffLine, PlaybackLogScrollRegion, PlaybackLogText, PlaybackProgressBarFill,
     PlaybackProgressLabel, PlaybackRoomKindText, PlaybackTheaterFloatLayer, ResetProgressButton,
     RunPlaybackScreen, SalvageItemButton, SettingsButton, SettingsModalBackdrop,
@@ -76,6 +77,9 @@ struct PlaybackCombatLogVisible(pub bool);
 #[derive(Resource, Default)]
 struct UiClickPress(Option<Entity>);
 
+#[derive(Resource, Default)]
+struct FloatingCombatPopupSeq(u32);
+
 pub struct UiPlugin;
 
 #[derive(ScheduleLabel, Clone, Debug, Hash, PartialEq, Eq)]
@@ -98,6 +102,7 @@ impl Plugin for UiPlugin {
         app.init_resource::<crate::ui::tooltip::TooltipState>();
         app.init_resource::<HeroNameEditState>();
         app.init_resource::<PlaybackCombatLogVisible>();
+        app.init_resource::<FloatingCombatPopupSeq>();
         app.add_systems(
             PreUpdate,
             raise_tooltip_above_modals,
@@ -1838,6 +1843,9 @@ fn sync_playback_cast_bars_foe(
     mut params: ParamSet<(
         Query<&mut Node, With<PlaybackFoeCastFill>>,
         Query<&mut Node, With<PlaybackFoeCdFill>>,
+        Query<&mut Node, With<PlaybackFoeAltCastFill>>,
+        Query<&mut Node, With<PlaybackFoeAltCdFill>>,
+        Query<&mut Visibility, With<PlaybackFoeAltTimingRow>>,
     )>,
 ) {
     if playback.frames.is_empty() {
@@ -1855,6 +1863,25 @@ fn sync_playback_cast_bars_foe(
     }
     for mut n in params.p1().iter_mut() {
         n.width = fcdn;
+    }
+    let fca = Val::Percent((c.foe_alt_cast * 100.0).clamp(0.0, 100.0));
+    let fcda = Val::Percent((c.foe_alt_cd * 100.0).clamp(0.0, 100.0));
+    for mut n in params.p2().iter_mut() {
+        n.width = fca;
+    }
+    for mut n in params.p3().iter_mut() {
+        n.width = fcda;
+    }
+    let show = c.enemy_name.contains(" · ");
+    let v = if show {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+    for mut vis in params.p4().iter_mut() {
+        if *vis != v {
+            *vis = v;
+        }
     }
 }
 
@@ -2128,6 +2155,7 @@ fn spawn_playback_floating_combat_text(
     playback: Res<ActiveRunPlayback>,
     mut last_idx: Local<Option<usize>>,
     float_layer: Query<Entity, With<PlaybackTheaterFloatLayer>>,
+    mut seq: ResMut<FloatingCombatPopupSeq>,
     mut commands: Commands,
 ) {
     if playback.frames.is_empty() {
@@ -2151,7 +2179,12 @@ fn spawn_playback_floating_combat_text(
         return;
     };
     let color = crate::ui::theme::playback_float_text_color(&caption, anchor);
-    let font_size = UiTheme::FONT_COMPACT;
+    let lower = caption.to_ascii_lowercase();
+    let font_size = if lower.contains("ability damage") || lower.contains(" white and ") {
+        UiTheme::FONT_SUBLINE
+    } else {
+        UiTheme::FONT_COMPACT
+    };
     let mut pos = Node {
                 box_sizing: BoxSizing::BorderBox,
                 position_type: PositionType::Absolute,
@@ -2180,9 +2213,12 @@ fn spawn_playback_floating_combat_text(
         crate::domain::combat::CombatSfxAnchor::Neutral => return,
     }
 
+    seq.0 = seq.0.wrapping_add(1);
+    let my_seq = seq.0;
+
     commands.entity(parent).with_children(|layer| {
         layer
-            .spawn((pos, FloatingCombatPopup { ttl: 0.95 }))
+            .spawn((pos, FloatingCombatPopup { ttl: 0.88, seq: my_seq }))
             .with_children(|pop| {
                 pop.spawn((
                     Text::new(caption),
@@ -2199,9 +2235,18 @@ fn tick_floating_combat_popups(
     mut q: Query<(Entity, &mut FloatingCombatPopup)>,
 ) {
     let dt = time.delta_secs();
+    let mut v: Vec<(u32, Entity, f32)> = Vec::new();
     for (entity, mut pop) in &mut q {
         pop.ttl -= dt;
-        if pop.ttl <= 0.0 {
+        v.push((pop.seq, entity, pop.ttl));
+    }
+    v.sort_by_key(|(s, _, _)| *s);
+    let remove = v.len().saturating_sub(8);
+    for i in 0..remove {
+        commands.entity(v[i].1).despawn();
+    }
+    for (_, entity, ttl) in v.into_iter().skip(remove) {
+        if ttl <= 0.0 {
             commands.entity(entity).despawn();
         }
     }

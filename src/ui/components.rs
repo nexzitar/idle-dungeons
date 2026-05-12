@@ -71,6 +71,7 @@ pub struct PlaybackTheaterFloatLayer;
 #[derive(Component)]
 pub struct FloatingCombatPopup {
     pub ttl: f32,
+    pub seq: u32,
 }
 
 #[derive(Component)]
@@ -234,6 +235,16 @@ pub struct PlaybackFoeCastFill;
 
 #[derive(Component)]
 pub struct PlaybackFoeCdFill;
+
+#[derive(Component)]
+pub struct PlaybackFoeAltCastFill;
+
+#[derive(Component)]
+pub struct PlaybackFoeAltCdFill;
+
+/// Second foe timing row (pack / flank); hidden in solo fights.
+#[derive(Component)]
+pub struct PlaybackFoeAltTimingRow;
 
 /// Scroll region for the live delve combat log (auto-scroll to latest).
 #[derive(Component)]
