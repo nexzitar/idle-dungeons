@@ -12,6 +12,7 @@ use crate::ui::components::{
 use crate::ui::mockup_layout::spawn_stash_filters_and_sort_row;
 use crate::ui::placeholder_graphics::UiPlaceholderImages;
 use crate::ui::theme::{caption_text, headline_text, section_title, UiTheme};
+use crate::ui::widgets::spawn_scrollable_flex_column;
 
 /// Equipped-gear column.
 const GEAR_LOADOUT_PANEL_W: f32 = 292.0;
@@ -121,21 +122,9 @@ pub fn spawn_gear_hub_modal(
                         .with_children(|loadout_panel| {
                             loadout_panel.spawn(headline_text("Equipped"));
                             loadout_panel.spawn(section_title("LOADOUT"));
-                            loadout_panel
-                                .spawn(Node {
-                                    width: Val::Percent(100.0),
-                                    flex_direction: FlexDirection::Column,
-                                    flex_grow: 1.0,
-                                    flex_basis: Val::Px(0.0),
-                                    min_height: Val::Px(0.0),
-                                    row_gap: Val::Px(6.0),
-                                    ..default()
-                                })
-                                .with_children(|loadout| {
-                                    crate::ui::mockup_layout::mockup_gear_cards(
-                                        loadout, profile, ph,
-                                    );
-                                });
+                            spawn_scrollable_flex_column(loadout_panel, None, |loadout| {
+                                crate::ui::mockup_layout::mockup_gear_cards(loadout, profile, ph);
+                            });
                         });
 
                     columns

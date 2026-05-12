@@ -2,6 +2,33 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.29 — 2026-05-09
+
+### Combat / roles / itemization (Wave 5)
+
+- **Party threat routing:** Per-tick decay on both threat slots; on a fixed interval, when the ally has tank stance (`Guard` + `ThickHide`), threat can **transfer** from lead to partner with an extra burst — wired in [`simulate_combat_party`](src/domain/combat.rs) / [`simulate_combat_party_foes`](src/domain/combat.rs) via [`tick_party_threat_routing`](src/domain/party.rs); pulse may emit [`CombatEvent::ThreatSnapshot`](src/domain/combat.rs).
+- **Archetype hints:** [`combat_archetype`](src/domain/combat_archetype.rs) derives [`CombatArchetypeHint`](src/domain/combat_archetype.rs) from skills/affixes on the **lead**; [`loot`](src/domain/loot.rs) nudges affix roll weights; [`roll_loot`](src/domain/loot.rs) / profile-guided early drops and treasure in [`run`](src/domain/run.rs) use those hints.
+- **Elite twin encounters:** Elite rooms can roll a **twin** pack ([`dungeon`](src/domain/dungeon.rs)) using twin-named bodies.
+
+### Docs
+
+- **Wave 5** checked in [`ACTIVE-REMAINING-WORK.md`](docs/superpowers/ACTIVE-REMAINING-WORK.md); cross-check table links archetype + threat code paths.
+
+## 0.2.28 — 2026-05-09
+
+### Itemization / progression (Wave 4)
+
+- **Nine `GearSlot`s:** main hand, off-hand, head, chest, hands, feet, trinket I & II, relic — distributes power budget across more items; [`loot`](src/domain/loot.rs) uses per-slot stats + compressed depth budget (~55% linear) so drops are smaller but sets stay relevant.
+- **Save compatibility:** legacy JSON `"Weapon"` / `"Armor"` / `"Trinket"` keys (and slot fields) deserialize via `serde(alias)` to main hand, chest, trinket I.
+- **Rhythm affix:** Heavy/Cleave weave post-swing recovery shortened by 1 tick when Rhythm is equipped on any item.
+- **Encounter score:** [`RunSummary.encounter_score`](src/domain/run.rs) from combat clears (depth × role weight) + sim tick slice + treasure/shrine bonuses; shown in run summary rewards line.
+- **Two-handed weapons:** `ItemInstance.two_handed` main-hand pieces clear or block off-hand; equipping off-hand unequips a two-hander; stash equip returns all displaced items.
+- **Gear hub:** loadout column scrolls when content overflows ([`spawn_scrollable_flex_column`](src/ui/widgets.rs)).
+
+### Docs
+
+- **Spec:** [`docs/superpowers/specs/2026-05-09-wave4-itemization-design.md`](docs/superpowers/specs/2026-05-09-wave4-itemization-design.md); **Wave 4** checked in [`ACTIVE-REMAINING-WORK.md`](docs/superpowers/ACTIVE-REMAINING-WORK.md).
+
 ## 0.2.27 — 2026-05-09
 
 ### Combat / hardening

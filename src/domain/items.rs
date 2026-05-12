@@ -1,11 +1,53 @@
 use crate::domain::stats::Stats;
 use serde::{Deserialize, Serialize};
 
+/// Equipment slots (WoW-style spread: power budget is distributed across many pieces).
+///
+/// Legacy saves used three PascalCase names; those map via `serde(alias)` onto the new layout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum GearSlot {
-    Weapon,
-    Armor,
-    Trinket,
+    /// Primary weapon (old saves: `"Weapon"`).
+    #[serde(alias = "Weapon")]
+    MainHand,
+    OffHand,
+    Head,
+    /// Largest armor piece; old `"Armor"` maps here.
+    #[serde(alias = "Armor")]
+    Chest,
+    Hands,
+    Feet,
+    #[serde(alias = "Trinket")]
+    Trinket1,
+    Trinket2,
+    Relic,
+}
+
+impl GearSlot {
+    pub const ALL: [GearSlot; 9] = [
+        GearSlot::MainHand,
+        GearSlot::OffHand,
+        GearSlot::Head,
+        GearSlot::Chest,
+        GearSlot::Hands,
+        GearSlot::Feet,
+        GearSlot::Trinket1,
+        GearSlot::Trinket2,
+        GearSlot::Relic,
+    ];
+
+    pub fn display_label(self) -> &'static str {
+        match self {
+            GearSlot::MainHand => "Main hand",
+            GearSlot::OffHand => "Off-hand",
+            GearSlot::Head => "Head",
+            GearSlot::Chest => "Chest",
+            GearSlot::Hands => "Hands",
+            GearSlot::Feet => "Feet",
+            GearSlot::Trinket1 => "Trinket I",
+            GearSlot::Trinket2 => "Trinket II",
+            GearSlot::Relic => "Relic",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -32,6 +74,8 @@ pub enum ItemAffix {
     Virulent,
     /// With Guard: +2 flat damage reduction on blocked enemy swings.
     Bastion,
+    /// **Swing-weave:** weapon post-swing recovery is one tick shorter (min 1) when a weave cadence applies.
+    Rhythm,
     /// **Legendary-only (loot):** when you land the killing blow, restore a slice of max HP.
     Devourer,
     /// **Legendary-only (loot):** while at or below half health, hero weapon hits deal ~25% more damage.
@@ -50,6 +94,7 @@ impl ItemAffix {
             ItemAffix::Shattering => "Weapon hits ignore 4 enemy armor.",
             ItemAffix::Virulent => "With Poison Edge: +1 poison stack per attack.",
             ItemAffix::Bastion => "With Guard: +2 flat damage blocked per enemy hit.",
+            ItemAffix::Rhythm => "Heavy / cleave weave recovers 1 tick faster between swings.",
             ItemAffix::Devourer => "On kill: heal a portion of max HP.",
             ItemAffix::TitansFury => "At ≤50% HP: weapon hits deal +25% damage.",
         }
@@ -64,6 +109,9 @@ pub struct ItemInstance {
     pub rarity: ItemRarity,
     pub stats: Stats,
     pub affixes: Vec<ItemAffix>,
+    /// Occupies **main hand + off-hand** (`GearSlot::OffHand` must stay empty in the equipment map).
+    #[serde(default)]
+    pub two_handed: bool,
 }
 
 impl ItemInstance {
@@ -75,6 +123,7 @@ impl ItemInstance {
             rarity: ItemRarity::Common,
             stats: Stats::default_zero(),
             affixes: Vec::new(),
+            two_handed: false,
         }
     }
 
@@ -119,6 +168,11 @@ impl ItemInstance {
                         ItemAffix::Bastion => Stats {
                             armor: 3,
                             max_health: 8,
+                            ..Stats::default_zero()
+                        },
+                        ItemAffix::Rhythm => Stats {
+                            damage: 1,
+                            attack_speed: 0.08,
                             ..Stats::default_zero()
                         },
                         ItemAffix::Devourer => Stats {

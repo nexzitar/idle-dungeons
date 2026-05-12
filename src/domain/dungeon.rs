@@ -31,10 +31,22 @@ pub struct Enemy {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Encounter {
     pub enemy: Enemy,
+    /// Second foe in the same room (dual-/multi-pack). Omitted in saves / JSON → single-foe.
+    #[serde(default)]
+    pub enemy_b: Option<Enemy>,
 }
 
 impl Encounter {
+    /// `1` or `2` enemy slots in combat.
+    pub fn foe_count(&self) -> u8 {
+        1u8.saturating_add(self.enemy_b.is_some() as u8)
+    }
+
     pub fn monster_for_depth(depth: u32, elite: bool) -> Self {
+        Self::monster_body(depth, elite, false)
+    }
+
+    fn monster_body(depth: u32, elite: bool, twin_pack: bool) -> Self {
         let mult = if elite { 2 } else { 1 };
         let base_hp = 24 + depth as i32 * 6;
         let mut max_health = base_hp * mult;
@@ -46,13 +58,19 @@ impl Encounter {
             dmg += 4;
             armor += 2;
         }
+        if twin_pack {
+            max_health = max_health.saturating_mul(4).saturating_div(5);
+            dmg = dmg.saturating_mul(9).saturating_div(10).max(1);
+        }
+        let name = match (elite, twin_pack) {
+            (true, true) => "Twin elite hollows",
+            (true, false) => "Elite Hollow",
+            (false, true) => "Twin hollows",
+            (false, false) => "Hollow",
+        };
         Self {
             enemy: Enemy {
-                name: if elite {
-                    "Elite Hollow".into()
-                } else {
-                    "Hollow".into()
-                },
+                name: name.into(),
                 max_health,
                 damage: dmg,
                 armor,
@@ -60,6 +78,7 @@ impl Encounter {
                 cast_ticks: if elite { 2 } else { 1 },
                 cooldown_ticks: if elite { 4 } else { 3 },
             },
+            enemy_b: None,
         }
     }
 }
@@ -99,8 +118,30 @@ pub fn generate_dungeon(depth_count: u32, seed: u64) -> Vec<DungeonRoom> {
             };
 
             let encounter = match kind {
-                RoomKind::Monster => Some(Encounter::monster_for_depth(depth, false)),
-                RoomKind::Elite => Some(Encounter::monster_for_depth(depth, true)),
+                RoomKind::Monster => {
+                    let twin = rng.gen_bool(0.22);
+                    let mut e = Encounter::monster_body(depth, false, false);
+                    if twin {
+                        e.enemy.name = "Twin hollows".into();
+                        let mut flank = Encounter::monster_body(depth, false, true).enemy;
+                        flank.name = "Hollow (flank)".into();
+                        e.enemy_b = Some(flank);
+                    }
+                    Some(e)
+                }
+                RoomKind::Elite => {
+                    let twin = rng.gen_bool(0.30);
+                    Some(if twin {
+                        let mut e = Encounter::monster_body(depth, true, true);
+                        e.enemy.name = "Twin elite hollows".into();
+                        let mut flank = Encounter::monster_body(depth, true, true).enemy;
+                        flank.name = "Elite hollow (flank)".into();
+                        e.enemy_b = Some(flank);
+                        e
+                    } else {
+                        Encounter::monster_for_depth(depth, true)
+                    })
+                }
                 RoomKind::Boss => Some(Encounter {
                     enemy: Enemy {
                         name: "Gate Warden".into(),
@@ -111,6 +152,7 @@ pub fn generate_dungeon(depth_count: u32, seed: u64) -> Vec<DungeonRoom> {
                         cast_ticks: 2,
                         cooldown_ticks: 5,
                     },
+                    enemy_b: None,
                 }),
                 RoomKind::Treasure | RoomKind::Shrine => None,
             };
@@ -218,6 +260,23 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn elite_room_can_spawn_twin_pack() {
+        let found = (0_u64..4000).any(|seed| {
+            let rooms = generate_dungeon(35, seed);
+            rooms.iter().any(|r| {
+                r.kind == RoomKind::Elite
+                    && r.encounter
+                        .as_ref()
+                        .is_some_and(|e| e.enemy_b.is_some())
+            })
+        });
+        assert!(
+            found,
+            "expected some seed to roll elite twin within 4000 tries"
+        );
     }
 
     #[test]

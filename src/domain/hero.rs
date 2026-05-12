@@ -126,9 +126,45 @@ impl HeroProfile {
         Ok(())
     }
 
-    pub fn equip_item(&mut self, item: ItemInstance) -> Result<(), HeroError> {
-        self.equipped_items.insert(item.slot, item);
-        Ok(())
+    /// Equip `item`, returning any pieces **removed** from the loadout (same-slot replace,
+    /// off-hand bumped by a new two-hander, or two-hander bumped by a new off-hand).
+    pub fn equip_item(&mut self, item: ItemInstance) -> Vec<ItemInstance> {
+        let mut displaced: Vec<ItemInstance> = Vec::new();
+        debug_assert!(
+            !item.two_handed || item.slot == GearSlot::MainHand,
+            "two_handed items must use MainHand slot"
+        );
+
+        match item.slot {
+            GearSlot::MainHand => {
+                if item.two_handed {
+                    if let Some(off) = self.equipped_items.remove(&GearSlot::OffHand) {
+                        displaced.push(off);
+                    }
+                }
+                if let Some(old) = self.equipped_items.insert(GearSlot::MainHand, item) {
+                    displaced.push(old);
+                }
+            }
+            GearSlot::OffHand => {
+                if let Some(mh) = self.equipped_items.get(&GearSlot::MainHand) {
+                    if mh.two_handed {
+                        if let Some(two_h) = self.equipped_items.remove(&GearSlot::MainHand) {
+                            displaced.push(two_h);
+                        }
+                    }
+                }
+                if let Some(old) = self.equipped_items.insert(GearSlot::OffHand, item) {
+                    displaced.push(old);
+                }
+            }
+            _ => {
+                if let Some(old) = self.equipped_items.insert(item.slot, item) {
+                    displaced.push(old);
+                }
+            }
+        }
+        displaced
     }
 
     pub fn equipped_item(&self, slot: GearSlot) -> Option<&ItemInstance> {
@@ -167,9 +203,9 @@ mod tests {
     #[test]
     fn has_affix_detects_gear_affix() {
         let mut hero = HeroProfile::default();
-        let mut blade = ItemInstance::basic(1, "Test", GearSlot::Weapon);
+        let mut blade = ItemInstance::basic(1, "Test", GearSlot::MainHand);
         blade.affixes.push(ItemAffix::Vampiric);
-        hero.equip_item(blade).unwrap();
+        hero.equip_item(blade);
         assert!(hero.has_affix(ItemAffix::Vampiric));
         assert!(!hero.has_affix(ItemAffix::Heavy));
     }
@@ -189,7 +225,7 @@ mod tests {
         hero.equip_item(ItemInstance {
             id: 1,
             name: "Vampiric Sword".to_string(),
-            slot: GearSlot::Weapon,
+            slot: GearSlot::MainHand,
             rarity: ItemRarity::Uncommon,
             stats: Stats {
                 max_health: 0,
@@ -199,8 +235,8 @@ mod tests {
                 healing_power: 0,
             },
             affixes: vec![ItemAffix::Vampiric],
-        })
-        .unwrap();
+            two_handed: false,
+        });
 
         let derived = hero.derived_stats();
 
@@ -270,19 +306,51 @@ mod tests {
     #[test]
     fn gear_replaces_only_matching_slot() {
         let mut hero = HeroProfile::default();
-        let armor = ItemInstance::basic(1, "Iron Armor", GearSlot::Armor);
-        let weapon = ItemInstance::basic(2, "Iron Sword", GearSlot::Weapon);
-        let replacement_armor = ItemInstance::basic(3, "Steel Armor", GearSlot::Armor);
+        let armor = ItemInstance::basic(1, "Iron Armor", GearSlot::Chest);
+        let weapon = ItemInstance::basic(2, "Iron Sword", GearSlot::MainHand);
+        let replacement_armor = ItemInstance::basic(3, "Steel Armor", GearSlot::Chest);
 
-        hero.equip_item(armor).unwrap();
-        hero.equip_item(weapon.clone()).unwrap();
-        hero.equip_item(replacement_armor.clone()).unwrap();
+        hero.equip_item(armor);
+        hero.equip_item(weapon.clone());
+        hero.equip_item(replacement_armor.clone());
 
         assert_eq!(
-            hero.equipped_item(GearSlot::Armor),
+            hero.equipped_item(GearSlot::Chest),
             Some(&replacement_armor)
         );
-        assert_eq!(hero.equipped_item(GearSlot::Weapon), Some(&weapon));
-        assert!(hero.equipped_item(GearSlot::Trinket).is_none());
+        assert_eq!(hero.equipped_item(GearSlot::MainHand), Some(&weapon));
+        assert!(hero.equipped_item(GearSlot::Trinket1).is_none());
+    }
+
+    #[test]
+    fn two_handed_main_displaces_off_hand() {
+        let mut hero = HeroProfile::default();
+        let shield = ItemInstance::basic(1, "Shield", GearSlot::OffHand);
+        let pole = ItemInstance {
+            two_handed: true,
+            ..ItemInstance::basic(2, "Greatstaff", GearSlot::MainHand)
+        };
+        hero.equip_item(shield);
+        let displaced = hero.equip_item(pole.clone());
+        assert_eq!(displaced.len(), 1);
+        assert_eq!(displaced[0].id, 1);
+        assert_eq!(hero.equipped_item(GearSlot::MainHand), Some(&pole));
+        assert!(hero.equipped_item(GearSlot::OffHand).is_none());
+    }
+
+    #[test]
+    fn off_hand_displaces_two_handed_main() {
+        let mut hero = HeroProfile::default();
+        let pole = ItemInstance {
+            two_handed: true,
+            ..ItemInstance::basic(2, "Greatstaff", GearSlot::MainHand)
+        };
+        let shield = ItemInstance::basic(1, "Shield", GearSlot::OffHand);
+        hero.equip_item(pole.clone());
+        let displaced = hero.equip_item(shield.clone());
+        assert_eq!(displaced.len(), 1);
+        assert_eq!(displaced[0].id, 2);
+        assert_eq!(hero.equipped_item(GearSlot::OffHand), Some(&shield));
+        assert!(hero.equipped_item(GearSlot::MainHand).is_none());
     }
 }

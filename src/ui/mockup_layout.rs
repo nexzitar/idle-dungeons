@@ -38,7 +38,7 @@ use crate::ui::theme::{
     body_text, caption_text, format_item_affix_lines, format_item_stat_summary, headline_text,
     log_line_present, rarity_color, section_title, UiTheme,
 };
-use crate::ui::widgets::spawn_scrollable_log;
+use crate::ui::widgets::{spawn_scrollable_flex_column, spawn_scrollable_log};
 
 fn ornate_shell(content: impl FnOnce(&mut ChildSpawnerCommands<'_>)) -> impl FnOnce(&mut ChildSpawnerCommands<'_>) {
     move |parent: &mut ChildSpawnerCommands<'_>| {
@@ -94,42 +94,7 @@ fn spawn_column_flex_scroll(
     min_viewport_height_px: Option<f32>,
     content: impl FnOnce(&mut ChildSpawnerCommands<'_>),
 ) {
-    parent
-        .spawn((
-            Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Percent(100.0),
-                flex_grow: 1.0,
-                flex_shrink: 1.0,
-                min_height: min_viewport_height_px
-                    .map(Val::Px)
-                    .unwrap_or(Val::Px(0.0)),
-                position_type: PositionType::Relative,
-                overflow: Overflow::clip_y(),
-                ..default()
-            },
-            FocusPolicy::Pass,
-            RelativeCursorPosition::default(),
-            UiScrollState::default(),
-            UiScrollRegion,
-        ))
-        .with_children(|vp| {
-            vp.spawn((
-                Node {
-                box_sizing: BoxSizing::BorderBox,
-                position_type: PositionType::Absolute,
-                        left: Val::Px(0.0),
-                        right: Val::Px(0.0),
-                        top: Val::Px(0.0),
-                        flex_direction: FlexDirection::Column,
-                        row_gap: Val::Px(8.0),
-                        align_items: AlignItems::Stretch,
-                        ..default()
-            },
-                UiScrollContent,
-            ))
-            .with_children(content);
-        });
+    spawn_scrollable_flex_column(parent, min_viewport_height_px, content);
 }
 
 /// Combat log during playback — pins scroll to the latest line when content grows.
@@ -1012,18 +977,36 @@ fn skill_slot_row(
         });
 }
 
+fn gear_slot_row_color(slot: GearSlot) -> Color {
+    match slot {
+        GearSlot::MainHand | GearSlot::OffHand | GearSlot::Hands => {
+            Color::srgb(1.0, 0.72, 0.45)
+        }
+        GearSlot::Head | GearSlot::Chest | GearSlot::Feet => Color::srgb(0.72, 0.82, 0.95),
+        GearSlot::Trinket1 | GearSlot::Trinket2 => Color::srgb(0.85, 0.68, 1.0),
+        GearSlot::Relic => Color::srgb(0.95, 0.78, 0.45),
+    }
+}
+
 pub fn mockup_gear_cards(
     parent: &mut ChildSpawnerCommands<'_>,
     profile: &crate::app::ProfileState,
     ph: &UiPlaceholderImages,
 ) {
-    for (label, slot) in [
-        ("Weapon", crate::domain::items::GearSlot::Weapon),
-        ("Armor", crate::domain::items::GearSlot::Armor),
-        ("Trinket", crate::domain::items::GearSlot::Trinket),
-    ] {
+    let main_two_handed = profile
+        .profile
+        .hero
+        .equipped_item(GearSlot::MainHand)
+        .is_some_and(|i| i.two_handed);
+    for slot in GearSlot::ALL {
+        let label = slot.display_label();
         let item = profile.profile.hero.equipped_item(slot);
-        let tip = if let Some(item) = item {
+        let blocked_off_hand = matches!(slot, GearSlot::OffHand) && main_two_handed;
+        let tip = if blocked_off_hand {
+            "Two-handed weapon equipped — off-hand is locked while this weapon is in use. \
+             Equip a one-handed main weapon to use a shield or focus again."
+                .to_string()
+        } else if let Some(item) = item {
             let aff = format_item_affix_lines(item);
             if aff.is_empty() {
                 format!(
@@ -1043,7 +1026,8 @@ pub fn mockup_gear_cards(
             }
         } else {
             format!(
-                "No {label} equipped yet. Loot gear on runs and equip it from the Inventory tab."
+                "No {} equipped yet. Loot gear on runs and equip it from the Inventory tab.",
+                label.to_lowercase()
             )
         };
         parent
@@ -1079,11 +1063,7 @@ pub fn mockup_gear_cards(
             BorderColor::from(UiTheme::panel_border_inner())
         ))
                 .with_children(|icon_cell| {
-                    let tint = match slot {
-                        GearSlot::Weapon => Color::srgb(1.0, 0.72, 0.45),
-                        GearSlot::Armor => Color::srgb(0.72, 0.82, 0.95),
-                        GearSlot::Trinket => Color::srgb(0.85, 0.68, 1.0),
-                    };
+                    let tint = gear_slot_row_color(slot);
                     icon_cell.spawn((
                         Node {
                             box_sizing: BoxSizing::BorderBox,
@@ -1109,7 +1089,12 @@ pub fn mockup_gear_cards(
             })
                 .with_children(|txt| {
                     txt.spawn(caption_text(label.to_string()));
-                    if let Some(item) = item {
+                    if blocked_off_hand {
+                        txt.spawn(body_text("Held by two-hander"));
+                    } else if let Some(item) = item {
+                        if item.two_handed {
+                            txt.spawn(caption_text("Two-handed"));
+                        }
                         txt.spawn((
                 Text::new(item.name.clone()),
                 TextFont::from_font_size(UiTheme::FONT_BODY),

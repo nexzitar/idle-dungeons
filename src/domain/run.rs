@@ -1,13 +1,17 @@
 use crate::domain::combat::{
-    combat_playback_frames_from_result, simulate_combat_party, CombatOutcome, CombatPlaybackFrame,
+    combat_playback_frames_from_result, simulate_party_vs_encounter_foes, CombatOutcome,
+    CombatPlaybackFrame, CombatSimOptions,
 };
 use crate::domain::combat_timing::encounter_initiative_seed;
 use crate::domain::dungeon::{
     generate_dungeon, peak_risk_note, room_risk_hint, room_risk_rank, DungeonRoom, RoomKind,
 };
+use crate::domain::combat_archetype::hints_for_hero;
 use crate::domain::hero::HeroProfile;
 use crate::domain::items::ItemInstance;
-use crate::domain::loot::{roll_loot, roll_profile_guided_early_combat_drop, salvage_value};
+use crate::domain::loot::{
+    roll_loot_with_hints, roll_profile_guided_early_combat_drop, salvage_value,
+};
 use serde::{Deserialize, Serialize};
 
 /// Default floor cap for a full delve (matches typical [`RunConfig::max_depth`]).
@@ -61,6 +65,9 @@ pub struct RunSummary {
     /// This run awarded the once-per-delve salvage before depth **10** (`weapon`/`armor` pacing).
     #[serde(default)]
     pub guided_early_combat_drop_granted: bool,
+    /// Weighted progression score from encounters cleared (Wave 4 experiment; not yet spendable currency).
+    #[serde(default)]
+    pub encounter_score: u64,
 }
 
 fn default_summary_dungeon_cap() -> u32 {
@@ -170,11 +177,13 @@ fn simulate_run_with_playback_for_rooms(
     let mut floors_cleared = 0u32;
     let mut granted_pre10_combat_loot = false;
     let mut guided_early_combat_drop_granted_this_run = false;
+    let mut encounter_score = 0u64;
     let mut peak_risk_rank = 0u8;
     let mut run_dmg_meter_0 = 0u32;
     let mut run_dmg_meter_1 = 0u32;
     let mut run_dmg_meter_foe = 0u32;
     let mut run_sim_ticks_total = 0u32;
+    let lead_archetype_hints = hints_for_hero(lead);
 
     for room in rooms {
         deepest_depth = room.depth;
@@ -203,29 +212,40 @@ fn simulate_run_with_playback_for_rooms(
                             peak_risk_note: peak_risk_note(peak_risk_rank),
                             guided_early_combat_drop_granted:
                                 guided_early_combat_drop_granted_this_run,
+                            encounter_score,
                         },
                         playback,
                     };
                 };
-                let enemy = encounter.enemy.clone();
                 let at_start = hero_current_hp;
                 let initiative_salt =
                     encounter_initiative_seed(config.seed, u64::from(room.depth).rotate_left(13));
-                let combat = simulate_combat_party(
+                let foes: Vec<crate::domain::dungeon::Enemy> = {
+                    let mut v = vec![encounter.enemy.clone()];
+                    if let Some(b) = encounter.enemy_b.as_ref() {
+                        v.push(b.clone());
+                    }
+                    v
+                };
+                let foe_display = foes.iter().map(|e| e.name.as_str()).collect::<Vec<_>>().join(" · ");
+                let enemy_max_hp_bar: i32 = foes.iter().map(|e| e.max_health).sum();
+                let combat = simulate_party_vs_encounter_foes(
                     lead,
-                    &enemy,
+                    &foes,
                     420,
                     at_start,
                     party_partner.map(|p| (p, partner_current_hp)),
                     initiative_salt,
+                    &[],
+                    CombatSimOptions::default(),
                 );
                 for frame in combat_playback_frames_from_result(
                     lead,
                     party_partner,
                     &combat,
-                    &enemy.name,
+                    &foe_display,
                     hero_max_hp,
-                    enemy.max_health,
+                    enemy_max_hp_bar,
                     at_start,
                     partner_max_hp.map(|_| partner_current_hp),
                     partner_max_hp,
@@ -252,11 +272,20 @@ fn simulate_run_with_playback_for_rooms(
                 }
                 match combat.outcome {
                     CombatOutcome::HeroWon => {
+                        let room_mult: u32 = match room.kind {
+                            RoomKind::Elite => 3,
+                            RoomKind::Boss => 12,
+                            _ => 1,
+                        };
+                        encounter_score +=
+                            u64::from(room.depth.saturating_mul(15).saturating_mul(room_mult))
+                                + u64::from(combat.clock_ticks / 8);
+
                         hero_current_hp = combat.hero_health;
                         if let Some(h) = combat.partner_health {
                             partner_current_hp = h;
                         }
-                        log.push(format!("Depth {}: defeated {}", room.depth, enemy.name));
+                        log.push(format!("Depth {}: defeated {}", room.depth, foe_display));
                         gold_earned += room.depth * 3;
                         floors_cleared += 1;
                         if room.depth < 10
@@ -270,10 +299,11 @@ fn simulate_run_with_playback_for_rooms(
                                 config.seed,
                                 room.depth,
                                 config.guided_early_combat_claims_already,
+                                &lead_archetype_hints,
                             );
                             let note = match config.guided_early_combat_claims_already {
-                                0 => "weapon salvage",
-                                1 => "armor salvage",
+                                0 => "main-hand salvage",
+                                1 => "chest salvage",
                                 _ => "skirmish salvage",
                             };
                             log.push(format!(
@@ -311,13 +341,14 @@ fn simulate_run_with_playback_for_rooms(
                                     peak_risk_note: peak_risk_note(peak_risk_rank),
                                     guided_early_combat_drop_granted:
                                         guided_early_combat_drop_granted_this_run,
+                                    encounter_score,
                                 },
                                 playback,
                             };
                         }
                     }
                     CombatOutcome::EnemyWon | CombatOutcome::TimedOut => {
-                        log.push(format!("Depth {}: defeated by {}", room.depth, enemy.name));
+                        log.push(format!("Depth {}: defeated by {}", room.depth, foe_display));
                         return RunSimulation {
                             summary: RunSummary {
                                 outcome: RunOutcome::HeroDied,
@@ -327,11 +358,12 @@ fn simulate_run_with_playback_for_rooms(
                                 gold_earned,
                                 salvage_earned,
                                 loot,
-                                death_reason: Some(format!("Defeated by {}", enemy.name)),
+                                death_reason: Some(format!("Defeated by {}", foe_display)),
                                 log,
                                 peak_risk_note: peak_risk_note(peak_risk_rank),
                                 guided_early_combat_drop_granted:
                                     guided_early_combat_drop_granted_this_run,
+                                encounter_score,
                             },
                             playback,
                         };
@@ -339,7 +371,8 @@ fn simulate_run_with_playback_for_rooms(
                 }
             }
             RoomKind::Treasure => {
-                let item = roll_loot(room.depth, config.seed);
+                encounter_score += u64::from(room.depth.saturating_mul(6));
+                let item = roll_loot_with_hints(room.depth, config.seed, &lead_archetype_hints);
                 salvage_earned += salvage_value(&item);
                 let line = format!("Depth {}: found {}", room.depth, item.name);
                 log.push(line.clone());
@@ -359,6 +392,7 @@ fn simulate_run_with_playback_for_rooms(
                 ));
             }
             RoomKind::Shrine => {
+                encounter_score += u64::from(room.depth.saturating_mul(4));
                 let line = format!("Depth {}: shrine grants {} gold", room.depth, room.depth);
                 log.push(line.clone());
                 gold_earned += room.depth;
@@ -391,6 +425,7 @@ fn simulate_run_with_playback_for_rooms(
             log,
             peak_risk_note: peak_risk_note(peak_risk_rank),
             guided_early_combat_drop_granted: guided_early_combat_drop_granted_this_run,
+            encounter_score,
         },
         playback,
     }

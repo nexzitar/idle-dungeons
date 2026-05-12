@@ -1,17 +1,40 @@
 //! Per-tick strike ordering: initiative sort + round-robin interleaving.
 
-/// Party slot indices: `0` = lead, `1` = partner, `2` = foe.
+/// Party slot indices: `0` = lead, `1` = partner, `2` = first foe, `3` = second foe.
 pub type PartySlot = u8;
 
-/// Actors that can swing this tick, ordered by [`super::combat_timing::initiative_ranks`] (lower = earlier).
-pub fn sorted_strike_actors(has_partner: bool, ranks: [u8; 3]) -> Vec<PartySlot> {
-    let mut actors: Vec<PartySlot> = if has_partner {
-        vec![0, 1, 2]
-    } else {
-        vec![0, 2]
-    };
+/// Actors that can swing this tick, ordered by [`super::combat_timing::initiative_ranks_four`].
+pub fn sorted_strike_actors_four(
+    has_partner: bool,
+    foe_count: u8,
+    ranks: [u8; 4],
+) -> Vec<PartySlot> {
+    debug_assert!(foe_count >= 1 && foe_count <= 2);
+    let mut actors: Vec<PartySlot> = vec![0];
+    if has_partner {
+        actors.push(1);
+    }
+    actors.push(2);
+    if foe_count >= 2 {
+        actors.push(3);
+    }
     actors.sort_by_key(|&a| ranks[a as usize]);
     actors
+}
+
+/// Strike order for `party_count` heroes (indices `0..party_count-1`) plus `foe_count` foes.
+pub fn sorted_strike_pack_order(party_count: u8, foe_count: u8, ranks: &[u8]) -> Vec<PartySlot> {
+    let total = party_count as usize + foe_count as usize;
+    debug_assert_eq!(ranks.len(), total);
+    let mut actors: Vec<PartySlot> = (0..total as u8).collect();
+    actors.sort_by_key(|&a| ranks[a as usize]);
+    actors
+}
+
+/// Single-foe encounter ordering (foe at slot `2`).
+pub fn sorted_strike_actors(has_partner: bool, ranks: [u8; 3]) -> Vec<PartySlot> {
+    let four = [ranks[0], ranks[1], ranks[2], 255];
+    sorted_strike_actors_four(has_partner, 1, four)
 }
 
 /// Interleave strikes: in each sweep, every actor with remaining swings takes **one** hit,

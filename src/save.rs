@@ -108,6 +108,7 @@ pub fn save_profile(path: &Path, profile: &SaveProfile) -> Result<(), SaveError>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::items::GearSlot;
     use crate::domain::progression::MetaProgression;
     use crate::domain::skills::{SkillId, STARTER_SKILLS};
 
@@ -190,5 +191,36 @@ mod tests {
         let result = load_profile(&path);
 
         assert!(matches!(result, Err(SaveError::Parse(_))));
+    }
+
+    #[test]
+    fn legacy_three_slot_names_deserialize_to_new_gear_slots() {
+        let json = r#"{
+            "hero": {
+                "name": "Test",
+                "base_stats": { "max_health": 100, "damage": 10, "armor": 0, "attack_speed": 1.0, "healing_power": 0 },
+                "unlocked_skill_slots": 0,
+                "equipped_skills": [null, null, null, null, null, null],
+                "equipped_items": {
+                    "Weapon": { "id": 1, "name": "Old Sword", "slot": "Weapon", "rarity": "Common",
+                        "stats": { "max_health": 0, "damage": 3, "armor": 0, "attack_speed": 0.0, "healing_power": 0 },
+                        "affixes": [] },
+                    "Armor": { "id": 2, "name": "Old Mail", "slot": "Armor", "rarity": "Common",
+                        "stats": { "max_health": 0, "damage": 0, "armor": 2, "attack_speed": 0.0, "healing_power": 0 },
+                        "affixes": [] },
+                    "Trinket": { "id": 3, "name": "Old Charm", "slot": "Trinket", "rarity": "Common",
+                        "stats": { "max_health": 0, "damage": 0, "armor": 0, "attack_speed": 0.0, "healing_power": 1 },
+                        "affixes": [] }
+                }
+            },
+            "party_partner": null,
+            "inventory": [],
+            "meta": { "gold": 0, "salvage": 0, "unlocked_skill_slots": 2, "skill_slot_progress": 0, "deepest_floor_reached": 0, "unlocked_skill_ids": [], "guided_early_combat_drop_count": 0 }
+        }"#;
+
+        let profile: SaveProfile = serde_json::from_str(json).unwrap();
+        assert!(profile.hero.equipped_item(GearSlot::MainHand).is_some());
+        assert!(profile.hero.equipped_item(GearSlot::Chest).is_some());
+        assert!(profile.hero.equipped_item(GearSlot::Trinket1).is_some());
     }
 }

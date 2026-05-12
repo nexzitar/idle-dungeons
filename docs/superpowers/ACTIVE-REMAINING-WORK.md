@@ -13,10 +13,11 @@
 | **Skill layering** (mutual exclusivity hints) | `[skill_layering](../../src/domain/skill_layering.rs)` + build panel                                                     |
 | Initiative ordering                         | `[combat_timing](../../src/domain/combat_timing.rs)`, `[sorted_strike_actors](../../src/domain/combat_round.rs)`         |
 | Fixed-point weapon swing meters             | `[combat_meter](../../src/domain/combat_meter.rs)` + party/foe meters in `[simulate_combat_party](../../src/domain/combat.rs)` |
+| Nine-slot gear + loot budgets               | `[GearSlot](../../src/domain/items.rs)`, `[loot](../../src/domain/loot.rs)`                                              |
 | Playback timing bars                        | `[CombatPlaybackFrame](../../src/domain/combat.rs)`, theater stacks in `[mockup_layout](../../src/ui/mockup_layout.rs)`  |
-
-
----
+| Multi-foe pack combat (`Vec` HP, cleave)   | `[simulate_combat_party_foes](../../src/domain/combat.rs)`, `[initiative_ranks_pack](../../src/domain/combat_timing.rs)`, `[sorted_strike_pack_order](../../src/domain/combat_round.rs)`; cap `MAX_COMBAT_FOES` in `[combat.rs](../../src/domain/combat.rs)` |
+| Archetype hints (loot bias)                 | `[combat_archetype](../../src/domain/combat_archetype.rs)`, affix weights in `[loot](../../src/domain/loot.rs)`                                                                         |
+| Party threat decay / taunt pulse            | `[tick_party_threat_routing](../../src/domain/party.rs)` + calls in `[combat.rs](../../src/domain/combat.rs)`                                                                              |
 
 ## Prioritized execution waves (check off in PRs)
 
@@ -25,8 +26,8 @@ Use this as a **sequence**, not parallel pillars—later waves assume earlier on
 - [x] **Wave 1 — Readability & taxonomy** — `SkillCategory` + skill book labels; floating combat text respects party vs foe anchors; timing semantics in `combat_timing` / `simulate_combat_party` rustdoc.
 - [x] **Wave 2 — Skill layering rules** — [`skill_layering`](../../src/domain/skill_layering.rs): layer slots + loadout warnings (Heavy vs Cleave today); tests; build panel surfaces notices. Extend the table as new mutually exclusive pairs land (§A skill layering).
 - [x] **Wave 3 — Engine hardening** — Fixed-point meters; poison scheduling decision + tests; scheduler stress / same-tick lethal tests (§B).
-- [ ] **Wave 4 — Itemization & progression curve** — Stat compression; build-defining affix prototype; **encounter score / survival progression** experiments (§D); **equipment slot expansion review** (§D, 3-slot concentration).
-- [ ] **Wave 5 — Roles, multi-foe MVP & archetype hints** — Threat decay/transfer/taunt pulse; 2-enemy room + cleave targeting; seed **combat archetype framework** (§E) as tag/heuristic readouts for loot weighting / telemetry — no class locking.
+- [x] **Wave 4 — Itemization & progression curve** — Nine-slot gear spread + compressed loot budgets; **Rhythm** affix (weave recovery); **encounter score** on `RunSummary`; legacy save slot aliases; §C/D alignment.
+- [x] **Wave 5 — Roles, multi-foe MVP & archetype hints** — Party **threat decay** + **taunt pulse** (transfer + burst) when partner is in tank stance; **multi-foe** packs + cleave (incl. elite **twin** rooms); **[`combat_archetype`](../../src/domain/combat_archetype.rs)** hints + **loot affix nudges** from lead loadout; treasure / guided drops use hints. *Deferred (still §E):* focus-fire-only foe targeting for heroes; multi-foe cast/CD UI for non-primary foes; symmetric lead/partner API rename.
 - [ ] **Wave 6 — Telemetry slice** — One run summary metric (e.g. white vs ability damage %) from existing events (§F).
 - [ ] **Wave 7+ — Presentation / audio / art** — After combat language is stable (§G).
 
@@ -50,6 +51,9 @@ Delvers is evolving away from “idle stat progression” and toward a determini
 
 The simulation remains authoritative (`src/domain/`*).  
 UI, playback, floating combat text, and telemetry exist to make combat understandable and satisfying — not to drive outcomes.
+
+- **Symmetric actors (intent)**  
+  The **party is heroes**, not a privileged “lead” plus sidekick. Any hero slot should be able to function as the one playable character today, with **additional heroes added as peers**—same rules, same dignity in APIs and UI copy. The same principle applies to **enemies**: scalable packs, not a special “main foe + extras” except where pacing/content demands it. Implementation may still use `lead`/`partner` names in code paths for now; refactoring toward **slot-indexed heroes** should preserve this equality so co-op or AI teammates do not bake in hierarchy. **Mind control** (below) leans on this: temporarily moving a unit between sides is easier if both sides are “party lists” with shared action resolution.
 
 ---
 
@@ -220,7 +224,7 @@ Progression should feel incremental, readable, and long-term.
 
 # E. Party Roles & Encounter Design
 
-Party gameplay should emerge naturally from combat systems instead of hard-coded classes.
+Party gameplay should emerge naturally from combat systems instead of hard-coded classes. **Implementation stance:** model **heroes and foes as ordered, capped slot lists** (equal heroes in intent—Core Design Philosophy, **Symmetric actors**); refactor away from “lead/partner” semantics in public APIs over time.
 
 - **Threat system expansion**
   - Threat generation
@@ -257,14 +261,16 @@ Party gameplay should emerge naturally from combat systems instead of hard-coded
   - Avoid rigid class-locking; archetypes should emerge from builds rather than fixed hero classes.
 - **Multi-enemy encounters**
   - Multiple foes per room
-  - Target selection
+  - Target selection **beyond focus-fire** on lowest-index living foe: e.g. **threat tables on the foe side**, player/indirect control, or encounter scripts
   - Threat distribution
   - AoE rules
+- **Playback / UI parity for packs**
+  - Today timing pulses emphasize one “primary” foe’s cast/CD; **surface secondary (and further) foes’ wind-up and recovery** where it affects readability (stacked bars, compact row, or tooltip), not only the focused target
 - **AoE skill framework**
-  - Cleave
-  - Whirlwind
-  - Splash damage
-  - Multi-target DoTs
+  - Cleave, whirlwind, splash, multi-target DoTs
+  - **Configurable splash count:** support strikes that hit the primary target plus **N additional enemies** (e.g. 1–2), not strictly “every other living foe.” *Current sim:* Cleave applies to **all** other living foes in the pack—add a numeric cap / targeting predicate when skills need stricter limits
+- **Mind control (future mechanic)**
+  - Ability usable by **players and enemies**: temporarily **control one unit on the opposing side** so they act for your side’s benefit (to the best of their AI/abilities). Requires clear ownership of initiative, threat, and “which party’s” buff/debuff state for the controlled unit; fits the symmetric party/enemy list model above
 - **Party scaling**
   - Unlock additional party slots gradually.
   - Long-term target: 5-character parties.
@@ -306,6 +312,7 @@ The current UI proves systems; future work should improve atmosphere and readabi
   - Cleaner floating text
   - Better readability hierarchy
   - Stronger timing emphasis
+  - **Multi-foe packs:** surface cast/CD (and related telegraphs) for more than one foe when useful—see §E “Playback / UI parity for packs”
 - **Skill visuals**
   - Distinct visual identity per skill category.
 - **Animation pass**
@@ -326,6 +333,7 @@ The current UI proves systems; future work should improve atmosphere and readabi
 
 These are intentionally deferred until the combat/buildcraft foundation feels complete.
 
+- **Mind control** — cross-side unit control (see §E); also listed there for combat design
 - Prestige systems
 - Branching dungeon graphs
 - Alternate progression currencies
