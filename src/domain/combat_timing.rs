@@ -1,4 +1,30 @@
-//! Deterministic combat tick and initiative (see combat feel spec).
+//! Deterministic combat tick and stable initiative ordering.
+//!
+//! ## Tick = time quantum
+//!
+//! One outer simulation step in [`crate::domain::combat::simulate_combat_party`] advances the combat
+//! clock by **one tick**. **[`COMBAT_TICK_MS`]** (`100`) is the canonical fictional duration of that
+//! step for UI copy and DPS math (e.g. `sim_ticks * COMBAT_TICK_MS` milliseconds).
+//!
+//! ## Wall clock vs tick cap
+//!
+//! `max_clock_ticks` is a **hard upper bound on tick iterations** for the encounter loop, not a
+//! separate real-time timer. Fight ends earlier on victory/defeat.
+//!
+//! ## GCD, weapon cadence, casts (where to read rules)
+//!
+//! - **Weapon wind-up / post-swing cooldown:** [`crate::domain::skills::SkillCombatStyle::SwingWeave`]
+//!   actives use per-hero `attack_cast_total` / `attack_cd_total` from [`crate::domain::skills::skill_timings`].
+//! - **Shared ability GCD** (instant strikes + next-melee buff queues): gated by
+//!   [`crate::domain::skills::skill_triggers_shared_ability_gcd`] and `h*_skill_gcd_left` in combat sim.
+//! - **Per-charge recharge** (Victory Rush style): `ability_icd_ticks` pulses in [`crate::domain::combat`].
+//!
+//! ## Initiative
+//!
+//! Same-tick melee ordering uses [`initiative_ranks`] keyed by encounter salt (see
+//! [`encounter_initiative_seed`]). [`ActionLane`] orders proactive swings vs end-of-tick poison batching.
+//!
+//! Active backlog / future hardening: `docs/superpowers/ACTIVE-REMAINING-WORK.md`.
 
 /// In-fiction duration of one simulation tick (milliseconds).
 pub const COMBAT_TICK_MS: u32 = 100;

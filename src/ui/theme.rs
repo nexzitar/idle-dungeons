@@ -264,10 +264,28 @@ pub fn format_item_affix_lines(item: &crate::domain::items::ItemInstance) -> Str
         .join("\n")
 }
 
-pub fn playback_float_text_color(caption: &str) -> Color {
+pub fn playback_float_text_color(
+    caption: &str,
+    anchor: crate::domain::combat::CombatSfxAnchor,
+) -> Color {
     let lower = caption.to_ascii_lowercase();
-    if lower.contains("recover") {
+    if lower.contains("recover") || lower.contains("recovers") {
         return UiTheme::healing();
+    }
+    // Outbound party damage: avoid blood-red (reserved for incoming pain / foe effects).
+    if matches!(
+        anchor,
+        crate::domain::combat::CombatSfxAnchor::Lead | crate::domain::combat::CombatSfxAnchor::Ally
+    ) {
+        if lower.contains("ability") || lower.contains(" white and ") {
+            return UiTheme::muted_gold();
+        }
+        if lower.contains("strike")
+            || lower.contains("hits")
+            || lower.contains("thorns bite")
+        {
+            return UiTheme::muted_cream();
+        }
     }
     if lower.contains("ability") {
         return UiTheme::muted_gold();

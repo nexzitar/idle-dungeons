@@ -1,5 +1,6 @@
 pub mod buff;
 pub mod combat;
+pub mod combat_meter;
 pub mod combat_round;
 pub mod combat_timing;
 pub mod dungeon;
@@ -9,5 +10,6 @@ pub mod items;
 pub mod loot;
 pub mod progression;
 pub mod run;
+pub mod skill_layering;
 pub mod skills;
 pub mod stats;

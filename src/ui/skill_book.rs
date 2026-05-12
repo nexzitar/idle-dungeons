@@ -5,7 +5,8 @@ use bevy::ui::{FocusPolicy, RelativeCursorPosition};
 
 use crate::domain::party::PartyHeroKind;
 use crate::domain::skills::{
-    format_skill_tags, skill_book_pick_order_for, skill_definition, SkillId, SkillKind,
+    format_skill_tags, skill_book_pick_order_for, skill_category, skill_definition, SkillId,
+    SkillKind,
 };
 use crate::ui::components::{
     SkillBookBackdrop, SkillBookCloseButton, SkillBookPickButton, SkillBookRoot, UiButtonPalette,
@@ -152,16 +153,19 @@ pub fn spawn_skill_book_modal(
                                             SkillKind::Active => "Active",
                                             SkillKind::Passive => "Passive",
                                         };
+                                        let cat = skill_category(id);
                                         let label = format!(
-                                            "{} · {} · {}",
+                                            "{} · {} · {} · {}",
                                             d.name,
                                             kind_str,
+                                            cat.display_label(),
                                             format_skill_tags(d.tags)
                                         );
                                         let tip = format!(
-                                            "{}\n{}\n{}\n\nSynergy: {}",
+                                            "{}\n{} · {}\n{}\n\nSynergy: {}",
                                             d.name,
                                             kind_str,
+                                            cat.display_label(),
                                             d.description,
                                             d.synergy_hint
                                         );

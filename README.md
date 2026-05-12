@@ -34,11 +34,11 @@ The run simulation (`simulate_run_with_playback` and friends) drives outcomes; t
 ## Design documentation
 
 - **Design philosophy (readable overview):** `docs/design-philosophy.md`
+- **Remaining work (active backlog):** `docs/superpowers/ACTIVE-REMAINING-WORK.md`
 - Full design: `docs/superpowers/specs/2026-05-06-roguelike-incremental-bevy-design.md`
-- **Post-MVP direction (buildcraft, party, itemization):** `docs/superpowers/specs/2026-05-06-buildcraft-party-systems-roadmap.md`
+- **Strategic roadmap (archived snapshot):** `docs/superpowers/specs/obsolete-2026-05-06-buildcraft-party-systems-roadmap.md`
 - MVP checklist: `docs/mvp-acceptance.md`
 - Skill catalog ↔ combat mapping: `docs/superpowers/plans/2026-05-07-skill-combat-catalog-mapping.md`
-- Gap / increment plan: `docs/superpowers/plans/2026-05-06-mvp-remaining-work.md`
 
 ## Development
 

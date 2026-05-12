@@ -1,4 +1,5 @@
 use crate::domain::buff::{buff_display_name, buff_expires_at_clock, BuffApplication, BuffId};
+use crate::domain::combat_meter::{meter_add_attack_speed, meter_try_consume_swing};
 use crate::domain::dungeon::Enemy;
 use crate::domain::hero::HeroProfile;
 use crate::domain::items::ItemAffix;
@@ -533,7 +534,7 @@ pub(crate) struct PreparedHero {
     /// Max ticks from equipped OnAttack actives (0 = use legacy meter spam).
     attack_cast_total: u32,
     attack_cd_total: u32,
-    /// Cleave wins over Heavy when both equipped (yellow damage credit).
+    /// Cleave wins over Heavy when both equipped (yellow damage credit). See [`crate::domain::skill_layering`] for player-facing loadout warnings.
     heavy_skill: Option<SkillId>,
     has_empowered_blow: bool,
     has_victory_rush: bool,
@@ -857,7 +858,7 @@ fn lead_weapon_pass(
     p0: &PreparedHero,
     lead: &HeroProfile,
     enemy: &Enemy,
-    meters: &mut [f32; 2],
+    meters: &mut [u64; 2],
     h0_cd_left: &mut u32,
     h0_cast_left: &mut u32,
     as_applied: &mut [bool; 3],
@@ -920,11 +921,10 @@ fn lead_weapon_pass(
             return (None, false);
         }
         if !as_applied[0] {
-            meters[0] += p0.attack_speed;
+            meter_add_attack_speed(&mut meters[0], p0.attack_speed);
             as_applied[0] = true;
         }
-        if meters[0] >= 1.0 && *h0 > 0 && *enemy_health > 0 {
-            meters[0] -= 1.0;
+        if *h0 > 0 && *enemy_health > 0 && meter_try_consume_swing(&mut meters[0]) {
             if events.len() >= max_events {
                 return (None, true);
             }
@@ -1000,11 +1000,10 @@ fn lead_weapon_pass(
             return (None, true);
         }
         if !as_applied[0] {
-            meters[0] += p0.attack_speed;
+            meter_add_attack_speed(&mut meters[0], p0.attack_speed);
             as_applied[0] = true;
         }
-        if meters[0] >= 1.0 && *h0 > 0 && *enemy_health > 0 {
-            meters[0] -= 1.0;
+        if *h0 > 0 && *enemy_health > 0 && meter_try_consume_swing(&mut meters[0]) {
             if p0.attack_cast_total > 0 {
                 *h0_cast_left = p0.attack_cast_total;
                 return (None, true);
@@ -1050,7 +1049,7 @@ fn partner_weapon_pass(
     p1prep: &PreparedHero,
     partner: &HeroProfile,
     enemy: &Enemy,
-    meters: &mut [f32; 2],
+    meters: &mut [u64; 2],
     h1_cd_left: &mut u32,
     h1_cast_left: &mut u32,
     as_applied: &mut [bool; 3],
@@ -1110,11 +1109,10 @@ fn partner_weapon_pass(
             return (None, false);
         }
         if !as_applied[1] {
-            meters[1] += p1prep.attack_speed;
+            meter_add_attack_speed(&mut meters[1], p1prep.attack_speed);
             as_applied[1] = true;
         }
-        if meters[1] >= 1.0 && *h1 > 0 && *enemy_health > 0 {
-            meters[1] -= 1.0;
+        if *h1 > 0 && *enemy_health > 0 && meter_try_consume_swing(&mut meters[1]) {
             if events.len() >= max_events {
                 return (None, true);
             }
@@ -1186,11 +1184,10 @@ fn partner_weapon_pass(
             return (None, true);
         }
         if !as_applied[1] {
-            meters[1] += p1prep.attack_speed;
+            meter_add_attack_speed(&mut meters[1], p1prep.attack_speed);
             as_applied[1] = true;
         }
-        if meters[1] >= 1.0 && *h1 > 0 && *enemy_health > 0 {
-            meters[1] -= 1.0;
+        if *h1 > 0 && *enemy_health > 0 && meter_try_consume_swing(&mut meters[1]) {
             if p1prep.attack_cast_total > 0 {
                 *h1_cast_left = p1prep.attack_cast_total;
                 return (None, true);
@@ -1306,7 +1303,7 @@ fn foe_weapon_pass(
     enemy: &Enemy,
     p0: &PreparedHero,
     p1prep: Option<&PreparedHero>,
-    enemy_meter: &mut f32,
+    enemy_meter: &mut u64,
     enemy_as: f32,
     foe_cast_left: &mut u32,
     foe_cd_left: &mut u32,
@@ -1330,11 +1327,11 @@ fn foe_weapon_pass(
             return (None, false);
         }
         if !as_applied[2] {
-            *enemy_meter += enemy_as;
+            meter_add_attack_speed(enemy_meter, enemy_as);
             as_applied[2] = true;
         }
-        if *enemy_meter >= 1.0 && *enemy_health > 0 && *h0 > 0 && (!has_partner || *h1 > 0) {
-            *enemy_meter -= 1.0;
+        if *enemy_health > 0 && *h0 > 0 && (!has_partner || *h1 > 0) && meter_try_consume_swing(enemy_meter)
+        {
             if events.len() >= max_events {
                 return (None, true);
             }
@@ -1414,11 +1411,11 @@ fn foe_weapon_pass(
             return (None, true);
         }
         if !as_applied[2] {
-            *enemy_meter += enemy_as;
+            meter_add_attack_speed(enemy_meter, enemy_as);
             as_applied[2] = true;
         }
-        if *enemy_meter >= 1.0 && *enemy_health > 0 && *h0 > 0 && (!has_partner || *h1 > 0) {
-            *enemy_meter -= 1.0;
+        if *enemy_health > 0 && *h0 > 0 && (!has_partner || *h1 > 0) && meter_try_consume_swing(enemy_meter)
+        {
             if foe_ct > 0 {
                 *foe_cast_left = foe_ct;
                 return (None, true);
@@ -1593,6 +1590,8 @@ impl PartyBuffState {
 /// **Phase 4 — shared ability GCD:** [`crate::domain::skills::skill_triggers_shared_ability_gcd`]
 /// matches styles that advance **`h0_skill_gcd_left`** (instant strikes and next-melee buff queues).
 /// **`SwingWeave`** (Heavy / Cleave cadence) uses the weapon cast/CD timers instead, not this GCD.
+///
+/// **Tick & ordering overview:** [`crate::domain::combat_timing`] (`COMBAT_TICK_MS`, initiative ranks).
 pub fn simulate_combat_party(
     lead: &HeroProfile,
     enemy: &Enemy,
@@ -1706,8 +1705,8 @@ pub fn simulate_combat_party_with_options(
     ];
 
     let enemy_as = enemy.attack_speed.max(0.12);
-    let mut meters = [0.0_f32, 0.0_f32];
-    let mut enemy_meter = 0.0_f32;
+    let mut meters = [0u64, 0u64];
+    let mut enemy_meter = 0u64;
 
     let mut poison_stacks: u32 = 0;
     const POISON_DAMAGE_STACK_CAP: u32 = 12;
@@ -2135,6 +2134,10 @@ pub fn simulate_combat_party_with_options(
             });
         }
 
+        // **Poison scheduling:** one batched [`CombatEvent::PoisonTick`] per outer tick, after the
+        // proactive strike-order loop and [`CombatEvent::TimingPulse`] for that tick. We intentionally
+        // do **not** model DoT as independently scheduled sub-tick slices (see
+        // [`ActionLane::Dot`](crate::domain::combat_timing::ActionLane) vs proactive initiative passes).
         if has_poison_any && poison_stacks > 0 && h0 > 0 && enemy_health > 0 {
             if events.len() >= MAX_EVENTS {
                 break;
@@ -2720,6 +2723,87 @@ mod tests {
     fn pick_party_enemy_tie_without_sticky_is_stable_for_tick() {
         let t = pick_party_enemy_target(4, [0, 0], 100, 100, true, None);
         assert_eq!(t, pick_party_enemy_target(4, [0, 0], 100, 100, true, None));
+    }
+
+    #[test]
+    fn scheduler_extreme_attack_speed_is_deterministic() {
+        let mut hero = HeroProfile::new(Stats {
+            damage: 12,
+            attack_speed: 80.0,
+            ..Stats::default()
+        });
+        hero.unlock_skill_slots(1);
+
+        let enemy = Enemy {
+            name: "Speed bag".into(),
+            max_health: 200,
+            damage: 1,
+            armor: 0,
+            attack_speed: 80.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
+        };
+
+        let a = simulate_combat_party(
+            &hero,
+            &enemy,
+            40,
+            hero.derived_stats().max_health,
+            None,
+            0xC0FFEE,
+        );
+        let b = simulate_combat_party(
+            &hero,
+            &enemy,
+            40,
+            hero.derived_stats().max_health,
+            None,
+            0xC0FFEE,
+        );
+        assert_eq!(a.outcome, b.outcome);
+        assert_eq!(a.events, b.events);
+    }
+
+    #[test]
+    fn mutual_ohko_outcome_follows_initiative_order_solo() {
+        use crate::domain::combat_timing::{encounter_initiative_seed, initiative_ranks};
+
+        let hero = HeroProfile::new(Stats {
+            max_health: 50,
+            damage: 50,
+            armor: 0,
+            attack_speed: 100.0,
+            healing_power: 0,
+        });
+        let enemy = Enemy {
+            name: "Mirror".into(),
+            max_health: 50,
+            damage: 50,
+            armor: 0,
+            attack_speed: 100.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
+        };
+        let mix = (enemy.max_health as u64) ^ ((enemy.damage as u64).rotate_left(17));
+
+        let mut hero_first_salt = None;
+        let mut foe_first_salt = None;
+        for salt in 0u64..512 {
+            let enc = encounter_initiative_seed(salt, mix);
+            let r = initiative_ranks(enc, 1);
+            if r[0] < r[2] {
+                hero_first_salt.get_or_insert(salt);
+            } else {
+                foe_first_salt.get_or_insert(salt);
+            }
+        }
+        let hs = hero_first_salt.expect("expected a solo salt where lead swings before foe");
+        let fs = foe_first_salt.expect("expected a solo salt where foe swings before lead");
+
+        let hero_wins = simulate_combat_party(&hero, &enemy, 6, 50, None, hs);
+        let foe_wins = simulate_combat_party(&hero, &enemy, 6, 50, None, fs);
+        assert_eq!(hero_wins.outcome, CombatOutcome::HeroWon, "{hero_wins:?}");
+        assert_eq!(foe_wins.outcome, CombatOutcome::EnemyWon, "{foe_wins:?}");
     }
 
     #[test]
@@ -3577,6 +3661,40 @@ mod tests {
         assert!(
             poison_ticks >= 2,
             "poison should tick on later clock iterations without a second hero swing, got {poison_ticks} PoisonTick events"
+        );
+    }
+
+    #[test]
+    fn poison_tick_batch_runs_immediately_after_timing_pulse_same_tick() {
+        let mut hero = HeroProfile::default();
+        hero.base_stats.attack_speed = 0.12;
+        hero.unlock_skill_slots(1);
+        hero.equip_skill(0, SkillId::PoisonEdge).unwrap();
+
+        let enemy = Enemy {
+            name: "Pacer".into(),
+            max_health: 999,
+            damage: 1,
+            armor: 0,
+            attack_speed: 1.0,
+            cast_ticks: 0,
+            cooldown_ticks: 0,
+        };
+
+        let result = simulate_combat(&hero, &enemy, 12, hero.derived_stats().max_health);
+        let i = result
+            .events
+            .iter()
+            .position(|e| matches!(e, CombatEvent::PoisonTick { .. }))
+            .expect("expected at least one PoisonTick");
+        assert!(
+            matches!(
+                result.events.get(i.wrapping_sub(1)),
+                Some(CombatEvent::TimingPulse { .. })
+            ),
+            "expected PoisonTick immediately after TimingPulse, got {:?} then {:?}",
+            result.events.get(i.wrapping_sub(1)),
+            result.events.get(i)
         );
     }
 

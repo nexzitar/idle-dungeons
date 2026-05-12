@@ -8,7 +8,7 @@ The MVP should prove the core loop with a small vertical slice rather than broad
 
 Long term, the game should grow from one configurable hero into a party-building incremental roguelike. Hero identity should emerge from unlocked skill slots, equipped skills, and gear interactions rather than fixed classes.
 
-For the **strategic roadmap** toward buildcraft, party roles, threat, itemization, and telemetry (simulation-first), see [`2026-05-06-buildcraft-party-systems-roadmap.md`](./2026-05-06-buildcraft-party-systems-roadmap.md).
+For the **strategic roadmap** toward buildcraft, party roles, threat, itemization, and telemetry (simulation-first), see the archived snapshot [`obsolete-2026-05-06-buildcraft-party-systems-roadmap.md`](./obsolete-2026-05-06-buildcraft-party-systems-roadmap.md). For current execution tasks, see [`../ACTIVE-REMAINING-WORK.md`](../ACTIVE-REMAINING-WORK.md).
 
 ## Design Goals
 

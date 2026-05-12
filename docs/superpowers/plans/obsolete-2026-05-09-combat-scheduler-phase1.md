@@ -1,8 +1,10 @@
 # Combat scheduler Phase 1 — Implementation Plan
 
+> **OBSOLETE (archived).** Current execution backlog: [`../ACTIVE-REMAINING-WORK.md`](../ACTIVE-REMAINING-WORK.md). Many steps landed in code; checkboxes below are not maintained.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace phase-locked per-tick resolution in `simulate_combat_party` with a **dense 100 ms tick** loop that **batches and sorts** all actions due on the same tick using **stable initiative** (spec: `docs/superpowers/specs/2026-05-09-combat-feel-timing-skill-flow.md`), preserving **determinism** and passing the existing combat regression suite.
+**Goal:** Replace phase-locked per-tick resolution in `simulate_combat_party` with a **dense 100 ms tick** loop that **batches and sorts** all actions due on the same tick using **stable initiative** (spec: `docs/superpowers/specs/obsolete-2026-05-09-combat-feel-timing-skill-flow.md`), preserving **determinism** and passing the existing combat regression suite.
 
 **Architecture:** Keep **`CombatResult` / `CombatEvent` / `combat_playback_frames_from_result`** as the Player-facing API. Introduce a small **`combat_timing`** module for `COMBAT_TICK_MS`, deterministic **initiative ranks** per encounter, and a **total order key** `(tick, initiative_rank, action_lane, sequence)`. Each outer tick: advance weapon meters and cast/CD machinery into **pending actions** for this tick, append scheduled housekeeping (poison tick, `TimingPulse`, threat drips if still tick-scoped), **sort**, execute in order, then advance. **Float meters** stay for Phase 1 (parity with current math); fixed-point can be a follow-up.
 
@@ -372,7 +374,7 @@ git commit -m "test(combat): same-tick race outcome stable under initiative"
 
 **Files:**
 - Modify: `CHANGELOG.md`
-- Modify: `docs/superpowers/specs/2026-05-09-combat-feel-timing-skill-flow.md` (link to this plan at bottom)
+- Modify: `docs/superpowers/specs/obsolete-2026-05-09-combat-feel-timing-skill-flow.md` (link to this plan at bottom)
 
 - [ ] **Step 1: Changelog entry** under next patch version:
 
@@ -387,13 +389,13 @@ git commit -m "test(combat): same-tick race outcome stable under initiative"
 ```markdown
 ## Implementation
 
-- Phase 1 plan: [`docs/superpowers/plans/2026-05-09-combat-scheduler-phase1.md`](../plans/2026-05-09-combat-scheduler-phase1.md)
+- Phase 1 plan: [`docs/superpowers/plans/obsolete-2026-05-09-combat-scheduler-phase1.md`](../plans/obsolete-2026-05-09-combat-scheduler-phase1.md)
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add CHANGELOG.md docs/superpowers/specs/2026-05-09-combat-feel-timing-skill-flow.md
+git add CHANGELOG.md docs/superpowers/specs/obsolete-2026-05-09-combat-feel-timing-skill-flow.md
 git commit -m "docs: link combat Phase 1 plan and changelog scheduler note"
 ```
 
@@ -418,7 +420,7 @@ git commit -m "docs: link combat Phase 1 plan and changelog scheduler note"
 
 ## Execution handoff
 
-**Plan complete and saved to `docs/superpowers/plans/2026-05-09-combat-scheduler-phase1.md`. Two execution options:**
+**Plan complete and saved to `docs/superpowers/plans/obsolete-2026-05-09-combat-scheduler-phase1.md`. Two execution options:**
 
 1. **Subagent-Driven (recommended)** — Dispatch a fresh subagent per task, review between tasks, fast iteration (**superpowers:subagent-driven-development**).
 
