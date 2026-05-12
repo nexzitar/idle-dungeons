@@ -40,7 +40,7 @@ mod tests {
     use crate::domain::items::GearSlot;
 
     fn item(id: u64, name: &str, rarity: ItemRarity) -> ItemInstance {
-        let mut it = ItemInstance::basic(id, name, GearSlot::Weapon);
+        let mut it = ItemInstance::basic(id, name, GearSlot::MainHand);
         it.rarity = rarity;
         it
     }

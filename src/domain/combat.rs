@@ -547,6 +547,13 @@ pub(crate) struct PreparedHero {
     vr_max_charges: u8,
 }
 
+#[cfg(test)]
+impl PreparedHero {
+    fn test_attack_cd_total(&self) -> u32 {
+        self.attack_cd_total
+    }
+}
+
 fn attack_cadence_ticks(hero: &HeroProfile) -> (u32, u32) {
     let mut max_cast = 0u32;
     let mut max_cd = 0u32;
@@ -604,7 +611,10 @@ fn prepare_hero_combat(hero: &HeroProfile) -> PreparedHero {
         guard_flat += 2;
     }
 
-    let (attack_cast_total, attack_cd_total) = attack_cadence_ticks(hero);
+    let (attack_cast_total, mut attack_cd_total) = attack_cadence_ticks(hero);
+    if hero.has_affix(ItemAffix::Rhythm) && attack_cd_total > 1 {
+        attack_cd_total -= 1;
+    }
 
     let heavy_skill = if has(SkillId::Cleave) {
         Some(SkillId::Cleave)
@@ -3596,6 +3606,25 @@ mod tests {
     }
 
     #[test]
+    fn rhythm_affix_reduces_heavy_weave_recovery_by_one_tick() {
+        let mut base = HeroProfile::default();
+        base.unlock_skill_slots(1);
+        base.equip_skill(0, SkillId::HeavyStrike).unwrap();
+        let cd_base = prepare_hero_combat(&base).test_attack_cd_total();
+        assert!(cd_base > 1, "heavy should have post-swing recovery ticks");
+
+        let mut rhythm_hero = HeroProfile::default();
+        rhythm_hero.unlock_skill_slots(1);
+        rhythm_hero.equip_skill(0, SkillId::HeavyStrike).unwrap();
+        let mut grips = ItemInstance::basic(77, "Snap grips", GearSlot::Hands);
+        grips.affixes.push(ItemAffix::Rhythm);
+        rhythm_hero.equip_item(grips);
+        let cd_rhythm = prepare_hero_combat(&rhythm_hero).test_attack_cd_total();
+
+        assert_eq!(cd_base.saturating_sub(cd_rhythm), 1);
+    }
+
+    #[test]
     fn poison_edge_deals_extra_damage() {
         let mut hero = HeroProfile::default();
         hero.unlock_skill_slots(1);
@@ -3893,9 +3922,9 @@ mod tests {
         hero.base_stats.attack_speed = 0.12;
         hero.unlock_skill_slots(1);
         hero.equip_skill(0, SkillId::ThornSkin).unwrap();
-        let mut mail = ItemInstance::basic(9, "Spiked mail", GearSlot::Armor);
+        let mut mail = ItemInstance::basic(9, "Spiked mail", GearSlot::Chest);
         mail.affixes.push(ItemAffix::Spiked);
-        hero.equip_item(mail).unwrap();
+        hero.equip_item(mail);
 
         let enemy = Enemy {
             name: "Splinter target".into(),
@@ -3981,18 +4010,18 @@ mod tests {
         let mut skill_only = HeroProfile::default();
         skill_only.unlock_skill_slots(1);
         skill_only.equip_skill(0, SkillId::HeavyStrike).unwrap();
-        let mut club = ItemInstance::basic(1, "Club", GearSlot::Weapon);
+        let mut club = ItemInstance::basic(1, "Club", GearSlot::MainHand);
         club.stats.damage = 4;
-        skill_only.equip_item(club).unwrap();
+        skill_only.equip_item(club);
 
         let mut with_affix = HeroProfile::default();
         with_affix.unlock_skill_slots(1);
         with_affix.equip_skill(0, SkillId::HeavyStrike).unwrap();
-        let mut maul = ItemInstance::basic(2, "Maul", GearSlot::Weapon);
+        let mut maul = ItemInstance::basic(2, "Maul", GearSlot::MainHand);
         maul.stats.damage = 0;
         maul.stats.attack_speed = 0.2;
         maul.affixes.push(ItemAffix::Heavy);
-        with_affix.equip_item(maul).unwrap();
+        with_affix.equip_item(maul);
 
         let e = dummy_enemy();
         let a = first_hero_damage(&simulate_combat(&skill_only, &e, 20, 100));
@@ -4011,9 +4040,9 @@ mod tests {
         let mut geared = HeroProfile::default();
         geared.unlock_skill_slots(1);
         geared.equip_skill(0, SkillId::LifestealStrike).unwrap();
-        let mut blade = ItemInstance::basic(2, "Fang", GearSlot::Weapon);
+        let mut blade = ItemInstance::basic(2, "Fang", GearSlot::MainHand);
         blade.affixes.push(ItemAffix::Vampiric);
-        geared.equip_item(blade).unwrap();
+        geared.equip_item(blade);
 
         let e = dummy_enemy();
         let h_plain = first_heal(&simulate_combat(&plain, &e, 1, 100));
@@ -4030,9 +4059,9 @@ mod tests {
         let mut both = HeroProfile::default();
         both.unlock_skill_slots(1);
         both.equip_skill(0, SkillId::ThornSkin).unwrap();
-        let mut spiky = ItemInstance::basic(3, "Spiky mail", GearSlot::Armor);
+        let mut spiky = ItemInstance::basic(3, "Spiky mail", GearSlot::Chest);
         spiky.affixes.push(ItemAffix::Spiked);
-        both.equip_item(spiky).unwrap();
+        both.equip_item(spiky);
 
         let enemy = Enemy {
             name: "Bruiser".into(),
@@ -4060,9 +4089,9 @@ mod tests {
         let mut cursed = HeroProfile::default();
         cursed.unlock_skill_slots(1);
         cursed.equip_skill(0, SkillId::BarrierPulse).unwrap();
-        let mut cloth = ItemInstance::basic(4, "Shroud", GearSlot::Trinket);
+        let mut cloth = ItemInstance::basic(4, "Shroud", GearSlot::Trinket1);
         cloth.affixes.push(ItemAffix::Cursed);
-        cursed.equip_item(cloth).unwrap();
+        cursed.equip_item(cloth);
 
         let enemy = Enemy {
             name: "Bruiser".into(),
@@ -4101,9 +4130,9 @@ mod tests {
             healing_power: 0,
         });
         pierce.unlock_skill_slots(0);
-        let mut mace = ItemInstance::basic(9, "Ram", GearSlot::Weapon);
+        let mut mace = ItemInstance::basic(9, "Ram", GearSlot::MainHand);
         mace.affixes.push(ItemAffix::Shattering);
-        pierce.equip_item(mace).unwrap();
+        pierce.equip_item(mace);
 
         assert_eq!(plain.derived_stats().damage, pierce.derived_stats().damage);
 
@@ -4132,9 +4161,9 @@ mod tests {
         let mut v = HeroProfile::default();
         v.unlock_skill_slots(1);
         v.equip_skill(0, SkillId::PoisonEdge).unwrap();
-        let mut orb = ItemInstance::basic(10, "Ichor", GearSlot::Trinket);
+        let mut orb = ItemInstance::basic(10, "Ichor", GearSlot::Trinket1);
         orb.affixes.push(ItemAffix::Virulent);
-        v.equip_item(orb).unwrap();
+        v.equip_item(orb);
 
         let enemy = Enemy {
             name: "Sponge".into(),
@@ -4183,9 +4212,9 @@ mod tests {
         let mut wall = HeroProfile::default();
         wall.unlock_skill_slots(1);
         wall.equip_skill(0, SkillId::Guard).unwrap();
-        let mut shield = ItemInstance::basic(11, "Bulwark", GearSlot::Armor);
+        let mut shield = ItemInstance::basic(11, "Bulwark", GearSlot::OffHand);
         shield.affixes.push(ItemAffix::Bastion);
-        wall.equip_item(shield).unwrap();
+        wall.equip_item(shield);
 
         let enemy = Enemy {
             name: "Bruiser".into(),
@@ -4221,9 +4250,9 @@ mod tests {
             healing_power: 0,
         });
         fury.unlock_skill_slots(0);
-        let mut axe = ItemInstance::basic(55, "Titan maul", GearSlot::Weapon);
+        let mut axe = ItemInstance::basic(55, "Titan maul", GearSlot::MainHand);
         axe.affixes.push(ItemAffix::TitansFury);
-        fury.equip_item(axe).unwrap();
+        fury.equip_item(axe);
 
         assert_eq!(plain.derived_stats().damage, fury.derived_stats().damage);
 
@@ -4253,9 +4282,9 @@ mod tests {
             healing_power: 0,
         });
         hero.unlock_skill_slots(0);
-        let mut glaive = ItemInstance::basic(56, "Maw", GearSlot::Weapon);
+        let mut glaive = ItemInstance::basic(56, "Maw", GearSlot::MainHand);
         glaive.affixes.push(ItemAffix::Devourer);
-        hero.equip_item(glaive).unwrap();
+        hero.equip_item(glaive);
 
         let enemy = Enemy {
             name: "Wisp".into(),

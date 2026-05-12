@@ -13,6 +13,7 @@
 | **Skill layering** (mutual exclusivity hints) | `[skill_layering](../../src/domain/skill_layering.rs)` + build panel                                                     |
 | Initiative ordering                         | `[combat_timing](../../src/domain/combat_timing.rs)`, `[sorted_strike_actors](../../src/domain/combat_round.rs)`         |
 | Fixed-point weapon swing meters             | `[combat_meter](../../src/domain/combat_meter.rs)` + party/foe meters in `[simulate_combat_party](../../src/domain/combat.rs)` |
+| Nine-slot gear + loot budgets               | `[GearSlot](../../src/domain/items.rs)`, `[loot](../../src/domain/loot.rs)`                                              |
 | Playback timing bars                        | `[CombatPlaybackFrame](../../src/domain/combat.rs)`, theater stacks in `[mockup_layout](../../src/ui/mockup_layout.rs)`  |
 
 
@@ -25,7 +26,7 @@ Use this as a **sequence**, not parallel pillars—later waves assume earlier on
 - [x] **Wave 1 — Readability & taxonomy** — `SkillCategory` + skill book labels; floating combat text respects party vs foe anchors; timing semantics in `combat_timing` / `simulate_combat_party` rustdoc.
 - [x] **Wave 2 — Skill layering rules** — [`skill_layering`](../../src/domain/skill_layering.rs): layer slots + loadout warnings (Heavy vs Cleave today); tests; build panel surfaces notices. Extend the table as new mutually exclusive pairs land (§A skill layering).
 - [x] **Wave 3 — Engine hardening** — Fixed-point meters; poison scheduling decision + tests; scheduler stress / same-tick lethal tests (§B).
-- [ ] **Wave 4 — Itemization & progression curve** — Stat compression; build-defining affix prototype; **encounter score / survival progression** experiments (§D); **equipment slot expansion review** (§D, 3-slot concentration).
+- [x] **Wave 4 — Itemization & progression curve** — Nine-slot gear spread + compressed loot budgets; **Rhythm** affix (weave recovery); **encounter score** on `RunSummary`; legacy save slot aliases; §C/D alignment.
 - [ ] **Wave 5 — Roles, multi-foe MVP & archetype hints** — Threat decay/transfer/taunt pulse; 2-enemy room + cleave targeting; seed **combat archetype framework** (§E) as tag/heuristic readouts for loot weighting / telemetry — no class locking.
 - [ ] **Wave 6 — Telemetry slice** — One run summary metric (e.g. white vs ability damage %) from existing events (§F).
 - [ ] **Wave 7+ — Presentation / audio / art** — After combat language is stable (§G).

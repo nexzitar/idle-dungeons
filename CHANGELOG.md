@@ -2,6 +2,21 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## 0.2.28 — 2026-05-09
+
+### Itemization / progression (Wave 4)
+
+- **Nine `GearSlot`s:** main hand, off-hand, head, chest, hands, feet, trinket I & II, relic — distributes power budget across more items; [`loot`](src/domain/loot.rs) uses per-slot stats + compressed depth budget (~55% linear) so drops are smaller but sets stay relevant.
+- **Save compatibility:** legacy JSON `"Weapon"` / `"Armor"` / `"Trinket"` keys (and slot fields) deserialize via `serde(alias)` to main hand, chest, trinket I.
+- **Rhythm affix:** Heavy/Cleave weave post-swing recovery shortened by 1 tick when Rhythm is equipped on any item.
+- **Encounter score:** [`RunSummary.encounter_score`](src/domain/run.rs) from combat clears (depth × role weight) + sim tick slice + treasure/shrine bonuses; shown in run summary rewards line.
+- **Two-handed weapons:** `ItemInstance.two_handed` main-hand pieces clear or block off-hand; equipping off-hand unequips a two-hander; stash equip returns all displaced items.
+- **Gear hub:** loadout column scrolls when content overflows ([`spawn_scrollable_flex_column`](src/ui/widgets.rs)).
+
+### Docs
+
+- **Spec:** [`docs/superpowers/specs/2026-05-09-wave4-itemization-design.md`](docs/superpowers/specs/2026-05-09-wave4-itemization-design.md); **Wave 4** checked in [`ACTIVE-REMAINING-WORK.md`](docs/superpowers/ACTIVE-REMAINING-WORK.md).
+
 ## 0.2.27 — 2026-05-09
 
 ### Combat / hardening

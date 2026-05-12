@@ -313,10 +313,8 @@ fn equip_inventory_item(
 ) {
     for event in events.read() {
         if let Some(item) = remove_inventory_item(&mut profile.profile.inventory, event.item_id) {
-            if let Some(replaced) = profile.profile.hero.equipped_item(item.slot).cloned() {
-                profile.profile.inventory.push(replaced);
-            }
-            let _ = profile.profile.hero.equip_item(item);
+            let displaced = profile.profile.hero.equip_item(item);
+            profile.profile.inventory.extend(displaced);
             save_current_profile(&save_path, &profile);
         }
     }
@@ -512,7 +510,7 @@ mod tests {
     fn equip_inventory_item_moves_item_to_hero_and_saves() {
         let dir = tempfile::tempdir().unwrap();
         let save_path = dir.path().join("profile.json");
-        let item = ItemInstance::basic(42, "Iron Sword", GearSlot::Weapon);
+        let item = ItemInstance::basic(42, "Iron Sword", GearSlot::MainHand);
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
         app.insert_resource(ProfileSavePath(save_path.clone()));
@@ -529,20 +527,20 @@ mod tests {
 
         let profile = app.world().resource::<ProfileState>();
         assert_eq!(
-            profile.profile.hero.equipped_item(GearSlot::Weapon),
+            profile.profile.hero.equipped_item(GearSlot::MainHand),
             Some(&item)
         );
         assert!(profile.profile.inventory.is_empty());
 
         let saved = crate::save::load_profile(&save_path).unwrap();
-        assert_eq!(saved.hero.equipped_item(GearSlot::Weapon), Some(&item));
+        assert_eq!(saved.hero.equipped_item(GearSlot::MainHand), Some(&item));
     }
 
     #[test]
     fn salvage_inventory_item_adds_salvage_and_saves() {
         let dir = tempfile::tempdir().unwrap();
         let save_path = dir.path().join("profile.json");
-        let mut item = ItemInstance::basic(7, "Rare Trinket", GearSlot::Trinket);
+        let mut item = ItemInstance::basic(7, "Rare Trinket", GearSlot::Trinket1);
         item.rarity = ItemRarity::Rare;
         let expected_salvage = salvage_value(&item);
         let mut app = App::new();

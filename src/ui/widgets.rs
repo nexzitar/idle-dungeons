@@ -218,6 +218,54 @@ fn spawn_panel_scroll_viewport(parent: &mut ChildSpawnerCommands<'_>, content: i
         });
 }
 
+/// Fills remaining column height in a flex parent; scrolls when content exceeds the viewport.
+///
+/// When `min_viewport_height_px` is set, the viewport is at least that tall (stops flex from
+/// collapsing empty lists).
+pub fn spawn_scrollable_flex_column(
+    parent: &mut ChildSpawnerCommands<'_>,
+    min_viewport_height_px: Option<f32>,
+    content: impl FnOnce(&mut ChildSpawnerCommands<'_>),
+) {
+    parent
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
+                flex_grow: 1.0,
+                flex_shrink: 1.0,
+                flex_basis: Val::Px(0.0),
+                min_height: min_viewport_height_px
+                    .map(Val::Px)
+                    .unwrap_or(Val::Px(0.0)),
+                position_type: PositionType::Relative,
+                overflow: Overflow::clip_y(),
+                ..default()
+            },
+            FocusPolicy::Pass,
+            RelativeCursorPosition::default(),
+            UiScrollState::default(),
+            UiScrollRegion,
+        ))
+        .with_children(|vp| {
+            vp.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(0.0),
+                    right: Val::Px(0.0),
+                    top: Val::Px(0.0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(8.0),
+                    align_items: AlignItems::Stretch,
+                    ..default()
+                },
+                UiScrollContent,
+            ))
+            .with_children(content);
+        });
+}
+
 pub fn spawn_framed_panel(
     parent: &mut ChildSpawnerCommands<'_>,
     flex: f32,

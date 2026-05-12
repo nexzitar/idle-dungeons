@@ -13,6 +13,7 @@ pub fn empty_run_summary() -> RunSummary {
         log: Vec::new(),
         peak_risk_note: String::new(),
         guided_early_combat_drop_granted: false,
+        encounter_score: 0,
     }
 }
 
@@ -59,9 +60,10 @@ pub fn outcome_headline(summary: &RunSummary) -> String {
 
 pub fn reward_digest(summary: &RunSummary) -> String {
     format!(
-        "Rewards pending - Gold +{} · Salvage +{} · Loot pieces: {}",
+        "Rewards pending - Gold +{} · Salvage +{} · Encounter score {} · Loot pieces: {}",
         summary.gold_earned,
         summary.salvage_earned,
+        summary.encounter_score,
         summary.loot.len()
     )
 }
@@ -106,12 +108,14 @@ mod tests {
             log: vec!["Depth 8: defeated by Hollow".into()],
             peak_risk_note: "Peak room risk: moderate (standard combat).".into(),
             guided_early_combat_drop_granted: false,
+            encounter_score: 0,
         };
 
         let text = summary_panel_text(&summary);
 
         assert!(text.contains("depth 8"));
         assert!(text.contains("Gold +30"));
+        assert!(text.contains("Encounter score"));
         assert!(text.contains("Defeated by Hollow"));
         assert!(text.contains("Peak room risk"));
     }

@@ -4,7 +4,7 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 /// Baseline affix pool (always eligible on loot).
-const STANDARD_AFFIXES: [ItemAffix; 8] = [
+const STANDARD_AFFIXES: [ItemAffix; 9] = [
     ItemAffix::Vampiric,
     ItemAffix::Heavy,
     ItemAffix::Cursed,
@@ -13,14 +13,50 @@ const STANDARD_AFFIXES: [ItemAffix; 8] = [
     ItemAffix::Shattering,
     ItemAffix::Virulent,
     ItemAffix::Bastion,
+    ItemAffix::Rhythm,
 ];
 
+#[derive(Clone, Copy)]
+enum AffixFamily {
+    Strike,
+    Ward,
+    Charm,
+}
+
+fn affix_family_for_slot(slot: GearSlot) -> AffixFamily {
+    match slot {
+        GearSlot::MainHand | GearSlot::OffHand | GearSlot::Hands => AffixFamily::Strike,
+        GearSlot::Head | GearSlot::Chest | GearSlot::Feet => AffixFamily::Ward,
+        GearSlot::Trinket1 | GearSlot::Trinket2 | GearSlot::Relic => AffixFamily::Charm,
+    }
+}
+
+/// Unskewed random slot; main hand / chest slightly more common (players chase primaries first).
+const DROP_WEIGHTS: [(GearSlot, u32); 9] = [
+    (GearSlot::MainHand, 14),
+    (GearSlot::OffHand, 10),
+    (GearSlot::Head, 9),
+    (GearSlot::Chest, 12),
+    (GearSlot::Hands, 8),
+    (GearSlot::Feet, 8),
+    (GearSlot::Trinket1, 7),
+    (GearSlot::Trinket2, 7),
+    (GearSlot::Relic, 9),
+];
+
+fn pick_weighted_slot(rng: &mut ChaCha8Rng) -> GearSlot {
+    let total: u32 = DROP_WEIGHTS.iter().map(|(_, w)| w).sum();
+    let mut r = rng.gen_range(0..total);
+    for &(slot, w) in &DROP_WEIGHTS {
+        if r < w {
+            return slot;
+        }
+        r -= w;
+    }
+    GearSlot::MainHand
+}
+
 /// Roll item rarity from **dungeon depth** and RNG (same seed + depth = same tier).
-///
-/// - **Legendary** starts around **1%** at shallow depths and rises slowly with depth;
-///   it is **not** guaranteed before depth **1000**.
-/// - At depth **≥ 1000**, loot is **always** Legendary.
-/// - Below 1000, non-legendary rolls bias toward Common/Uncommon early and Rare/Epic deeper.
 fn roll_rarity_for_depth(depth: u32, rng: &mut ChaCha8Rng) -> ItemRarity {
     if depth >= 1000 {
         return ItemRarity::Legendary;
@@ -30,7 +66,6 @@ fn roll_rarity_for_depth(depth: u32, rng: &mut ChaCha8Rng) -> ItemRarity {
     } else {
         ((depth - 1) as f64 / 999.0).clamp(0.0, 1.0)
     };
-    // ~1% at depth 1, ~99% at depth 999 (never 100% before floor 1000).
     let p_legendary = 0.01 + 0.98 * t * t;
     let r1: f64 = rng.gen();
     if r1 < p_legendary {
@@ -78,21 +113,23 @@ fn affix_count_for_rarity(rarity: ItemRarity, rng: &mut ChaCha8Rng) -> usize {
     }
 }
 
-/// Higher weight = more likely when rolling loot for this slot.
 fn affix_slot_weight(affix: ItemAffix, slot: GearSlot) -> u32 {
     let base = 2u32;
-    let bonus = match (slot, affix) {
-        (GearSlot::Weapon, ItemAffix::Shattering | ItemAffix::Heavy) => 5,
-        (GearSlot::Weapon, ItemAffix::Vampiric | ItemAffix::Relentless) => 3,
-        (GearSlot::Weapon, ItemAffix::Spiked | ItemAffix::Cursed) => 2,
+    let family = affix_family_for_slot(slot);
+    let bonus = match (family, affix) {
+        (AffixFamily::Strike, ItemAffix::Shattering | ItemAffix::Heavy) => 5,
+        (AffixFamily::Strike, ItemAffix::Vampiric | ItemAffix::Relentless) => 3,
+        (AffixFamily::Strike, ItemAffix::Rhythm) => 4,
+        (AffixFamily::Strike, ItemAffix::Spiked | ItemAffix::Cursed) => 2,
 
-        (GearSlot::Armor, ItemAffix::Bastion | ItemAffix::Spiked) => 5,
-        (GearSlot::Armor, ItemAffix::Cursed | ItemAffix::Heavy) => 3,
-        (GearSlot::Armor, ItemAffix::Shattering | ItemAffix::Virulent) => 1,
+        (AffixFamily::Ward, ItemAffix::Bastion | ItemAffix::Spiked) => 5,
+        (AffixFamily::Ward, ItemAffix::Cursed | ItemAffix::Heavy) => 3,
+        (AffixFamily::Ward, ItemAffix::Shattering | ItemAffix::Virulent) => 1,
 
-        (GearSlot::Trinket, ItemAffix::Virulent | ItemAffix::Vampiric) => 5,
-        (GearSlot::Trinket, ItemAffix::Cursed | ItemAffix::Relentless) => 3,
-        (GearSlot::Trinket, ItemAffix::Bastion | ItemAffix::Spiked) => 2,
+        (AffixFamily::Charm, ItemAffix::Virulent | ItemAffix::Vampiric) => 5,
+        (AffixFamily::Charm, ItemAffix::Cursed | ItemAffix::Relentless) => 3,
+        (AffixFamily::Charm, ItemAffix::Rhythm) => 3,
+        (AffixFamily::Charm, ItemAffix::Bastion | ItemAffix::Spiked) => 2,
 
         _ => 0,
     };
@@ -112,7 +149,7 @@ fn affix_pick_table(slot: GearSlot, rarity: ItemRarity) -> Vec<(ItemAffix, u32)>
     v
 }
 
-fn pick_weighted(rng: &mut ChaCha8Rng, table: &[(ItemAffix, u32)]) -> ItemAffix {
+fn pick_weighted_affix(rng: &mut ChaCha8Rng, table: &[(ItemAffix, u32)]) -> ItemAffix {
     let total: u32 = table.iter().map(|(_, w)| w).sum();
     if total == 0 {
         return STANDARD_AFFIXES[0];
@@ -135,13 +172,13 @@ fn roll_affixes(rng: &mut ChaCha8Rng, slot: GearSlot, rarity: ItemRarity) -> Vec
         if out.len() >= want {
             break;
         }
-        let a = pick_weighted(rng, &table);
+        let a = pick_weighted_affix(rng, &table);
         if !out.contains(&a) {
             out.push(a);
         }
     }
     while out.len() < want {
-        out.push(pick_weighted(rng, &table));
+        out.push(pick_weighted_affix(rng, &table));
     }
     out.truncate(want);
     out
@@ -157,12 +194,12 @@ fn affix_prefix_word(a: ItemAffix) -> &'static str {
         ItemAffix::Shattering => "Shattering",
         ItemAffix::Virulent => "Virulent",
         ItemAffix::Bastion => "Bastion",
+        ItemAffix::Rhythm => "Rhythmic",
         ItemAffix::Devourer => "Devouring",
         ItemAffix::TitansFury => "Titan",
     }
 }
 
-/// Short suffix after "of …" for a second affix (flavor, e.g. Spiked → Thorns).
 fn affix_of_suffix(a: ItemAffix) -> &'static str {
     match a {
         ItemAffix::Vampiric => "Blood",
@@ -173,21 +210,35 @@ fn affix_of_suffix(a: ItemAffix) -> &'static str {
         ItemAffix::Shattering => "Shattering",
         ItemAffix::Virulent => "Venom",
         ItemAffix::Bastion => "Warding",
+        ItemAffix::Rhythm => "Cadence",
         ItemAffix::Devourer => "Feasting",
         ItemAffix::TitansFury => "Titans",
     }
 }
 
-fn gear_kind(slot: GearSlot) -> &'static str {
+fn gear_kind(slot: GearSlot, two_handed: bool) -> &'static str {
+    if two_handed && slot == GearSlot::MainHand {
+        return "Greatblade";
+    }
     match slot {
-        GearSlot::Weapon => "Blade",
-        GearSlot::Armor => "Mail",
-        GearSlot::Trinket => "Charm",
+        GearSlot::MainHand => "Blade",
+        GearSlot::OffHand => "Focus",
+        GearSlot::Head => "Helm",
+        GearSlot::Chest => "Vest",
+        GearSlot::Hands => "Grips",
+        GearSlot::Feet => "Striders",
+        GearSlot::Trinket1 | GearSlot::Trinket2 => "Charm",
+        GearSlot::Relic => "Relic",
     }
 }
 
-fn loot_display_name(rarity: ItemRarity, slot: GearSlot, affixes: &[ItemAffix]) -> String {
-    let kind = gear_kind(slot);
+fn loot_display_name(
+    rarity: ItemRarity,
+    slot: GearSlot,
+    affixes: &[ItemAffix],
+    two_handed: bool,
+) -> String {
+    let kind = gear_kind(slot, two_handed);
     match affixes.len() {
         0 => format!("{rarity:?} Plain {kind}"),
         1 => {
@@ -206,68 +257,168 @@ fn loot_display_name(rarity: ItemRarity, slot: GearSlot, affixes: &[ItemAffix]) 
     }
 }
 
+fn rarity_bonus(rarity: ItemRarity) -> i32 {
+    match rarity {
+        ItemRarity::Common => 0,
+        ItemRarity::Uncommon => 4,
+        ItemRarity::Rare => 10,
+        ItemRarity::Epic => 16,
+        ItemRarity::Legendary => 24,
+    }
+}
+
+/// Smaller numbers per drop; combined across nine slots this approaches prior total gearing power.
+fn compressed_stat_budget(depth: u32, rarity: ItemRarity) -> i32 {
+    let d = depth as i32;
+    let rb = rarity_bonus(rarity);
+    let scaled = d
+        .saturating_mul(55)
+        .saturating_div(100)
+        .saturating_add(rb.saturating_mul(55).saturating_div(100));
+    scaled.max(1)
+}
+
+#[inline]
+fn ip(b: i32, num: i32, den: i32) -> i32 {
+    if den <= 0 {
+        return 0;
+    }
+    (b.saturating_mul(num) / den).max(0)
+}
+
+fn stats_for_slot(slot: GearSlot, b: i32) -> Stats {
+    match slot {
+        GearSlot::MainHand => Stats {
+            damage: ip(b, 115, 100),
+            ..Stats::default_zero()
+        },
+        GearSlot::OffHand => Stats {
+            damage: ip(b, 40, 100),
+            armor: ip(b, 18, 100),
+            ..Stats::default_zero()
+        },
+        GearSlot::Head => Stats {
+            armor: ip(b, 22, 100),
+            max_health: ip(b, 180, 100),
+            ..Stats::default_zero()
+        },
+        GearSlot::Chest => Stats {
+            armor: ip(b, 38, 100),
+            max_health: ip(b, 450, 100),
+            ..Stats::default_zero()
+        },
+        GearSlot::Hands => Stats {
+            damage: ip(b, 20, 100),
+            attack_speed: 0.025,
+            ..Stats::default_zero()
+        },
+        GearSlot::Feet => Stats {
+            armor: ip(b, 18, 100),
+            max_health: ip(b, 150, 100),
+            attack_speed: 0.035,
+            ..Stats::default_zero()
+        },
+        GearSlot::Trinket1 | GearSlot::Trinket2 => Stats {
+            healing_power: ip(b, 22, 100),
+            attack_speed: 0.055,
+            ..Stats::default_zero()
+        },
+        GearSlot::Relic => Stats {
+            healing_power: ip(b, 15, 100),
+            damage: ip(b, 12, 100),
+            attack_speed: 0.025,
+            ..Stats::default_zero()
+        },
+    }
+}
+
+fn stats_two_handed_main(budget: i32) -> Stats {
+    stats_for_slot(GearSlot::MainHand, budget) + stats_for_slot(GearSlot::OffHand, budget)
+}
+
+fn two_handed_roll(id_seed: u64, depth: u32, allow: bool, slot: GearSlot) -> bool {
+    allow
+        && slot == GearSlot::MainHand
+        && id_seed.wrapping_add(depth as u64).wrapping_mul(0x9E37_79B97F4A7C15) % 5 == 0
+}
+
 fn item_from_slot_and_affixes(
     depth: u32,
     id_seed: u64,
     slot: GearSlot,
     rarity: ItemRarity,
     affixes: Vec<ItemAffix>,
+    allow_two_handed: bool,
 ) -> ItemInstance {
-    let budget = depth as i32 + rarity_bonus(rarity);
+    let budget = compressed_stat_budget(depth, rarity);
+    let two_handed = two_handed_roll(id_seed, depth, allow_two_handed, slot);
+    let stats = if two_handed {
+        stats_two_handed_main(budget)
+    } else {
+        stats_for_slot(slot, budget)
+    };
     ItemInstance {
         id: id_seed ^ ((depth as u64) << 32),
-        name: loot_display_name(rarity, slot, &affixes),
+        name: loot_display_name(rarity, slot, &affixes, two_handed),
         slot,
         rarity,
-        stats: match slot {
-            GearSlot::Weapon => Stats {
-                damage: budget,
-                ..Stats::default_zero()
-            },
-            GearSlot::Armor => Stats {
-                armor: budget / 2,
-                max_health: budget * 4,
-                ..Stats::default_zero()
-            },
-            GearSlot::Trinket => Stats {
-                healing_power: budget / 2,
-                attack_speed: 0.1,
-                ..Stats::default_zero()
-            },
-        },
+        stats,
         affixes,
+        two_handed,
+    }
+}
+
+fn slot_lane_seed(slot: GearSlot) -> u64 {
+    match slot {
+        GearSlot::MainHand => 0xD15EA5D0u64,
+        GearSlot::OffHand => 0x0FF5C0A7u64,
+        GearSlot::Head => 0x4EAD_C0DEu64,
+        GearSlot::Chest => 0xC5E51_1Du64,
+        GearSlot::Hands => 0xFA11B1E5u64,
+        GearSlot::Feet => 0xFEE7_BEEFu64,
+        GearSlot::Trinket1 => 0x731B1EF0u64,
+        GearSlot::Trinket2 => 0x731B1EF1u64,
+        GearSlot::Relic => 0xCE11E9A1u64,
     }
 }
 
 /// Roll loot with a locked gear slot — used for onboarding salvage pacing.
 pub fn roll_loot_for_slot(depth: u32, seed: u64, slot: GearSlot) -> ItemInstance {
-    let lane = match slot {
-        GearSlot::Weapon => 0xD15EA5Du64,
-        GearSlot::Armor => 0xBAD00D7Au64,
-        GearSlot::Trinket => 0x731B1EFu64,
-    };
+    roll_loot_for_slot_impl(depth, seed, slot, true)
+}
+
+fn roll_loot_for_slot_impl(
+    depth: u32,
+    seed: u64,
+    slot: GearSlot,
+    allow_two_handed: bool,
+) -> ItemInstance {
+    let lane = slot_lane_seed(slot);
     let lane_shift = lane.rotate_left(slot as u32);
     let mut rng = ChaCha8Rng::seed_from_u64(seed.wrapping_add(depth as u64) ^ lane_shift);
     let rarity = roll_rarity_for_depth(depth, &mut rng);
     let affixes = roll_affixes(&mut rng, slot, rarity);
     let id_seed = seed ^ lane_shift;
-    item_from_slot_and_affixes(depth, id_seed, slot, rarity, affixes)
+    item_from_slot_and_affixes(
+        depth,
+        id_seed,
+        slot,
+        rarity,
+        affixes,
+        allow_two_handed,
+    )
 }
 
 pub fn roll_loot(depth: u32, seed: u64) -> ItemInstance {
     let mut rng = ChaCha8Rng::seed_from_u64(seed ^ depth as u64);
-    let slot = match rng.gen_range(0..3) {
-        0 => GearSlot::Weapon,
-        1 => GearSlot::Armor,
-        _ => GearSlot::Trinket,
-    };
+    let slot = pick_weighted_slot(&mut rng);
     let rarity = roll_rarity_for_depth(depth, &mut rng);
     let affixes = roll_affixes(&mut rng, slot, rarity);
-    item_from_slot_and_affixes(depth, seed, slot, rarity, affixes)
+    item_from_slot_and_affixes(depth, seed, slot, rarity, affixes, true)
 }
 
 /// Profile milestone for guaranteed combat salvage before depth **10**:
-/// first **weapon**, second **armor**; later uses [`roll_loot`] with salted RNG so repeats are not clones.
+/// first **main hand**, second **chest**; later uses [`roll_loot`] with salted RNG so repeats are not clones.
 pub fn roll_profile_guided_early_combat_drop(
     depth: u32,
     run_seed: u64,
@@ -283,8 +434,8 @@ pub fn roll_profile_guided_early_combat_drop(
                 .wrapping_mul(0x9E37_79B97F4A7C15),
         );
     match profile_claim_count_before_grant {
-        0 => roll_loot_for_slot(depth, salt, GearSlot::Weapon),
-        1 => roll_loot_for_slot(depth, salt, GearSlot::Armor),
+        0 => roll_loot_for_slot_impl(depth, salt, GearSlot::MainHand, false),
+        1 => roll_loot_for_slot(depth, salt, GearSlot::Chest),
         _ => roll_loot(depth, salt),
     }
 }
@@ -296,16 +447,6 @@ pub fn salvage_value(item: &ItemInstance) -> u32 {
         ItemRarity::Rare => 40,
         ItemRarity::Epic => 75,
         ItemRarity::Legendary => 130,
-    }
-}
-
-fn rarity_bonus(rarity: ItemRarity) -> i32 {
-    match rarity {
-        ItemRarity::Common => 0,
-        ItemRarity::Uncommon => 4,
-        ItemRarity::Rare => 10,
-        ItemRarity::Epic => 16,
-        ItemRarity::Legendary => 24,
     }
 }
 
@@ -323,11 +464,18 @@ mod tests {
     }
 
     #[test]
-    fn guided_early_combat_first_weapon_second_armor() {
+    fn guided_early_combat_first_weapon_second_chest() {
         let w = roll_profile_guided_early_combat_drop(1, 99, 1, 0);
         let a = roll_profile_guided_early_combat_drop(1, 99, 1, 1);
-        assert_eq!(w.slot, GearSlot::Weapon);
-        assert_eq!(a.slot, GearSlot::Armor);
+        assert_eq!(w.slot, GearSlot::MainHand);
+        assert_eq!(a.slot, GearSlot::Chest);
+    }
+
+    #[test]
+    fn guided_early_first_main_hand_never_two_handed() {
+        let w = roll_profile_guided_early_combat_drop(3, 42, 2, 0);
+        assert_eq!(w.slot, GearSlot::MainHand);
+        assert!(!w.two_handed);
     }
 
     #[test]
@@ -342,23 +490,23 @@ mod tests {
 
     #[test]
     fn deeper_loot_has_at_least_as_much_stat_budget() {
-        let shallow = roll_loot_for_slot(100, 42, GearSlot::Weapon);
-        let deep = roll_loot_for_slot(200, 42, GearSlot::Weapon);
+        let shallow = roll_loot_for_slot(100, 42, GearSlot::MainHand);
+        let deep = roll_loot_for_slot(200, 42, GearSlot::MainHand);
 
         assert!(deep.stats.damage >= shallow.stats.damage);
     }
 
     #[test]
     fn salvage_value_scales_by_rarity() {
-        let mut common = ItemInstance::basic(1, "Common Sword", GearSlot::Weapon);
+        let mut common = ItemInstance::basic(1, "Common Sword", GearSlot::MainHand);
         common.rarity = ItemRarity::Common;
-        let mut uncommon = ItemInstance::basic(2, "Uncommon Sword", GearSlot::Weapon);
+        let mut uncommon = ItemInstance::basic(2, "Uncommon Sword", GearSlot::MainHand);
         uncommon.rarity = ItemRarity::Uncommon;
-        let mut rare = ItemInstance::basic(3, "Rare Sword", GearSlot::Weapon);
+        let mut rare = ItemInstance::basic(3, "Rare Sword", GearSlot::MainHand);
         rare.rarity = ItemRarity::Rare;
-        let mut epic = ItemInstance::basic(4, "Epic Sword", GearSlot::Weapon);
+        let mut epic = ItemInstance::basic(4, "Epic Sword", GearSlot::MainHand);
         epic.rarity = ItemRarity::Epic;
-        let mut legendary = ItemInstance::basic(5, "Legendary Sword", GearSlot::Weapon);
+        let mut legendary = ItemInstance::basic(5, "Legendary Sword", GearSlot::MainHand);
         legendary.rarity = ItemRarity::Legendary;
 
         assert!(salvage_value(&uncommon) > salvage_value(&common));
@@ -368,13 +516,9 @@ mod tests {
     }
 
     #[test]
-    fn rolled_items_use_mvp_gear_slots() {
+    fn rolled_items_use_gear_slots() {
         let item = roll_loot(3, 5);
-
-        assert!(matches!(
-            item.slot,
-            GearSlot::Weapon | GearSlot::Armor | GearSlot::Trinket
-        ));
+        assert!(GearSlot::ALL.contains(&item.slot));
     }
 
     #[test]
@@ -407,14 +551,14 @@ mod tests {
 
     #[test]
     fn legendary_pick_table_includes_devourer_and_titans_fury() {
-        let t = affix_pick_table(GearSlot::Weapon, ItemRarity::Legendary);
+        let t = affix_pick_table(GearSlot::MainHand, ItemRarity::Legendary);
         assert!(t.iter().any(|(a, _)| *a == ItemAffix::Devourer));
         assert!(t.iter().any(|(a, _)| *a == ItemAffix::TitansFury));
     }
 
     #[test]
     fn non_legendary_table_excludes_legendary_only_affixes() {
-        let t = affix_pick_table(GearSlot::Trinket, ItemRarity::Epic);
+        let t = affix_pick_table(GearSlot::Trinket1, ItemRarity::Epic);
         assert!(!t.iter().any(|(a, _)| *a == ItemAffix::Devourer));
         assert!(!t.iter().any(|(a, _)| *a == ItemAffix::TitansFury));
     }

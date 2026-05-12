@@ -19,7 +19,7 @@ pub struct MetaProgression {
     #[serde(default = "default_unlocked_skill_ids_migration")]
     pub unlocked_skill_ids: Vec<SkillId>,
     /// Lifetime claims of guaranteed **before-depth-10** combat salvage on the player's profile:
-    /// first is a **weapon**, second **armor**; later rolls use varied seeds so repeats are not clones.
+    /// first is **main hand**, second **chest**; later rolls use varied seeds so repeats are not clones.
     #[serde(default)]
     pub guided_early_combat_drop_count: u32,
 }

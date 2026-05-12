@@ -61,6 +61,9 @@ pub struct RunSummary {
     /// This run awarded the once-per-delve salvage before depth **10** (`weapon`/`armor` pacing).
     #[serde(default)]
     pub guided_early_combat_drop_granted: bool,
+    /// Weighted progression score from encounters cleared (Wave 4 experiment; not yet spendable currency).
+    #[serde(default)]
+    pub encounter_score: u64,
 }
 
 fn default_summary_dungeon_cap() -> u32 {
@@ -170,6 +173,7 @@ fn simulate_run_with_playback_for_rooms(
     let mut floors_cleared = 0u32;
     let mut granted_pre10_combat_loot = false;
     let mut guided_early_combat_drop_granted_this_run = false;
+    let mut encounter_score = 0u64;
     let mut peak_risk_rank = 0u8;
     let mut run_dmg_meter_0 = 0u32;
     let mut run_dmg_meter_1 = 0u32;
@@ -203,6 +207,7 @@ fn simulate_run_with_playback_for_rooms(
                             peak_risk_note: peak_risk_note(peak_risk_rank),
                             guided_early_combat_drop_granted:
                                 guided_early_combat_drop_granted_this_run,
+                            encounter_score,
                         },
                         playback,
                     };
@@ -252,6 +257,15 @@ fn simulate_run_with_playback_for_rooms(
                 }
                 match combat.outcome {
                     CombatOutcome::HeroWon => {
+                        let room_mult: u32 = match room.kind {
+                            RoomKind::Elite => 3,
+                            RoomKind::Boss => 12,
+                            _ => 1,
+                        };
+                        encounter_score +=
+                            u64::from(room.depth.saturating_mul(15).saturating_mul(room_mult))
+                                + u64::from(combat.clock_ticks / 8);
+
                         hero_current_hp = combat.hero_health;
                         if let Some(h) = combat.partner_health {
                             partner_current_hp = h;
@@ -272,8 +286,8 @@ fn simulate_run_with_playback_for_rooms(
                                 config.guided_early_combat_claims_already,
                             );
                             let note = match config.guided_early_combat_claims_already {
-                                0 => "weapon salvage",
-                                1 => "armor salvage",
+                                0 => "main-hand salvage",
+                                1 => "chest salvage",
                                 _ => "skirmish salvage",
                             };
                             log.push(format!(
@@ -311,6 +325,7 @@ fn simulate_run_with_playback_for_rooms(
                                     peak_risk_note: peak_risk_note(peak_risk_rank),
                                     guided_early_combat_drop_granted:
                                         guided_early_combat_drop_granted_this_run,
+                                    encounter_score,
                                 },
                                 playback,
                             };
@@ -332,6 +347,7 @@ fn simulate_run_with_playback_for_rooms(
                                 peak_risk_note: peak_risk_note(peak_risk_rank),
                                 guided_early_combat_drop_granted:
                                     guided_early_combat_drop_granted_this_run,
+                                encounter_score,
                             },
                             playback,
                         };
@@ -339,6 +355,7 @@ fn simulate_run_with_playback_for_rooms(
                 }
             }
             RoomKind::Treasure => {
+                encounter_score += u64::from(room.depth.saturating_mul(6));
                 let item = roll_loot(room.depth, config.seed);
                 salvage_earned += salvage_value(&item);
                 let line = format!("Depth {}: found {}", room.depth, item.name);
@@ -359,6 +376,7 @@ fn simulate_run_with_playback_for_rooms(
                 ));
             }
             RoomKind::Shrine => {
+                encounter_score += u64::from(room.depth.saturating_mul(4));
                 let line = format!("Depth {}: shrine grants {} gold", room.depth, room.depth);
                 log.push(line.clone());
                 gold_earned += room.depth;
@@ -391,6 +409,7 @@ fn simulate_run_with_playback_for_rooms(
             log,
             peak_risk_note: peak_risk_note(peak_risk_rank),
             guided_early_combat_drop_granted: guided_early_combat_drop_granted_this_run,
+            encounter_score,
         },
         playback,
     }

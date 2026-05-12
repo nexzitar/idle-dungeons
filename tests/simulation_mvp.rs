@@ -27,6 +27,19 @@ fn run_summary_reports_depth_gold_and_outcome() {
         !result.peak_risk_note.is_empty(),
         "peak risk hint should summarize room pressure"
     );
+    assert!(
+        result.encounter_score > 0,
+        "encounter score should accumulate from cleared rooms"
+    );
+}
+
+#[test]
+fn run_summary_encounter_score_is_deterministic_for_seed() {
+    let hero = HeroProfile::default();
+    let config = RunConfig::new(5, 25);
+    let a = simulate_run(&hero, None, config);
+    let b = simulate_run(&hero, None, config);
+    assert_eq!(a.encounter_score, b.encounter_score);
 }
 
 #[test]
