@@ -34,6 +34,11 @@ arrows or IJKL = move; [ ] = scale (Alt=width, Shift=height); - / = size basis; 
 Q / E = rotate; N / M = layer (global Z); 1/2 exposure · 3/4 glow · 5/6 bloom (stored); \
 P = print JSON; Ctrl+S = save; F5 = reload";
 
+/// One-line summary for the presentation editor banner before the console hint is marked logged.
+#[cfg(debug_assertions)]
+pub const TITLE_SCENE_TUNE_BANNER_HINT: &str = "\
+Press ` to toggle layout mode · Tab / Shift+Tab cycles targets · arrows or IJKL move · [ ] scale";
+
 /// Pixel width × height of the fireplace art box from [`TitleUiElementTune::size_basis`] (image height).
 #[must_use]
 pub fn title_fireplace_base_px(tune: &TitleUiElementTune) -> (f32, f32) {

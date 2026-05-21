@@ -1,17 +1,25 @@
-//! Title screen: campfire hub preview with lightweight animation and progression silhouettes.
+//! Title screen: campfire hub using **`assets/ui/campfire_scene.png`**.
+//!
+//! - **Fire:** `Fireplace.png` (single still) on the stone ring.
+//! - **Heroes:** [`TitleCampFigureSlot`] (per party index) is the hook for silhouettes or portraits when
+//!   slots unlock (`MetaProgression::party_slots_unlocked` today; extend when more unlock rules exist).
 
 use bevy::prelude::*;
 use bevy::text::{TextColor, TextFont};
+use bevy::ui::{GlobalZIndex, UiTransform, Val2};
 
 use crate::app::ProfileState;
-use crate::domain::progression::PARTY_SLOT_2_UNLOCK_DEPTH;
 use crate::domain::progression::MetaProgression;
+use crate::domain::progression::PARTY_SLOT_2_UNLOCK_DEPTH;
+use crate::presentation::spawn_title_fire_layers;
 use crate::ui::components::{
-    CampfireFlame, TitleCampFigureSlot, TitleCampMilestoneExtras, TitleCampSceneRoot,
-    TitleEnterCampButton, TitleQuitButton, TitleScreen, UiRoot,
+    TitleCampFigureEmoji, TitleCampFigureSlot, TitleCampFigureTuneMarker, TitleCampMilestoneExtras,
+    TitleCampSceneRoot, TitleCampStageRoot, TitleCampfireTuneMarker, TitleEnterCampButton,
+    TitleQuitButton, TitleScreen, UiRoot,
 };
 use crate::ui::mockup_layout::spawn_mockup_header;
 use crate::ui::placeholder_graphics::UiPlaceholderImages;
+use crate::ui::scene_tune::{title_fireplace_base_px, tune_to_figure_emoji_color, TitleSceneLayout};
 use crate::ui::theme::{body_text, caption_text, section_title, UiTheme};
 use crate::ui::tooltip;
 use crate::ui::widgets::spawn_atmosphere;
@@ -24,6 +32,7 @@ pub fn spawn_title_screen(
     profile: &ProfileState,
     speed_mult: f32,
     ph: &UiPlaceholderImages,
+    layout: &TitleSceneLayout,
 ) {
     let meta = &profile.profile.meta;
     let lead = profile.effective_hero();
@@ -46,25 +55,25 @@ pub fn spawn_title_screen(
             col.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
-                    flex_grow: 1.0,
-                    min_height: Val::Px(320.0),
-                    flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(18.0),
-                    align_items: AlignItems::Stretch,
-                    padding: UiRect::vertical(Val::Px(8.0)),
-                    ..default()
+                flex_grow: 1.0,
+                min_height: Val::Px(320.0),
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(18.0),
+                align_items: AlignItems::Stretch,
+                padding: UiRect::vertical(Val::Px(8.0)),
+                ..default()
             })
             .with_children(|row| {
                 spawn_title_nav_column(row);
-                spawn_camp_scene(row, meta, ph);
+                spawn_camp_scene(row, meta, ph, layout);
             });
 
             col.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_direction: FlexDirection::Row,
-                    justify_content: JustifyContent::SpaceBetween,
-                    width: Val::Percent(100.0),
-                    ..default()
+                justify_content: JustifyContent::SpaceBetween,
+                width: Val::Percent(100.0),
+                ..default()
             })
             .with_children(|foot| {
                 foot.spawn(caption_text(format!(
@@ -77,12 +86,14 @@ pub fn spawn_title_screen(
                 )));
             });
 
-            col.spawn(caption_text(format!(
-                "v{}",
-                env!("CARGO_PKG_VERSION")
-            )));
+            col.spawn(caption_text(format!("v{}", env!("CARGO_PKG_VERSION"))));
         });
         tooltip::spawn_tooltip_layer(root);
+        #[cfg(debug_assertions)]
+        {
+            use crate::presentation::editor::spawn_presentation_editor_overlay;
+            spawn_presentation_editor_overlay(root);
+        }
     });
 }
 
@@ -102,19 +113,17 @@ fn root_shell() -> impl Bundle {
 }
 
 fn content_column_bundle() -> impl Bundle {
-    (
-        Node {
-            box_sizing: BoxSizing::BorderBox,
-            width: Val::Percent(100.0),
-            flex_grow: 1.0,
-            min_height: Val::Px(0.0),
-            flex_direction: FlexDirection::Column,
-            padding: UiRect::axes(Val::Px(18.0), Val::Px(14.0)),
-            row_gap: Val::Px(10.0),
-            align_items: AlignItems::Stretch,
-            ..default()
-        },
-    )
+    (Node {
+        box_sizing: BoxSizing::BorderBox,
+        width: Val::Percent(100.0),
+        flex_grow: 1.0,
+        min_height: Val::Px(0.0),
+        flex_direction: FlexDirection::Column,
+        padding: UiRect::axes(Val::Px(18.0), Val::Px(14.0)),
+        row_gap: Val::Px(10.0),
+        align_items: AlignItems::Stretch,
+        ..default()
+    },)
 }
 
 fn spawn_title_nav_column(parent: &mut ChildSpawnerCommands<'_>) {
@@ -133,7 +142,7 @@ fn spawn_title_nav_column(parent: &mut ChildSpawnerCommands<'_>) {
                 ..default()
             },
             BackgroundColor(UiTheme::panel_bg().into()),
-            BorderColor::from(pal_border)
+            BorderColor::from(pal_border),
         ))
         .with_children(|col| {
             col.spawn(section_title("Delvers"));
@@ -147,29 +156,11 @@ fn spawn_title_nav_column(parent: &mut ChildSpawnerCommands<'_>) {
                 pal_idle,
                 pal_border,
             );
-            title_menu_button(
-                col,
-                "Party",
-                TitleEnterCampButton,
-                pal_idle,
-                pal_border,
-            );
-            title_menu_button(
-                col,
-                "Heroes",
-                TitleEnterCampButton,
-                pal_idle,
-                pal_border,
-            );
+            title_menu_button(col, "Party", TitleEnterCampButton, pal_idle, pal_border);
+            title_menu_button(col, "Heroes", TitleEnterCampButton, pal_idle, pal_border);
             title_codex_placeholder(col);
             crate::ui::mockup_layout::title_settings_menu_button(col);
-            title_menu_button(
-                col,
-                "Quit",
-                TitleQuitButton,
-                pal_idle,
-                pal_border,
-            );
+            title_menu_button(col, "Quit", TitleQuitButton, pal_idle, pal_border);
         });
 }
 
@@ -185,11 +176,11 @@ fn title_menu_button(
             Node {
                 box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
-                    min_height: Val::Px(40.0),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
+                min_height: Val::Px(40.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
             },
             Button,
             BackgroundColor(bg.into()),
@@ -218,7 +209,7 @@ fn title_codex_placeholder(parent: &mut ChildSpawnerCommands<'_>) {
                 ..default()
             },
             BackgroundColor(UiTheme::stone_deep().into()),
-            BorderColor::from(UiTheme::body_dim())
+            BorderColor::from(UiTheme::body_dim()),
         ))
         .with_children(|b| {
             b.spawn((
@@ -229,20 +220,27 @@ fn title_codex_placeholder(parent: &mut ChildSpawnerCommands<'_>) {
         });
 }
 
-fn spawn_camp_scene(parent: &mut ChildSpawnerCommands<'_>, meta: &MetaProgression, ph: &UiPlaceholderImages) {
+fn spawn_camp_scene(
+    parent: &mut ChildSpawnerCommands<'_>,
+    meta: &MetaProgression,
+    ph: &UiPlaceholderImages,
+    layout: &TitleSceneLayout,
+) {
+    let (base_w, base_h) = title_fireplace_base_px(&layout.fireplace);
+
     parent
         .spawn((
             Node {
                 box_sizing: BoxSizing::BorderBox,
                 flex_grow: 1.0,
-                    min_width: Val::Px(0.0),
-                    min_height: Val::Px(280.0),
-                    position_type: PositionType::Relative,
-                    padding: UiRect::all(Val::Px(14.0)),
-                    border: UiRect::all(Val::Px(2.0)),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::FlexEnd,
-                    ..default()
+                min_width: Val::Px(0.0),
+                min_height: Val::Px(280.0),
+                position_type: PositionType::Relative,
+                padding: UiRect::all(Val::Px(14.0)),
+                border: UiRect::all(Val::Px(2.0)),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::FlexEnd,
+                ..default()
             },
             BackgroundColor(Color::srgba(0.04, 0.04, 0.07, 1.0).into()),
             BorderColor::from(UiTheme::ornate_gold()),
@@ -260,44 +258,47 @@ fn spawn_camp_scene(parent: &mut ChildSpawnerCommands<'_>, meta: &MetaProgressio
                     ..default()
                 },
                 ImageNode {
-                    image: ph.dungeon_theater.clone(),
-                    color: Color::srgba(0.35, 0.32, 0.45, 0.35),
+                    image: ph.campfire_scene.clone(),
+                    color: Color::WHITE,
                     ..default()
                 },
             ));
 
             scene
                 .spawn(Node {
-                box_sizing: BoxSizing::BorderBox,
-                position_type: PositionType::Absolute,
-                        left: Val::Percent(8.0),
-                        bottom: Val::Percent(12.0),
-                        flex_direction: FlexDirection::Column,
-                        row_gap: Val::Px(6.0),
-                        max_width: Val::Percent(55.0),
-                        ..default()
-            })
+                    box_sizing: BoxSizing::BorderBox,
+                    position_type: PositionType::Absolute,
+                    left: Val::Percent(8.0),
+                    bottom: Val::Percent(12.0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(6.0),
+                    max_width: Val::Percent(55.0),
+                    ..default()
+                })
                 .with_children(|titles| {
                     titles.spawn((
-                Text::new("DELVERS"),
-                TextFont::from_font_size(UiTheme::FONT_DISPLAY_HERO),
-                TextColor(UiTheme::muted_gold()),
-            ));
+                        Text::new("DELVERS"),
+                        TextFont::from_font_size(UiTheme::FONT_DISPLAY_HERO),
+                        TextColor(UiTheme::muted_gold()),
+                    ));
                     titles.spawn(body_text(
                         "Your expedition gathers at the fire. Each successful run brings new faces, gear, and stories.",
                     ));
                 });
 
             scene
-                .spawn(Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Percent(100.0),
+                .spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        width: Val::Percent(100.0),
                         flex_direction: FlexDirection::Column,
                         align_items: AlignItems::Center,
                         row_gap: Val::Px(14.0),
                         padding: UiRect::bottom(Val::Px(18.0)),
                         ..default()
-            })
+                    },
+                    TitleCampStageRoot,
+                ))
                 .with_children(|camp| {
                     let tent_vis = if meta.deepest_floor_reached >= 15 {
                         Visibility::Visible
@@ -306,16 +307,16 @@ fn spawn_camp_scene(parent: &mut ChildSpawnerCommands<'_>, meta: &MetaProgressio
                     };
                     camp.spawn((
                         Node {
-                box_sizing: BoxSizing::BorderBox,
-                align_self: AlignSelf::FlexEnd,
-                                margin: UiRect::right(Val::Px(24.0)),
-                                padding: UiRect::axes(Val::Px(14.0), Val::Px(6.0)),
-                                border: UiRect::all(Val::Px(1.0)),
-                                ..default()
-            },
-            BackgroundColor(Color::srgba(0.12, 0.1, 0.08, 0.92).into()),
-            BorderColor::from(UiTheme::panel_border()),
-            tent_vis,
+                            box_sizing: BoxSizing::BorderBox,
+                            align_self: AlignSelf::FlexEnd,
+                            margin: UiRect::right(Val::Px(24.0)),
+                            padding: UiRect::axes(Val::Px(14.0), Val::Px(6.0)),
+                            border: UiRect::all(Val::Px(1.0)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgba(0.12, 0.1, 0.08, 0.92).into()),
+                        BorderColor::from(UiTheme::panel_border()),
+                        tent_vis,
                         TitleCampMilestoneExtras,
                     ))
                     .with_children(|t| {
@@ -323,13 +324,13 @@ fn spawn_camp_scene(parent: &mut ChildSpawnerCommands<'_>, meta: &MetaProgressio
                     });
 
                     camp.spawn(Node {
-                box_sizing: BoxSizing::BorderBox,
-                flex_direction: FlexDirection::Row,
-                            align_items: AlignItems::FlexEnd,
-                            justify_content: JustifyContent::Center,
-                            column_gap: Val::Px(28.0),
-                            ..default()
-            })
+                        box_sizing: BoxSizing::BorderBox,
+                        flex_direction: FlexDirection::Row,
+                        align_items: AlignItems::FlexEnd,
+                        justify_content: JustifyContent::Center,
+                        column_gap: Val::Px(28.0),
+                        ..default()
+                    })
                     .with_children(|figures| {
                         for i in 0..CAMP_FIGURE_SLOTS {
                             let vis = if i == 0 {
@@ -339,72 +340,74 @@ fn spawn_camp_scene(parent: &mut ChildSpawnerCommands<'_>, meta: &MetaProgressio
                             } else {
                                 Visibility::Hidden
                             };
+                            let tune = if i == 0 {
+                                &layout.lead_slot
+                            } else {
+                                &layout.ally_slot
+                            };
                             figures
                                 .spawn((
                                     Node {
-                box_sizing: BoxSizing::BorderBox,
-                flex_direction: FlexDirection::Column,
-                                            align_items: AlignItems::Center,
-                                            row_gap: Val::Px(6.0),
-                                            ..default()
-            },
-            vis,
+                                        box_sizing: BoxSizing::BorderBox,
+                                        flex_direction: FlexDirection::Column,
+                                        align_items: AlignItems::Center,
+                                        row_gap: Val::Px(6.0),
+                                        ..default()
+                                    },
+                                    vis,
                                     TitleCampFigureSlot(i as u8),
+                                    TitleCampFigureTuneMarker(i as u8),
+                                    UiTransform {
+                                        translation: Val2::ZERO,
+                                        ..default()
+                                    },
+                                    GlobalZIndex(tune.global_z),
                                 ))
                                 .with_children(|fig| {
                                     fig.spawn((
                                         Text::new(if i == 0 { "\u{1F9DD}" } else { "\u{2694}" }),
-                                        TextFont::from_font_size(42.0),
-                                        TextColor(Color::srgba(0.95, 0.82, 0.6, 0.88)),
+                                        TextFont::from_font_size(tune.size_basis.clamp(8.0, 160.0)),
+                                        TextColor(tune_to_figure_emoji_color(tune)),
+                                        TitleCampFigureEmoji(i as u8),
                                     ));
-                                    fig.spawn(caption_text(if i == 0 {
-                                        "Lead"
-                                    } else {
-                                        "Ally"
-                                    }));
+                                    fig.spawn(caption_text(if i == 0 { "Lead" } else { "Ally" }));
                                 });
                         }
                     });
 
                     camp.spawn(Node {
-                box_sizing: BoxSizing::BorderBox,
-                flex_direction: FlexDirection::Column,
-                            align_items: AlignItems::Center,
-                            row_gap: Val::Px(4.0),
-                            ..default()
-            })
+                        box_sizing: BoxSizing::BorderBox,
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Center,
+                        row_gap: Val::Px(4.0),
+                        ..default()
+                    })
                     .with_children(|fire_zone| {
-                        fire_zone.spawn((
-                            Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Px(120.0),
-                                    height: Val::Px(28.0),
+                        fire_zone
+                            .spawn((
+                                Node {
+                                    box_sizing: BoxSizing::BorderBox,
+                                    position_type: PositionType::Relative,
+                                    align_items: AlignItems::Center,
+                                    justify_content: JustifyContent::FlexEnd,
                                     ..default()
-            },
-            BackgroundColor(Color::srgba(0.95, 0.45, 0.22, 0.45).into()),
-                            CampfireFlame {
-                                base: Color::srgba(0.75, 0.28, 0.08, 0.55),
-                                peak: Color::srgba(1.0, 0.72, 0.18, 0.78),
-                                speed: 5.0,
-                                phase_offset: 0.0,
-                            },
-                        ));
-                        fire_zone.spawn((
-                            Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Px(72.0),
-                                    height: Val::Px(48.0),
-                                    margin: UiRect::top(Val::Px(-14.0)),
+                                },
+                                TitleCampfireTuneMarker,
+                                UiTransform {
+                                    translation: Val2::ZERO,
                                     ..default()
-            },
-            BackgroundColor(Color::srgba(0.98, 0.55, 0.12, 0.85).into()),
-                            CampfireFlame {
-                                base: Color::srgba(0.92, 0.4, 0.05, 0.82),
-                                peak: Color::srgba(1.0, 0.88, 0.35, 0.95),
-                                speed: 7.0,
-                                phase_offset: 1.7,
-                            },
-                        ));
+                                },
+                                GlobalZIndex(layout.fireplace.global_z),
+                            ))
+                            .with_children(|host| {
+                                spawn_title_fire_layers(
+                                    host,
+                                    ph.fireplace.clone(),
+                                    base_w,
+                                    base_h,
+                                    &layout.fire_presentation,
+                                );
+                            });
                         fire_zone.spawn(caption_text("The fire never lies."));
                     });
                 });

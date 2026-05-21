@@ -50,6 +50,12 @@ use crate::ui::components::{
     UiScrollContent, UiScrollRegion, UiScrollState, UiTooltip,
 };
 use crate::ui::placeholder_graphics::UiPlaceholderImages;
+use crate::presentation::editor::{
+    apply_presentation_tune_delta, tune_for_scene_mut, PresentationEditorHierarchyButton,
+    PresentationEditorReloadButton, PresentationEditorSaveButton, PresentationEditorSettingsToggleButton,
+    PresentationEditorTuneDeltaButton,
+};
+use crate::presentation::editor::TITLE_ELEMENT_FIREPLACE;
 use crate::presentation::PresentationEditorSession;
 use crate::ui::scene_tune::TitleSceneLayout;
 use crate::ui::theme::{
@@ -76,7 +82,7 @@ struct PlaybackCombatLogVisible(pub bool);
 
 /// Button that received [`Interaction::Pressed`] on press; used to confirm click on mouse-up.
 #[derive(Resource, Default)]
-struct UiClickPress(Option<Entity>);
+pub(crate) struct UiClickPress(Option<Entity>);
 
 #[derive(Resource, Default)]
 struct FloatingCombatPopupSeq(u32);
@@ -244,6 +250,10 @@ impl Plugin for UiPlugin {
             Update,
             (
                 crate::ui::scene_tune::title_scene_tune_hotkeys,
+                handle_presentation_editor_overlay_buttons,
+                handle_presentation_editor_settings_toggle,
+                crate::presentation::editor::toggle_presentation_editor_visibility,
+                crate::presentation::editor::sync_presentation_editor_ui,
                 crate::ui::scene_tune::sync_title_scene_elements,
                 crate::ui::scene_tune::sync_title_fire_presentation_from_layout,
                 crate::ui::scene_tune::title_scene_tune_selection_gizmo,
@@ -251,6 +261,7 @@ impl Plugin for UiPlugin {
             )
                 .chain()
                 .run_if(in_state(GameState::Title))
+                .after(apply_ui_button_palettes)
                 .before(UiSystems::Focus),
         );
         #[cfg(not(debug_assertions))]
@@ -517,7 +528,7 @@ fn capture_ui_click_start(
 /// especially with nested UI hit targets—still treat release as confirming if [`UiClickPress`]
 /// captured this entity on mouse-down (callers gate on matching `target`).
 #[inline]
-fn ui_click_release_confirms(interaction: Interaction) -> bool {
+pub(crate) fn ui_click_release_confirms(interaction: Interaction) -> bool {
     matches!(
         interaction,
         Interaction::Hovered | Interaction::Pressed | Interaction::None
@@ -1365,6 +1376,79 @@ fn open_settings_modal(
             crate::ui::mockup_layout::spawn_settings_modal(parent);
         });
         break;
+    }
+}
+
+#[cfg(debug_assertions)]
+fn handle_presentation_editor_overlay_buttons(
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    mut layout: ResMut<TitleSceneLayout>,
+    mut session: ResMut<PresentationEditorSession>,
+    save: Query<(Entity, &Interaction), With<PresentationEditorSaveButton>>,
+    reload: Query<(Entity, &Interaction), With<PresentationEditorReloadButton>>,
+    hierarchy: Query<(Entity, &Interaction, &PresentationEditorHierarchyButton)>,
+    deltas: Query<(Entity, &Interaction, &PresentationEditorTuneDeltaButton)>,
+) {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+
+    for (entity, interaction, hb) in &hierarchy {
+        if entity == target && ui_click_release_confirms(*interaction) {
+            session.selected_element = Some(hb.0.clone());
+            return;
+        }
+    }
+
+    for (entity, interaction) in &save {
+        if entity == target && ui_click_release_confirms(*interaction) {
+            layout.try_save_to_disk();
+            return;
+        }
+    }
+
+    for (entity, interaction) in &reload {
+        if entity == target && ui_click_release_confirms(*interaction) {
+            *layout = TitleSceneLayout::try_load_from_disk();
+            return;
+        }
+    }
+
+    let sel = session
+        .selected_element
+        .as_deref()
+        .unwrap_or(TITLE_ELEMENT_FIREPLACE);
+    for (entity, interaction, delta) in &deltas {
+        if entity == target && ui_click_release_confirms(*interaction) {
+            let tune = tune_for_scene_mut(&mut layout, sel);
+            apply_presentation_tune_delta(tune, delta.field, delta.positive);
+            return;
+        }
+    }
+}
+
+#[cfg(debug_assertions)]
+fn handle_presentation_editor_settings_toggle(
+    mouse: Res<ButtonInput<MouseButton>>,
+    press: Res<UiClickPress>,
+    mut session: ResMut<PresentationEditorSession>,
+    buttons: Query<(Entity, &Interaction), With<PresentationEditorSettingsToggleButton>>,
+) {
+    if !mouse.just_released(MouseButton::Left) {
+        return;
+    }
+    let Some(target) = press.0 else {
+        return;
+    };
+    for (entity, interaction) in &buttons {
+        if entity == target && ui_click_release_confirms(*interaction) {
+            session.active = !session.active;
+            break;
+        }
     }
 }
 

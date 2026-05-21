@@ -266,6 +266,42 @@ pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>) {
                 TextColor(UiTheme::muted_cream()),
             ));
                         });
+                    #[cfg(debug_assertions)]
+                    {
+                        use crate::presentation::editor::{
+                            PresentationEditorSettingsToggleButton, PresentationEditorSettingsToggleText,
+                        };
+                        dialog.spawn(section_title("Debug"));
+                        let pe_pal = UiButtonPalette::panel_secondary();
+                        dialog
+                            .spawn((
+                                Node {
+                                    box_sizing: BoxSizing::BorderBox,
+                                    width: Val::Percent(100.0),
+                                    min_height: Val::Px(40.0),
+                                    justify_content: JustifyContent::Center,
+                                    align_items: AlignItems::Center,
+                                    border: UiRect::all(Val::Px(1.0)),
+                                    ..default()
+                                },
+                                Button,
+                                BackgroundColor(pe_pal.idle_bg.into()),
+                                BorderColor::from(pe_pal.idle_border),
+                                PresentationEditorSettingsToggleButton,
+                                pe_pal,
+                                UiTooltip::txt(
+                                    "Open the fullscreen presentation editor overlay (same as layout mode).",
+                                ),
+                            ))
+                            .with_children(|b| {
+                                b.spawn((
+                                    Text::new("Presentation editor · OFF"),
+                                    TextFont::from_font_size(UiTheme::FONT_BODY),
+                                    TextColor(UiTheme::body()),
+                                    PresentationEditorSettingsToggleText,
+                                ));
+                            });
+                    }
                 });
         });
 }
