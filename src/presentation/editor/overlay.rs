@@ -28,6 +28,14 @@ pub struct PresentationEditorSaveButton;
 #[derive(Component)]
 pub struct PresentationEditorReloadButton;
 
+/// Footer — resets the selected element's offsets/scale/rotation to anchor center.
+#[derive(Component)]
+pub struct PresentationEditorResetCenterButton;
+
+/// Footer — resets placement for fireplace, lead, and ally slots.
+#[derive(Component)]
+pub struct PresentationEditorResetAllButton;
+
 /// Settings modal row (debug): toggles [`PresentationEditorSession::active`].
 #[derive(Component)]
 pub struct PresentationEditorSettingsToggleButton;
@@ -172,6 +180,18 @@ pub fn spawn_presentation_editor_overlay(parent: &mut ChildSpawnerCommands<'_>) 
                 BorderColor::from(UiTheme::panel_border_inner()),
             ))
             .with_children(|foot| {
+                spawn_footer_button(
+                    foot,
+                    "Reset to center",
+                    PresentationEditorResetCenterButton,
+                    "Selected element: zero offsets on its anchor, scale 1, rotation 0.",
+                );
+                spawn_footer_button(
+                    foot,
+                    "Reset all",
+                    PresentationEditorResetAllButton,
+                    "All camp elements: snap fireplace, lead, and ally back to anchor center.",
+                );
                 spawn_footer_button(
                     foot,
                     "Save to disk",

@@ -86,4 +86,13 @@ impl PresentationElementTune {
             ..Default::default()
         }
     }
+
+    /// Snap placement back onto the bound anchor (offsets zero, neutral scale/rotation).
+    pub fn reset_placement_to_anchor(&mut self) {
+        self.offset_x = 0.0;
+        self.offset_y = 0.0;
+        self.rotation_deg = 0.0;
+        self.scale_x = 1.0;
+        self.scale_y = 1.0;
+    }
 }

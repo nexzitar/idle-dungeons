@@ -53,9 +53,10 @@ use crate::ui::placeholder_graphics::UiPlaceholderImages;
 use crate::presentation::editor::{
     apply_presentation_tune_delta, presentation_editor_tune_field_keyboard, tune_for_scene,
     tune_for_scene_mut, PresentationEditorFieldEditState, PresentationEditorHierarchyButton,
-    PresentationEditorReloadButton, PresentationEditorSaveButton,
-    PresentationEditorSettingsToggleButton, PresentationEditorTuneDeltaButton,
-    PresentationEditorTuneValueButton,
+    reset_all_title_placements, PresentationEditorReloadButton,
+    PresentationEditorResetAllButton, PresentationEditorResetCenterButton,
+    PresentationEditorSaveButton, PresentationEditorSettingsToggleButton,
+    PresentationEditorTuneDeltaButton, PresentationEditorTuneValueButton,
 };
 use crate::presentation::editor::TITLE_ELEMENT_FIREPLACE;
 use crate::presentation::PresentationEditorSession;
@@ -1413,6 +1414,8 @@ fn handle_presentation_editor_overlay_buttons(
     mut layout: ResMut<TitleSceneLayout>,
     mut session: ResMut<PresentationEditorSession>,
     mut field_edit: ResMut<PresentationEditorFieldEditState>,
+    reset_center: Query<(Entity, &Interaction), With<PresentationEditorResetCenterButton>>,
+    reset_all: Query<(Entity, &Interaction), With<PresentationEditorResetAllButton>>,
     save: Query<(Entity, &Interaction), With<PresentationEditorSaveButton>>,
     reload: Query<(Entity, &Interaction), With<PresentationEditorReloadButton>>,
     hierarchy: Query<(Entity, &Interaction, &PresentationEditorHierarchyButton)>,
@@ -1434,6 +1437,27 @@ fn handle_presentation_editor_overlay_buttons(
         }
     }
 
+    let sel = session
+        .selected_element
+        .as_deref()
+        .unwrap_or(TITLE_ELEMENT_FIREPLACE);
+
+    for (entity, interaction) in &reset_center {
+        if entity == target && ui_click_release_confirms(*interaction) {
+            tune_for_scene_mut(&mut layout, sel).reset_placement_to_anchor();
+            field_edit.clear();
+            return;
+        }
+    }
+
+    for (entity, interaction) in &reset_all {
+        if entity == target && ui_click_release_confirms(*interaction) {
+            reset_all_title_placements(&mut layout);
+            field_edit.clear();
+            return;
+        }
+    }
+
     for (entity, interaction) in &save {
         if entity == target && ui_click_release_confirms(*interaction) {
             layout.try_save_to_disk();
@@ -1447,11 +1471,6 @@ fn handle_presentation_editor_overlay_buttons(
             return;
         }
     }
-
-    let sel = session
-        .selected_element
-        .as_deref()
-        .unwrap_or(TITLE_ELEMENT_FIREPLACE);
 
     for (entity, interaction, vb) in &value_btns {
         if entity == target && ui_click_release_confirms(*interaction) {

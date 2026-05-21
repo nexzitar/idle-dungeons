@@ -25,7 +25,7 @@ When the session is active:
 | **Banner** | `Presentation Mode · {element id}` plus a short hint pointing at backtick / Tab cycling. |
 | **Left — Hierarchy** | Buttons **Fireplace**, **Lead slot**, **Ally slot** (ids `fireplace`, `lead_slot`, `ally_slot`). Sets **`selected_element`** for the inspector. |
 | **Right — Inspector** | **Click a value** to type directly (**Enter** applies, **Esc** cancels). **− / +** use fine steps; hold **Shift** for **10×** steps. **Pivot** / **Anchor** summary is read-only. |
-| **Footer** | **Save to disk** (same as **Ctrl+S**) and **Reload from disk** (same as **F5**). |
+| **Footer** | **Reset to center** (selected: offsets 0 on anchor, scale 1, rotation 0), **Reset all** (fireplace + lead + ally), **Save to disk** (**Ctrl+S**), **Reload from disk** (**F5**). |
 
 **Backtick** toggles layout mode globally. Persistence uses **`TitleSceneLayout::try_save_to_disk`** / **`try_load_from_disk`**, wired to **`assets/tuning/title_scene.json`** (see below).
 

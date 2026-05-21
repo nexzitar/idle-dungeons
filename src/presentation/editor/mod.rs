@@ -8,8 +8,9 @@ mod selection;
 pub use overlay::{
     spawn_presentation_editor_overlay, PresentationEditorBannerHintText,
     PresentationEditorBannerTitleText, PresentationEditorHierarchyButton,
-    PresentationEditorPivotSummaryText, PresentationEditorReloadButton, PresentationEditorRoot,
-    PresentationEditorSaveButton, PresentationEditorSettingsToggleButton,
+    PresentationEditorPivotSummaryText,     PresentationEditorReloadButton, PresentationEditorResetAllButton,
+    PresentationEditorResetCenterButton, PresentationEditorRoot, PresentationEditorSaveButton,
+    PresentationEditorSettingsToggleButton,
     PresentationEditorSettingsToggleText, PresentationEditorTuneDeltaButton,
     PresentationEditorTuneField, PresentationEditorTuneValueButton, PresentationEditorTuneValueText,
 };
@@ -295,6 +296,13 @@ pub(crate) fn tune_for_scene_mut<'a>(
         TITLE_ELEMENT_ALLY_SLOT => &mut layout.ally_slot,
         _ => &mut layout.fireplace,
     }
+}
+
+/// Reset offsets, scale, and rotation for every title-camp element.
+pub fn reset_all_title_placements(layout: &mut TitleCampSceneLayout) {
+    layout.fireplace.reset_placement_to_anchor();
+    layout.lead_slot.reset_placement_to_anchor();
+    layout.ally_slot.reset_placement_to_anchor();
 }
 
 pub fn tune_for_scene<'a>(
