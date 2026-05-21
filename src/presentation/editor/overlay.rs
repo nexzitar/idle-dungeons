@@ -7,6 +7,7 @@ use crate::presentation::editor::{
 };
 use crate::ui::components::{UiButtonPalette, UiTooltip};
 use crate::ui::theme::{section_title, UiTheme};
+use bevy::picking::prelude::Pickable;
 use bevy::prelude::*;
 use bevy::text::{Justify, TextColor, TextFont, TextLayout};
 use bevy::ui::{GlobalZIndex, FocusPolicy};
@@ -91,7 +92,8 @@ pub fn spawn_presentation_editor_overlay(parent: &mut ChildSpawnerCommands<'_>) 
             BackgroundColor(Color::srgba(0.02, 0.02, 0.04, 0.55)),
             PresentationEditorRoot,
             Visibility::Hidden,
-            FocusPolicy::Block,
+            FocusPolicy::Pass,
+            Pickable::IGNORE,
         ))
         .with_children(|root| {
             root.spawn((

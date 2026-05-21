@@ -10,6 +10,9 @@ use bevy::log::{info, warn};
 use bevy::prelude::*;
 use bevy::text::{TextColor, TextFont};
 use bevy::ui::{GlobalZIndex, UiTransform, Val2};
+use crate::presentation::editor::{
+    TITLE_ELEMENT_ALLY_SLOT, TITLE_ELEMENT_FIREPLACE, TITLE_ELEMENT_LEAD_SLOT,
+};
 use crate::presentation::{
     pivot_translation_compensation_px, resolve_element_translation_px, PresentationEditorSession,
     PresentationFirePart, PresentationFireStackRoot, SceneAnchorPose, TitleCampSceneLayout,
@@ -290,22 +293,25 @@ pub fn title_scene_tune_selection_gizmo(
 ) {
     let show = session.layout_mode()
         && session.gizmo_flags.selection_outline;
-    let sel = session.target();
+    let sel = session
+        .selected_element
+        .as_deref()
+        .unwrap_or(TITLE_ELEMENT_FIREPLACE);
     let col_active = BorderColor::all(Color::srgba(1.0, 0.2, 0.85, 0.95));
     let col_off = BorderColor::DEFAULT;
 
     for (mut border, mut node) in &mut fireplace {
-        let on = show && sel == TitleSceneTuneTarget::Fireplace;
+        let on = show && sel == TITLE_ELEMENT_FIREPLACE;
         *border = if on { col_active } else { col_off };
         node.border = UiRect::all(Val::Px(if on { 2.0 } else { 0.0 }));
     }
     for (marker, mut border, mut node) in &mut figures {
-        let on = show
-            && match (sel, marker.0) {
-                (TitleSceneTuneTarget::LeadSlot, 0) => true,
-                (TitleSceneTuneTarget::AllySlot, 1) => true,
-                _ => false,
-            };
+        let id = if marker.0 == 0 {
+            TITLE_ELEMENT_LEAD_SLOT
+        } else {
+            TITLE_ELEMENT_ALLY_SLOT
+        };
+        let on = show && sel == id;
         *border = if on { col_active } else { col_off };
         node.border = UiRect::all(Val::Px(if on { 2.0 } else { 0.0 }));
     }

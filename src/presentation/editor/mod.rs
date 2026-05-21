@@ -1,6 +1,8 @@
 //! In-engine presentation editor: session state, overlay UI, and (later) mouse / gizmos.
 
 mod overlay;
+mod mouse;
+mod selection;
 
 pub use overlay::{
     spawn_presentation_editor_overlay, PresentationEditorBannerHintText, PresentationEditorBannerTitleText,
@@ -9,6 +11,11 @@ pub use overlay::{
     PresentationEditorSettingsToggleText, PresentationEditorTuneDeltaButton, PresentationEditorTuneField,
     PresentationEditorTuneValueText,
 };
+
+#[cfg(debug_assertions)]
+pub use mouse::{presentation_editor_drag, presentation_editor_pick};
+#[cfg(debug_assertions)]
+pub use selection::presentation_editor_hover_outline;
 
 use crate::presentation::element::{PresentationElementId, PresentationElementTune};
 use crate::presentation::scene::TitleCampSceneLayout;
@@ -38,6 +45,12 @@ impl Default for PresentationEditorGizmoFlags {
             glow_radius_preview: false,
         }
     }
+}
+
+/// Tracks an in-progress drag on a [`PresentationElementHost`] (debug title editor).
+#[derive(Resource, Default)]
+pub struct PresentationEditorDragState {
+    pub active_host_drag: Option<PresentationElementId>,
 }
 
 /// Authoring session for layout / scene presentation editing (title camp first consumer).
@@ -134,11 +147,13 @@ pub fn sync_presentation_editor_ui(
     session: Res<PresentationEditorSession>,
     layout: Res<TitleSceneLayout>,
     hint_logged: Option<Res<crate::ui::scene_tune::TitleSceneTuneHintLogged>>,
-    mut banner: Query<&mut Text, With<PresentationEditorBannerTitleText>>,
-    mut hint: Query<&mut Text, With<PresentationEditorBannerHintText>>,
-    mut pivot_line: Query<&mut Text, With<PresentationEditorPivotSummaryText>>,
-    mut field_texts: Query<(&PresentationEditorTuneValueText, &mut Text)>,
-    mut toggle_label: Query<&mut Text, With<PresentationEditorSettingsToggleText>>,
+    mut text_queries: ParamSet<(
+        Query<&mut Text, With<PresentationEditorBannerTitleText>>,
+        Query<&mut Text, With<PresentationEditorBannerHintText>>,
+        Query<&mut Text, With<PresentationEditorPivotSummaryText>>,
+        Query<(&PresentationEditorTuneValueText, &mut Text)>,
+        Query<&mut Text, With<PresentationEditorSettingsToggleText>>,
+    )>,
     mut hierarchy: Query<
         (
             &PresentationEditorHierarchyButton,
@@ -160,11 +175,11 @@ pub fn sync_presentation_editor_ui(
 
     let sel = banner_selected_id(&session);
     let title_line = format!("Presentation Mode · {sel}");
-    for mut t in &mut banner {
+    for mut t in text_queries.p0() {
         **t = title_line.clone();
     }
 
-    for mut t in &mut hint {
+    for mut t in text_queries.p1() {
         **t = if show_first_visit {
             TITLE_SCENE_TUNE_BANNER_HINT.to_string()
         } else {
@@ -172,7 +187,7 @@ pub fn sync_presentation_editor_ui(
         };
     }
 
-    for mut t in &mut toggle_label {
+    for mut t in text_queries.p4() {
         **t = if session.active {
             "Presentation editor · ON".to_string()
         } else {
@@ -181,11 +196,11 @@ pub fn sync_presentation_editor_ui(
     }
 
     let tune = tune_for_scene(&layout, sel);
-    for mut t in &mut pivot_line {
+    for mut t in text_queries.p2() {
         **t = format_pivot_line(tune);
     }
 
-    for (marker, mut text) in &mut field_texts {
+    for (marker, mut text) in text_queries.p3() {
         **text = format_tune_field(tune, marker.0);
     }
 

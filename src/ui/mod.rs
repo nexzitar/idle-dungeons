@@ -113,6 +113,8 @@ impl Plugin for UiPlugin {
         app.insert_resource(crate::ui::scene_tune::TitleSceneLayout::try_load_from_disk());
         app.init_resource::<PresentationEditorSession>();
         #[cfg(debug_assertions)]
+        app.init_resource::<crate::presentation::editor::PresentationEditorDragState>();
+        #[cfg(debug_assertions)]
         app.init_resource::<crate::ui::scene_tune::TitleSceneTuneHintLogged>();
         app.add_systems(PreUpdate, raise_tooltip_above_modals);
         app.add_systems(
@@ -248,21 +250,31 @@ impl Plugin for UiPlugin {
         #[cfg(debug_assertions)]
         app.add_systems(
             Update,
+            crate::ui::scene_tune::title_scene_tune_hotkeys
+                .run_if(in_state(GameState::Title))
+                .after(apply_ui_button_palettes)
+                .before(UiSystems::Focus),
+        );
+        #[cfg(debug_assertions)]
+        app.add_systems(
+            Update,
             (
-                crate::ui::scene_tune::title_scene_tune_hotkeys,
                 handle_presentation_editor_overlay_buttons,
                 handle_presentation_editor_settings_toggle,
                 crate::presentation::editor::toggle_presentation_editor_visibility,
+                crate::presentation::editor::presentation_editor_pick,
+                crate::presentation::editor::presentation_editor_drag,
                 crate::presentation::editor::sync_presentation_editor_ui,
                 crate::ui::scene_tune::sync_title_scene_elements,
                 crate::ui::scene_tune::sync_title_fire_presentation_from_layout,
                 crate::ui::scene_tune::title_scene_tune_selection_gizmo,
+                crate::presentation::editor::presentation_editor_hover_outline,
                 crate::ui::scene_tune::tick_title_fire_ambient,
             )
                 .chain()
                 .run_if(in_state(GameState::Title))
                 .after(apply_ui_button_palettes)
-                .before(UiSystems::Focus),
+                .after(UiSystems::Focus),
         );
         #[cfg(not(debug_assertions))]
         app.add_systems(

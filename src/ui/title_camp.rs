@@ -6,14 +6,18 @@
 
 use bevy::prelude::*;
 use bevy::text::{TextColor, TextFont};
-use bevy::ui::{GlobalZIndex, UiTransform, Val2};
+use bevy::ui::{GlobalZIndex, RelativeCursorPosition, UiTransform, Val2};
 
 use crate::app::ProfileState;
 use crate::domain::progression::MetaProgression;
 use crate::domain::progression::PARTY_SLOT_2_UNLOCK_DEPTH;
+use crate::presentation::editor::{
+    TITLE_ELEMENT_ALLY_SLOT, TITLE_ELEMENT_FIREPLACE, TITLE_ELEMENT_LEAD_SLOT,
+};
 use crate::presentation::spawn_title_fire_layers;
 use crate::ui::components::{
-    TitleCampFigureEmoji, TitleCampFigureSlot, TitleCampFigureTuneMarker, TitleCampMilestoneExtras,
+    PresentationElementHost, TitleCampFigureEmoji, TitleCampFigureSlot, TitleCampFigureTuneMarker,
+    TitleCampMilestoneExtras,
     TitleCampSceneRoot, TitleCampStageRoot, TitleCampfireTuneMarker, TitleEnterCampButton,
     TitleQuitButton, TitleScreen, UiRoot,
 };
@@ -357,6 +361,13 @@ fn spawn_camp_scene(
                                     vis,
                                     TitleCampFigureSlot(i as u8),
                                     TitleCampFigureTuneMarker(i as u8),
+                                    PresentationElementHost(if i == 0 {
+                                        TITLE_ELEMENT_LEAD_SLOT.to_string()
+                                    } else {
+                                        TITLE_ELEMENT_ALLY_SLOT.to_string()
+                                    }),
+                                    Interaction::default(),
+                                    RelativeCursorPosition::default(),
                                     UiTransform {
                                         translation: Val2::ZERO,
                                         ..default()
@@ -393,6 +404,9 @@ fn spawn_camp_scene(
                                     ..default()
                                 },
                                 TitleCampfireTuneMarker,
+                                PresentationElementHost(TITLE_ELEMENT_FIREPLACE.to_string()),
+                                Interaction::default(),
+                                RelativeCursorPosition::default(),
                                 UiTransform {
                                     translation: Val2::ZERO,
                                     ..default()

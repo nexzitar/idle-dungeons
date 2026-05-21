@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 use crate::domain::party::PartyHeroKind;
 use crate::domain::skills::SkillId;
+use crate::presentation::element::PresentationElementId;
 use crate::ui::theme::UiTheme;
 
 #[derive(Component)]
@@ -437,16 +438,28 @@ pub struct TitleQuitButton;
 #[derive(Component)]
 pub struct TitleCampFigureSlot(pub u8);
 
+/// Debug tuning: figure column root for party slot `0 = Lead`, `1 = Ally`.
+#[derive(Component)]
+pub struct TitleCampFigureTuneMarker(pub u8);
+
+/// Emoji row in a figure column (same slot index as [`TitleCampFigureTuneMarker`]).
+#[derive(Component)]
+pub struct TitleCampFigureEmoji(pub u8);
+
 #[derive(Component)]
 pub struct TitleCampMilestoneExtras;
 
 #[derive(Component)]
 pub struct TitleCampSceneRoot;
 
+/// Marker for the tunable title campfire presentation root (alias for [`crate::presentation::markers::CampfirePresentationRoot`]).
+pub use crate::presentation::markers::CampfirePresentationRoot as TitleCampfireTuneMarker;
+
+/// Lower-third layout root over [`UiPlaceholderImages::campfire_scene`]: tent, figure slots, fire layer.
+/// Reparent hero portraits/sprites here when art lands; align `Fireplace.png` with the stone ring in the painting.
 #[derive(Component)]
-pub struct CampfireFlame {
-    pub base: Color,
-    pub peak: Color,
-    pub speed: f32,
-    pub phase_offset: f32,
-}
+pub struct TitleCampStageRoot;
+
+/// UI hit target for tuning a logical presentation element (title camp fireplace / figure slots).
+#[derive(Component)]
+pub struct PresentationElementHost(pub PresentationElementId);
