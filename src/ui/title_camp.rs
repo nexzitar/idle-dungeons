@@ -417,6 +417,7 @@ fn spawn_camp_scene(
                                 spawn_title_fire_layers(
                                     host,
                                     ph.fireplace.clone(),
+                                    ph.fire_glow_radial.clone(),
                                     base_w,
                                     base_h,
                                     &layout.fire_presentation,

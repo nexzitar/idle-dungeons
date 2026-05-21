@@ -16,6 +16,7 @@ pub use editor::{PresentationEditorGizmoFlags, PresentationEditorSession};
 pub use element::{PresentationElementId, PresentationElementTune};
 pub use fire::{
     spawn_title_fire_layers, PresentationFirePart, PresentationFireStackRoot, TitleFirePresentationTune,
+    TITLE_FIRE_GROUND_LIGHT_H_PX, TITLE_FIRE_GROUND_LIGHT_W_MULT,
 };
 pub use pivot::{pivot_translation_compensation_px, ScenePivot};
 pub use scene::{

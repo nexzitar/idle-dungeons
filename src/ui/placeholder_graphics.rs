@@ -1,10 +1,10 @@
-//! Procedurally generated placeholder textures for UI until real art lands.
+//! Mostly procedural placeholder textures for UI chips until dedicated art lands.
 //!
-//! Replace handles in [`UiPlaceholderImages`] with `AssetServer::load("ui/...png")` once files exist
-//! under `assets/` (see `assets/ui/README.md`).
+//! Combat theater loads **`assets/ui/dungeon_theater.png`**; title **`assets/ui/campfire_scene.png`**, **`assets/ui/Fireplace.png`**, and **`assets/ui/fire_glow_radial.png`** (soft campfire bloom).
+//! Other icons remain procedural (see `assets/ui/README.md`).
 
-use bevy::prelude::*;
 use bevy::asset::RenderAssetUsages;
+use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
 const SZ: u32 = 32;
@@ -20,11 +20,21 @@ pub struct UiPlaceholderImages {
     pub item_generic: Handle<Image>,
     /// Tiny chip for header stats (skills / depth / speed).
     pub stat_chip: Handle<Image>,
-    /// Wide pixel stone strip for combat theater backdrop (`Image` tile).
+    /// Live delve combat strip (`assets/ui/dungeon_theater.png`).
     pub dungeon_theater: Handle<Image>,
+    /// Title campfire hub painting (`assets/ui/campfire_scene.png`).
+    pub campfire_scene: Handle<Image>,
+    /// Title / campfire fireplace still (`assets/ui/Fireplace.png`).
+    pub fireplace: Handle<Image>,
+    /// Soft radial additive glow for campfire presentation (`assets/ui/fire_glow_radial.png`).
+    pub fire_glow_radial: Handle<Image>,
 }
 
-pub fn register_ui_placeholder_images(mut images: ResMut<Assets<Image>>, mut commands: Commands) {
+pub fn register_ui_placeholder_images(
+    asset_server: Res<AssetServer>,
+    mut images: ResMut<Assets<Image>>,
+    mut commands: Commands,
+) {
     let mut add = |img: Image| images.add(img);
     commands.insert_resource(UiPlaceholderImages {
         skill_active: add(gen_skill_active()),
@@ -35,59 +45,11 @@ pub fn register_ui_placeholder_images(mut images: ResMut<Assets<Image>>, mut com
         salvage_shard: add(gen_salvage_shard()),
         item_generic: add(gen_item_chest()),
         stat_chip: add(gen_stat_chip()),
-        dungeon_theater: add(gen_dungeon_theater()),
+        dungeon_theater: asset_server.load("ui/dungeon_theater.png"),
+        campfire_scene: asset_server.load("ui/campfire_scene.png"),
+        fireplace: asset_server.load("ui/Fireplace.png"),
+        fire_glow_radial: asset_server.load("ui/fire_glow_radial.png"),
     });
-}
-
-fn gen_rgba_rect(w: u32, h: u32, f: impl Fn(u32, u32) -> [u8; 4]) -> Image {
-    let mut data = vec![0u8; (w * h * 4) as usize];
-    for y in 0..h {
-        for x in 0..w {
-            let px = f(x, y);
-            let i = ((y * w + x) * 4) as usize;
-            data[i..i + 4].copy_from_slice(&px);
-        }
-    }
-    Image::new(
-        Extent3d {
-            width: w,
-            height: h,
-            depth_or_array_layers: 1,
-        },
-        TextureDimension::D2,
-        data,
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::default(),
-    )
-}
-
-/// Horizontal tile: muted stone blocks with mortar — reads as pixel dungeon wall behind combat.
-fn gen_dungeon_theater() -> Image {
-    let w = 256u32;
-    let h = 96u32;
-    gen_rgba_rect(w, h, |x, y| {
-        let bx = x / 16;
-        let by = y / 12;
-        let edge = (x % 16 == 0) || (y % 12 == 0);
-        let mut stone = if edge {
-            [10u8, 9u8, 12u8, 255u8]
-        } else {
-            [32u8, 28u8, 34u8, 255u8]
-        };
-        let cx = w as f32 / 2.0;
-        let cy = h as f32 / 2.0;
-        let d = ((x as f32 - cx).powi(2) + (y as f32 - cy).powi(2)).sqrt() / (cx * 1.15);
-        let v = (1.0 - d.min(1.0)) * 0.28 + 0.72;
-        stone[0] = (stone[0] as f32 * v) as u8;
-        stone[1] = (stone[1] as f32 * v) as u8;
-        stone[2] = (stone[2] as f32 * v) as u8;
-        if !edge && (x ^ y ^ bx ^ by).count_ones() % 6 == 0 {
-            stone[0] = stone[0].saturating_add(22);
-            stone[1] = stone[1].saturating_add(18);
-            stone[2] = stone[2].saturating_add(14);
-        }
-        stone
-    })
 }
 
 fn gen_rgba(w: u32, f: impl Fn(u32, u32) -> [u8; 4]) -> Image {

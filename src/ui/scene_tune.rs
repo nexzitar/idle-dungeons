@@ -16,7 +16,7 @@ use crate::presentation::editor::{
 use crate::presentation::{
     pivot_translation_compensation_px, resolve_element_translation_px, PresentationEditorSession,
     PresentationFirePart, PresentationFireStackRoot, SceneAnchorPose, TitleCampSceneLayout,
-    TitleCampSceneTuneTarget,
+    TitleCampSceneTuneTarget, TITLE_FIRE_GROUND_LIGHT_H_PX, TITLE_FIRE_GROUND_LIGHT_W_MULT,
 };
 use std::collections::HashMap;
 use std::f32::consts::TAU;
@@ -185,10 +185,7 @@ pub fn sync_title_fire_presentation_from_layout(
     layout: Res<TitleSceneLayout>,
     mut groups: ParamSet<(
         Query<&mut Node, With<PresentationFireStackRoot>>,
-        Query<
-            (&PresentationFirePart, &mut Node),
-            (With<PresentationFirePart>, Without<ImageNode>),
-        >,
+        Query<(&PresentationFirePart, &mut Node), With<PresentationFirePart>>,
         Query<(&PresentationFirePart, &mut ImageNode), With<ImageNode>>,
     )>,
 ) {
@@ -204,13 +201,14 @@ pub fn sync_title_fire_presentation_from_layout(
     for (part, mut node) in groups.p1().iter_mut() {
         match *part {
             PresentationFirePart::GroundLight if cfg.enabled && cfg.ground_max_alpha > 0.001 => {
-                node.width = Val::Px(base_w * 1.35);
+                node.width = Val::Px(base_w * TITLE_FIRE_GROUND_LIGHT_W_MULT);
+                node.height = Val::Px(TITLE_FIRE_GROUND_LIGHT_H_PX);
             }
             PresentationFirePart::Glow if cfg.enabled && cfg.glow_max_alpha > 0.001 => {
-                node.left = Val::Px(-base_w * 0.12);
-                node.top = Val::Px(-base_h * 0.08);
-                node.right = Val::Px(-base_w * 0.12);
-                node.bottom = Val::Px(-base_h * 0.18);
+                node.left = Val::Px(-base_w * 0.42);
+                node.top = Val::Px(-base_h * 0.32);
+                node.right = Val::Px(-base_w * 0.42);
+                node.bottom = Val::Px(-base_h * 0.52);
             }
             _ => {}
         }
@@ -241,30 +239,39 @@ pub fn tick_title_fire_ambient(
     let period = cfg.crossfade_period_secs.max(0.25);
     let n = cfg.flame_variants.clamp(2, 8) as f32;
 
-    for (part, mut img) in parts.p0().iter_mut() {
-        let PresentationFirePart::Flame(idx) = *part else {
-            continue;
-        };
-        let i = idx as f32;
-        let wave = 0.5 + 0.5 * (TAU * t / period + i / n * TAU).sin();
-        let norm_den = (n * 0.5).max(1.0);
-        let alpha = (wave / norm_den).clamp(0.12, 0.42);
-        let base = img.color.to_srgba();
-        img.color = Color::srgba(base.red, base.green, base.blue, alpha);
-    }
+    let glow_pulse =
+        (1.0_f32 + cfg.glow_pulse_scale * (TAU * t * cfg.glow_pulse_hz).sin()).max(0.0);
 
-    let glow_s = 1.0 + cfg.glow_pulse_scale * (TAU * t * cfg.glow_pulse_hz).sin();
+    for (part, mut img) in parts.p0().iter_mut() {
+        match *part {
+            PresentationFirePart::Flame(idx) => {
+                let i = idx as f32;
+                let wave = 0.5 + 0.5 * (TAU * t / period + i / n * TAU).sin();
+                let norm_den = (n * 0.5).max(1.0);
+                let alpha = (wave / norm_den).clamp(0.12, 0.42);
+                let base = img.color.to_srgba();
+                img.color = Color::srgba(base.red, base.green, base.blue, alpha);
+            }
+            PresentationFirePart::Glow => {
+                let a = (cfg.glow_max_alpha * 0.9 * glow_pulse)
+                    .clamp(cfg.glow_min_alpha.max(0.0_f32), 1.0);
+                img.color = Color::srgba(1.0, 0.55, 0.18, a);
+            }
+            _ => {}
+        }
+    }
 
     for (part, mut ui) in parts.p2().iter_mut() {
         if matches!(*part, PresentationFirePart::Glow) {
-            ui.scale = Vec2::splat(glow_s);
+            ui.scale = Vec2::splat(glow_pulse);
             ui.rotation = Rot2::degrees(0.0_f32);
         }
     }
 
-    let g_alpha = cfg.ground_max_alpha
-        * (0.65
-            + 0.35 * (TAU * t * cfg.ground_flicker_hz + 0.3 * (TAU * t * 0.37).sin()).sin());
+    let ground_phase =
+        TAU * t * cfg.ground_flicker_hz + 0.3 * (TAU * t * (cfg.ground_flicker_hz * 0.5)).sin();
+    let g_alpha =
+        cfg.ground_max_alpha * (0.5 + 0.11 * ground_phase.sin());
 
     for (part, mut bg) in parts.p1().iter_mut() {
         if matches!(*part, PresentationFirePart::GroundLight) {
