@@ -5,14 +5,41 @@ use crate::presentation::editor::{
     DRAG_START_THRESHOLD_PX,
 };
 use crate::presentation::element::PresentationElementId;
+use crate::presentation::is_fire_layer_id;
+use crate::presentation::markers::PresentationFireLayerHost;
 use crate::ui::components::PresentationElementHost;
 use crate::ui::scene_tune::TitleSceneLayout;
 use bevy::input::mouse::{AccumulatedMouseMotion, MouseButton};
 use bevy::prelude::*;
 use bevy::ui::GlobalZIndex;
 
-fn top_pressed_presentation_host(
-    q: &Query<(
+fn consider_pressed(
+    best: &mut Option<(i32, PresentationElementId, Entity)>,
+    entity: Entity,
+    interaction: &Interaction,
+    z: i32,
+    id: PresentationElementId,
+) {
+    if *interaction != Interaction::Pressed {
+        return;
+    }
+    let replace = match best {
+        None => true,
+        Some((bz, _, be)) => z > *bz || (z == *bz && entity > *be),
+    };
+    if replace {
+        *best = Some((z, id, entity));
+    }
+}
+
+fn top_pressed_target(
+    fire_q: &Query<(
+        Entity,
+        &Interaction,
+        &PresentationFireLayerHost,
+        &GlobalZIndex,
+    )>,
+    host_q: &Query<(
         Entity,
         &Interaction,
         &PresentationElementHost,
@@ -20,28 +47,27 @@ fn top_pressed_presentation_host(
     )>,
 ) -> Option<PresentationElementId> {
     let mut best: Option<(i32, PresentationElementId, Entity)> = None;
-    for (entity, interaction, host, gz) in q.iter() {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
-        let z = gz.0;
-        let replace = match &best {
-            None => true,
-            Some((bz, _, be)) => z > *bz || (z == *bz && entity > *be),
-        };
-        if replace {
-            best = Some((z, host.0.clone(), entity));
-        }
+    for (entity, interaction, host, gz) in fire_q.iter() {
+        consider_pressed(&mut best, entity, interaction, gz.0, host.0.clone());
+    }
+    for (entity, interaction, host, gz) in host_q.iter() {
+        consider_pressed(&mut best, entity, interaction, gz.0, host.0.clone());
     }
     best.map(|(_, id, _)| id)
 }
 
-/// Left-click selects the topmost hovered presentation element (when the editor session is active).
+/// Left-click selects the topmost fire layer or camp element host.
 pub fn presentation_editor_pick(
     mouse: Res<ButtonInput<MouseButton>>,
     mut session: ResMut<PresentationEditorSession>,
     mut field_edit: ResMut<crate::presentation::editor::PresentationEditorFieldEditState>,
-    q: Query<(
+    fire_q: Query<(
+        Entity,
+        &Interaction,
+        &PresentationFireLayerHost,
+        &GlobalZIndex,
+    )>,
+    host_q: Query<(
         Entity,
         &Interaction,
         &PresentationElementHost,
@@ -54,13 +80,13 @@ pub fn presentation_editor_pick(
     if !mouse.just_pressed(MouseButton::Left) {
         return;
     }
-    if let Some(id) = top_pressed_presentation_host(&q) {
+    if let Some(id) = top_pressed_target(&fire_q, &host_q) {
         session.selected_element = Some(id);
         field_edit.clear();
     }
 }
 
-/// While holding the button after pressing a host, apply [`AccumulatedMouseMotion`] deltas to layout offsets (shift ×10).
+/// Drag applies to the selected element host or fire sub-layer.
 pub fn presentation_editor_drag(
     mouse: Res<ButtonInput<MouseButton>>,
     kb: Res<ButtonInput<KeyCode>>,
@@ -68,7 +94,13 @@ pub fn presentation_editor_drag(
     mut layout: ResMut<TitleSceneLayout>,
     mut drag: ResMut<PresentationEditorDragState>,
     accumulated: Res<AccumulatedMouseMotion>,
-    q: Query<(
+    fire_q: Query<(
+        Entity,
+        &Interaction,
+        &PresentationFireLayerHost,
+        &GlobalZIndex,
+    )>,
+    host_q: Query<(
         Entity,
         &Interaction,
         &PresentationElementHost,
@@ -89,11 +121,11 @@ pub fn presentation_editor_drag(
     }
 
     if mouse.just_pressed(MouseButton::Left) {
-        drag.active_host_drag = top_pressed_presentation_host(&q);
+        drag.active_host_drag = top_pressed_target(&fire_q, &host_q);
         drag.pending_delta = Vec2::ZERO;
     }
 
-    let Some(host_id) = drag.active_host_drag.clone() else {
+    let Some(target_id) = drag.active_host_drag.clone() else {
         return;
     };
 
@@ -107,7 +139,17 @@ pub fn presentation_editor_drag(
     }
 
     let mult = if shift { 10.0 } else { 1.0 };
-    let tune = tune_for_scene_mut(&mut layout, host_id.as_str());
-    tune.offset_x += accumulated.delta.x * mult;
-    tune.offset_y += accumulated.delta.y * mult;
+    let dx = accumulated.delta.x * mult;
+    let dy = accumulated.delta.y * mult;
+
+    if is_fire_layer_id(target_id.as_str()) {
+        if let Some(layer) = layout.fire_presentation.layers.get_mut(target_id.as_str()) {
+            layer.offset_x += dx;
+            layer.offset_y += dy;
+        }
+    } else {
+        let tune = tune_for_scene_mut(&mut layout, target_id.as_str());
+        tune.offset_x += dx;
+        tune.offset_y += dy;
+    }
 }

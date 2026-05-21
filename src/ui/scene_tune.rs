@@ -9,11 +9,13 @@
 use crate::presentation::editor::{
     TITLE_ELEMENT_ALLY_SLOT, TITLE_ELEMENT_FIREPLACE, TITLE_ELEMENT_LEAD_SLOT,
 };
+use crate::presentation::markers::PresentationFireLayerHost;
 use crate::presentation::{
-    pivot_translation_compensation_px, resolve_element_translation_px, PresentationEditorSession,
-    PresentationFirePart, PresentationFireStackRoot, SceneAnchorPose, TitleCampSceneLayout,
-    TitleCampSceneTuneTarget, TITLE_FIRE_GROUND_LIGHT_H_PX, TITLE_FIRE_GROUND_LIGHT_W_MULT,
-    TITLE_FIRE_TRACK_EVAL_SEED,
+    apply_layer_ui_transform, is_fire_layer_id, pivot_translation_compensation_px,
+    resolve_element_translation_px, PresentationEditorSession, PresentationFirePart,
+    PresentationFireStackRoot, SceneAnchorPose,
+    TitleCampSceneLayout, TitleCampSceneTuneTarget, TITLE_FIRE_GROUND_LIGHT_H_PX,
+    TITLE_FIRE_GROUND_LIGHT_W_MULT, TITLE_FIRE_TRACK_EVAL_SEED,
 };
 use bevy::log::{info, warn};
 use bevy::prelude::*;
@@ -176,8 +178,8 @@ pub fn sync_title_scene_elements(
 pub fn sync_title_fire_presentation_from_layout(
     layout: Res<TitleSceneLayout>,
     mut groups: ParamSet<(
-        Query<&mut Node, With<PresentationFireStackRoot>>,
-        Query<(&PresentationFirePart, &mut Node), With<PresentationFirePart>>,
+        Query<(&mut Node, &mut UiTransform), With<PresentationFireStackRoot>>,
+        Query<(&PresentationFirePart, &mut Node, &mut UiTransform), With<PresentationFirePart>>,
         Query<(&PresentationFirePart, &mut ImageNode), With<ImageNode>>,
     )>,
 ) {
@@ -186,11 +188,13 @@ pub fn sync_title_fire_presentation_from_layout(
     }
     let (base_w, base_h) = title_fireplace_base_px(&layout.fireplace);
     let cfg = &layout.fire_presentation;
-    for mut node in groups.p0().iter_mut() {
+    let layers = &cfg.layers;
+    for (mut node, mut ui) in groups.p0().iter_mut() {
         node.width = Val::Px(base_w);
         node.height = Val::Px(base_h);
+        apply_layer_ui_transform(&mut ui, &layers.stack);
     }
-    for (part, mut node) in groups.p1().iter_mut() {
+    for (part, mut node, _ui) in groups.p1().iter_mut() {
         match *part {
             PresentationFirePart::GroundLight if cfg.enabled && cfg.ground_max_alpha > 0.001 => {
                 node.width = Val::Px(base_w * TITLE_FIRE_GROUND_LIGHT_W_MULT);
@@ -236,6 +240,21 @@ pub fn tick_title_fire_ambient(
 
     let glow_alpha_eval = cfg.evaluate_glow_alpha_at(t, TITLE_FIRE_TRACK_EVAL_SEED);
     let ground_alpha_eval = cfg.evaluate_ground_alpha_at(t, TITLE_FIRE_TRACK_EVAL_SEED);
+    let layers = &cfg.layers;
+
+    for (part, mut ui) in parts.p2().iter_mut() {
+        let layer = match *part {
+            PresentationFirePart::GroundLight => &layers.ground,
+            PresentationFirePart::BaseStatic => &layers.base,
+            PresentationFirePart::Flame(_) => &layers.flame,
+            PresentationFirePart::Glow => &layers.glow,
+        };
+        apply_layer_ui_transform(&mut ui, layer);
+        if matches!(*part, PresentationFirePart::Glow) {
+            ui.scale = Vec2::new(layer.scale_x, layer.scale_y) * Vec2::splat(glow_pulse);
+            ui.rotation = Rot2::degrees(0.0_f32);
+        }
+    }
 
     for (part, mut img) in parts.p0().iter_mut() {
         match *part {
@@ -256,13 +275,6 @@ pub fn tick_title_fire_ambient(
         }
     }
 
-    for (part, mut ui) in parts.p2().iter_mut() {
-        if matches!(*part, PresentationFirePart::Glow) {
-            ui.scale = Vec2::splat(glow_pulse);
-            ui.rotation = Rot2::degrees(0.0_f32);
-        }
-    }
-
     let g_alpha = ground_alpha_eval;
 
     for (part, mut bg) in parts.p1().iter_mut() {
@@ -277,18 +289,21 @@ pub fn tick_title_fire_ambient(
 /// Magenta outline on the selected target while layout mode is on.
 pub fn title_scene_tune_selection_gizmo(
     session: Res<PresentationEditorSession>,
-    mut fireplace: Query<
-        (&mut BorderColor, &mut Node),
-        With<crate::ui::components::TitleCampfireTuneMarker>,
-    >,
-    mut figures: Query<
-        (
-            &crate::ui::components::TitleCampFigureTuneMarker,
-            &mut BorderColor,
-            &mut Node,
-        ),
-        Without<crate::ui::components::TitleCampfireTuneMarker>,
-    >,
+    mut groups: ParamSet<(
+        Query<(&mut BorderColor, &mut Node), With<crate::ui::components::TitleCampfireTuneMarker>>,
+        Query<
+            (
+                &crate::ui::components::TitleCampFigureTuneMarker,
+                &mut BorderColor,
+                &mut Node,
+            ),
+            Without<crate::ui::components::TitleCampfireTuneMarker>,
+        >,
+        Query<
+            (&PresentationFireLayerHost, &mut BorderColor),
+            Without<crate::ui::components::TitleCampfireTuneMarker>,
+        >,
+    )>,
 ) {
     let show = session.layout_mode() && session.gizmo_flags.selection_outline;
     let sel = session
@@ -297,13 +312,14 @@ pub fn title_scene_tune_selection_gizmo(
         .unwrap_or(TITLE_ELEMENT_FIREPLACE);
     let col_active = BorderColor::all(Color::srgba(1.0, 0.2, 0.85, 0.95));
     let col_idle = BorderColor::all(Color::srgba(0.0, 0.0, 0.0, 0.0));
+    let col_fire_sel = BorderColor::all(Color::srgba(0.35, 0.85, 1.0, 0.9));
 
-    for (mut border, mut node) in &mut fireplace {
+    for (mut border, mut node) in groups.p0().iter_mut() {
         let on = show && sel == TITLE_ELEMENT_FIREPLACE;
         *border = if on { col_active } else { col_idle };
         node.border = UiRect::all(Val::Px(2.0));
     }
-    for (marker, mut border, mut node) in &mut figures {
+    for (marker, mut border, mut node) in groups.p1().iter_mut() {
         let id = if marker.0 == 0 {
             TITLE_ELEMENT_LEAD_SLOT
         } else {
@@ -312,6 +328,10 @@ pub fn title_scene_tune_selection_gizmo(
         let on = show && sel == id;
         *border = if on { col_active } else { col_idle };
         node.border = UiRect::all(Val::Px(2.0));
+    }
+    for (host, mut border) in groups.p2().iter_mut() {
+        let on = show && is_fire_layer_id(sel) && host.0 == sel;
+        *border = if on { col_fire_sel } else { col_idle };
     }
 }
 

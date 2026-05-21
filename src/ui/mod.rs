@@ -51,9 +51,10 @@ use crate::ui::components::{
 };
 use crate::ui::placeholder_graphics::UiPlaceholderImages;
 use crate::presentation::editor::{
-    apply_presentation_tune_delta, presentation_editor_tune_field_keyboard, tune_for_scene,
-    tune_for_scene_mut, PresentationEditorFieldEditState, PresentationEditorHierarchyButton,
-    reset_all_title_placements, PresentationEditorReloadButton,
+    apply_editor_tune_delta, presentation_editor_tune_field_keyboard,
+    reset_all_title_placements, reset_editor_selection_placement,
+    PresentationEditorFieldEditState, PresentationEditorHierarchyButton,
+    PresentationEditorReloadButton,
     PresentationEditorResetAllButton, PresentationEditorResetCenterButton,
     PresentationEditorSaveButton, PresentationEditorSettingsToggleButton,
     PresentationEditorTuneDeltaButton, PresentationEditorTuneValueButton,
@@ -1444,7 +1445,7 @@ fn handle_presentation_editor_overlay_buttons(
 
     for (entity, interaction) in &reset_center {
         if entity == target && ui_click_release_confirms(*interaction) {
-            tune_for_scene_mut(&mut layout, sel).reset_placement_to_anchor();
+            reset_editor_selection_placement(&mut layout, sel);
             field_edit.clear();
             return;
         }
@@ -1474,8 +1475,7 @@ fn handle_presentation_editor_overlay_buttons(
 
     for (entity, interaction, vb) in &value_btns {
         if entity == target && ui_click_release_confirms(*interaction) {
-            let tune = tune_for_scene(&layout, sel);
-            field_edit.begin(vb.0, tune);
+            field_edit.begin(vb.0, &layout, sel);
             return;
         }
     }
@@ -1483,8 +1483,7 @@ fn handle_presentation_editor_overlay_buttons(
     let coarse = kb.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
     for (entity, interaction, delta) in &deltas {
         if entity == target && ui_click_release_confirms(*interaction) {
-            let tune = tune_for_scene_mut(&mut layout, sel);
-            apply_presentation_tune_delta(tune, delta.field, delta.positive, coarse);
+            apply_editor_tune_delta(&mut layout, sel, delta.field, delta.positive, coarse);
             field_edit.clear();
             return;
         }

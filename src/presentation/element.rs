@@ -96,3 +96,33 @@ impl PresentationElementTune {
         self.scale_y = 1.0;
     }
 }
+
+/// Per-child placement inside a composite element (e.g. fire base vs glow).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PresentationLayerTune {
+    pub offset_x: f32,
+    pub offset_y: f32,
+    pub scale_x: f32,
+    pub scale_y: f32,
+}
+
+impl Default for PresentationLayerTune {
+    fn default() -> Self {
+        Self {
+            offset_x: 0.0,
+            offset_y: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+        }
+    }
+}
+
+impl PresentationLayerTune {
+    pub fn reset_placement_to_anchor(&mut self) {
+        self.offset_x = 0.0;
+        self.offset_y = 0.0;
+        self.scale_x = 1.0;
+        self.scale_y = 1.0;
+    }
+}

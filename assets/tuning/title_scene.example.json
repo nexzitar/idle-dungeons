@@ -130,6 +130,13 @@
           "blend": "additive"
         }
       ]
+    },
+    "layers": {
+      "stack": { "offset_x": 0.0, "offset_y": 0.0, "scale_x": 1.0, "scale_y": 1.0 },
+      "base": { "offset_x": 0.0, "offset_y": 0.0, "scale_x": 1.0, "scale_y": 1.0 },
+      "flame": { "offset_x": 0.0, "offset_y": 0.0, "scale_x": 1.0, "scale_y": 1.0 },
+      "glow": { "offset_x": 0.0, "offset_y": 0.0, "scale_x": 1.0, "scale_y": 1.0 },
+      "ground": { "offset_x": 0.0, "offset_y": 0.0, "scale_x": 1.0, "scale_y": 1.0 }
     }
   },
   "ambient": {

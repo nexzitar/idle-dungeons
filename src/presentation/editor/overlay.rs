@@ -4,6 +4,9 @@ use crate::presentation::editor::{
     PresentationEditorSession, TITLE_ELEMENT_ALLY_SLOT, TITLE_ELEMENT_FIREPLACE,
     TITLE_ELEMENT_LEAD_SLOT,
 };
+use crate::presentation::fire::{
+    FIRE_LAYER_BASE, FIRE_LAYER_FLAME, FIRE_LAYER_GLOW, FIRE_LAYER_GROUND, FIRE_LAYER_STACK,
+};
 use crate::presentation::element::PresentationElementId;
 use crate::ui::components::{UiButtonPalette, UiTooltip};
 use crate::ui::theme::{section_title, UiTheme};
@@ -227,9 +230,27 @@ fn spawn_hierarchy_column(parent: &mut ChildSpawnerCommands<'_>) {
         ))
         .with_children(|col| {
             col.spawn(section_title("Elements"));
-            hierarchy_row(col, "Fireplace", TITLE_ELEMENT_FIREPLACE);
+            hierarchy_row(col, "Fireplace (host)", TITLE_ELEMENT_FIREPLACE);
+            hierarchy_row_indented(col, "Fire · stack", FIRE_LAYER_STACK);
+            hierarchy_row_indented(col, "Fire · base", FIRE_LAYER_BASE);
+            hierarchy_row_indented(col, "Fire · flame", FIRE_LAYER_FLAME);
+            hierarchy_row_indented(col, "Fire · glow", FIRE_LAYER_GLOW);
+            hierarchy_row_indented(col, "Fire · ground", FIRE_LAYER_GROUND);
             hierarchy_row(col, "Lead slot", TITLE_ELEMENT_LEAD_SLOT);
             hierarchy_row(col, "Ally slot", TITLE_ELEMENT_ALLY_SLOT);
+        });
+}
+
+fn hierarchy_row_indented(parent: &mut ChildSpawnerCommands<'_>, label: &str, id: &'static str) {
+    parent
+        .spawn(Node {
+            box_sizing: BoxSizing::BorderBox,
+            padding: UiRect::left(Val::Px(10.0)),
+            width: Val::Percent(100.0),
+            ..default()
+        })
+        .with_children(|wrap| {
+            hierarchy_row(wrap, label, id);
         });
 }
 

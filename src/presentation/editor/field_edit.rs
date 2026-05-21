@@ -1,10 +1,10 @@
 //! Click-to-type numeric editing for presentation inspector fields.
 
 use crate::presentation::editor::{
-    format_tune_field, tune_for_scene_mut, PresentationEditorTuneField,
+    banner_selected_id, format_editor_tune_field, tune_for_scene_mut, PresentationEditorTuneField,
 };
-use crate::presentation::element::PresentationElementTune;
-use crate::presentation::editor::banner_selected_id;
+use crate::presentation::element::{PresentationElementTune, PresentationLayerTune};
+use crate::presentation::fire::is_fire_layer_id;
 use crate::presentation::PresentationEditorSession;
 use crate::ui::scene_tune::TitleSceneLayout;
 use bevy::input::keyboard::KeyboardInput;
@@ -24,9 +24,14 @@ impl PresentationEditorFieldEditState {
         self.buffer.clear();
     }
 
-    pub fn begin(&mut self, field: PresentationEditorTuneField, tune: &PresentationElementTune) {
+    pub fn begin(
+        &mut self,
+        field: PresentationEditorTuneField,
+        layout: &TitleSceneLayout,
+        selected_id: &str,
+    ) {
         self.field = Some(field);
-        self.buffer = format_tune_field(tune, field);
+        self.buffer = format_editor_tune_field(layout, selected_id, field);
     }
 
     pub fn is_editing(&self) -> bool {
@@ -34,7 +39,11 @@ impl PresentationEditorFieldEditState {
     }
 }
 
-fn apply_buffer_to_tune(tune: &mut PresentationElementTune, field: PresentationEditorTuneField, buf: &str) {
+fn apply_buffer_to_element(
+    tune: &mut PresentationElementTune,
+    field: PresentationEditorTuneField,
+    buf: &str,
+) {
     let trimmed = buf.trim();
     if trimmed.is_empty() {
         return;
@@ -82,6 +91,26 @@ fn apply_buffer_to_tune(tune: &mut PresentationElementTune, field: PresentationE
     }
 }
 
+fn apply_buffer_to_layer(
+    tune: &mut PresentationLayerTune,
+    field: PresentationEditorTuneField,
+    buf: &str,
+) {
+    let trimmed = buf.trim();
+    if trimmed.is_empty() {
+        return;
+    }
+    if let Ok(v) = trimmed.parse::<f32>() {
+        match field {
+            PresentationEditorTuneField::OffsetX => tune.offset_x = v,
+            PresentationEditorTuneField::OffsetY => tune.offset_y = v,
+            PresentationEditorTuneField::ScaleX => tune.scale_x = v.clamp(0.05, 4.0),
+            PresentationEditorTuneField::ScaleY => tune.scale_y = v.clamp(0.05, 4.0),
+            _ => {}
+        }
+    }
+}
+
 /// Type into the focused inspector value; runs while presentation mode is on.
 #[cfg(debug_assertions)]
 pub fn presentation_editor_tune_field_keyboard(
@@ -112,8 +141,14 @@ pub fn presentation_editor_tune_field_keyboard(
 
     if keys.just_pressed(KeyCode::Enter) {
         let sel = banner_selected_id(&session);
-        let tune = tune_for_scene_mut(&mut layout, sel);
-        apply_buffer_to_tune(tune, field, &edit.buffer);
+        if is_fire_layer_id(sel) {
+            if let Some(layer) = layout.fire_presentation.layers.get_mut(sel) {
+                apply_buffer_to_layer(layer, field, &edit.buffer);
+            }
+        } else {
+            let tune = tune_for_scene_mut(&mut layout, sel);
+            apply_buffer_to_element(tune, field, &edit.buffer);
+        }
         edit.clear();
         for _ in kb.read() {}
         return;

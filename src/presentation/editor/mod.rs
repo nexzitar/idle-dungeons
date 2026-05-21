@@ -24,7 +24,8 @@ pub use mouse::{presentation_editor_drag, presentation_editor_pick};
 #[cfg(debug_assertions)]
 pub use selection::presentation_editor_hover_outline;
 
-use crate::presentation::element::{PresentationElementId, PresentationElementTune};
+use crate::presentation::element::{PresentationElementId, PresentationElementTune, PresentationLayerTune};
+use crate::presentation::is_fire_layer_id;
 use crate::presentation::scene::TitleCampSceneLayout;
 use crate::ui::components::UiButtonPalette;
 use crate::ui::scene_tune::TitleSceneLayout;
@@ -219,16 +220,22 @@ pub fn sync_presentation_editor_ui(
         };
     }
 
-    let tune = tune_for_scene(&layout, sel);
-    for mut t in text_queries.p2() {
-        **t = format_pivot_line(tune);
+    if is_fire_layer_id(sel) {
+        for mut t in text_queries.p2() {
+            **t = format!("Fire layer · {sel}");
+        }
+    } else {
+        let tune = tune_for_scene(&layout, sel);
+        for mut t in text_queries.p2() {
+            **t = format_pivot_line(tune);
+        }
     }
 
     for (marker, mut text) in text_queries.p3() {
         **text = if field_edit.field == Some(marker.0) {
             format!("{}▏", field_edit.buffer)
         } else {
-            format_tune_field(tune, marker.0)
+            format_editor_tune_field(&layout, sel, marker.0)
         };
     }
 
@@ -242,6 +249,49 @@ pub fn sync_presentation_editor_ui(
             *bg = pal.idle_bg.into();
             *bd = BorderColor::from(pal.idle_border);
         }
+    }
+}
+
+fn apply_layer_tune_delta(
+    tune: &mut PresentationLayerTune,
+    field: PresentationEditorTuneField,
+    positive: bool,
+    coarse: bool,
+) {
+    let sign = if positive { 1.0 } else { -1.0 };
+    let mult = if coarse { 10.0 } else { 1.0 };
+    match field {
+        PresentationEditorTuneField::OffsetX => tune.offset_x += sign * mult,
+        PresentationEditorTuneField::OffsetY => tune.offset_y += sign * mult,
+        PresentationEditorTuneField::ScaleX => {
+            tune.scale_x = (tune.scale_x + sign * 0.01 * mult).clamp(0.05, 4.0);
+        }
+        PresentationEditorTuneField::ScaleY => {
+            tune.scale_y = (tune.scale_y + sign * 0.01 * mult).clamp(0.05, 4.0);
+        }
+        _ => {}
+    }
+}
+
+/// Apply inspector delta to the current selection (camp element or fire sub-layer).
+pub fn apply_editor_tune_delta(
+    layout: &mut TitleCampSceneLayout,
+    selected_id: &str,
+    field: PresentationEditorTuneField,
+    positive: bool,
+    coarse: bool,
+) {
+    if is_fire_layer_id(selected_id) {
+        if let Some(layer) = layout.fire_presentation.layers.get_mut(selected_id) {
+            apply_layer_tune_delta(layer, field, positive, coarse);
+        }
+    } else {
+        apply_presentation_tune_delta(
+            tune_for_scene_mut(layout, selected_id),
+            field,
+            positive,
+            coarse,
+        );
     }
 }
 
@@ -303,6 +353,17 @@ pub fn reset_all_title_placements(layout: &mut TitleCampSceneLayout) {
     layout.fireplace.reset_placement_to_anchor();
     layout.lead_slot.reset_placement_to_anchor();
     layout.ally_slot.reset_placement_to_anchor();
+    layout.fire_presentation.layers.reset_all();
+}
+
+pub fn reset_editor_selection_placement(layout: &mut TitleCampSceneLayout, selected_id: &str) {
+    if is_fire_layer_id(selected_id) {
+        if let Some(layer) = layout.fire_presentation.layers.get_mut(selected_id) {
+            layer.reset_placement_to_anchor();
+        }
+    } else {
+        tune_for_scene_mut(layout, selected_id).reset_placement_to_anchor();
+    }
 }
 
 pub fn tune_for_scene<'a>(
@@ -313,6 +374,30 @@ pub fn tune_for_scene<'a>(
         TITLE_ELEMENT_LEAD_SLOT => &layout.lead_slot,
         TITLE_ELEMENT_ALLY_SLOT => &layout.ally_slot,
         _ => &layout.fireplace,
+    }
+}
+
+pub(crate) fn format_editor_tune_field(
+    layout: &TitleCampSceneLayout,
+    selected_id: &str,
+    field: PresentationEditorTuneField,
+) -> String {
+    if let Some(layer) = layout.fire_presentation.layers.get(selected_id) {
+        return format_layer_tune_field(layer, field);
+    }
+    format_tune_field(tune_for_scene(layout, selected_id), field)
+}
+
+pub(crate) fn format_layer_tune_field(
+    tune: &PresentationLayerTune,
+    field: PresentationEditorTuneField,
+) -> String {
+    match field {
+        PresentationEditorTuneField::OffsetX => format!("{:.1}", tune.offset_x),
+        PresentationEditorTuneField::OffsetY => format!("{:.1}", tune.offset_y),
+        PresentationEditorTuneField::ScaleX => format!("{:.2}", tune.scale_x),
+        PresentationEditorTuneField::ScaleY => format!("{:.2}", tune.scale_y),
+        _ => "—".to_string(),
     }
 }
 

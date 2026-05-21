@@ -463,3 +463,6 @@ pub struct TitleCampStageRoot;
 /// UI hit target for tuning a logical presentation element (title camp fireplace / figure slots).
 #[derive(Component)]
 pub struct PresentationElementHost(pub PresentationElementId);
+
+/// Re-export — defined in [`crate::presentation::markers`].
+pub use crate::presentation::markers::PresentationFireLayerHost;

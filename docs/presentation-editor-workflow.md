@@ -23,7 +23,7 @@ When the session is active:
 | Area | Role |
 |------|------|
 | **Banner** | `Presentation Mode · {element id}` plus a short hint pointing at backtick / Tab cycling. |
-| **Left — Hierarchy** | Buttons **Fireplace**, **Lead slot**, **Ally slot** (ids `fireplace`, `lead_slot`, `ally_slot`). Sets **`selected_element`** for the inspector. |
+| **Left — Hierarchy** | **Fireplace (host)** plus **Fire · stack / base / flame / glow / ground** sub-layers, then **Lead** / **Ally** slots. Select a sub-layer to nudge that part of the fire (logs, glow, ground wash) independently. |
 | **Right — Inspector** | **Click a value** to type directly (**Enter** applies, **Esc** cancels). **− / +** use fine steps; hold **Shift** for **10×** steps. **Pivot** / **Anchor** summary is read-only. |
 | **Footer** | **Reset to center** (selected: offsets 0 on anchor, scale 1, rotation 0), **Reset all** (fireplace + lead + ally), **Save to disk** (**Ctrl+S**), **Reload from disk** (**F5**). |
 
