@@ -11,7 +11,12 @@ use bevy::prelude::*;
 use bevy::ui::GlobalZIndex;
 
 fn top_pressed_presentation_host(
-    q: &Query<(Entity, &Interaction, &PresentationElementHost, &GlobalZIndex)>,
+    q: &Query<(
+        Entity,
+        &Interaction,
+        &PresentationElementHost,
+        &GlobalZIndex,
+    )>,
 ) -> Option<PresentationElementId> {
     let mut best: Option<(i32, PresentationElementId, Entity)> = None;
     for (entity, interaction, host, gz) in q.iter() {
@@ -34,7 +39,12 @@ fn top_pressed_presentation_host(
 pub fn presentation_editor_pick(
     mouse: Res<ButtonInput<MouseButton>>,
     mut session: ResMut<PresentationEditorSession>,
-    q: Query<(Entity, &Interaction, &PresentationElementHost, &GlobalZIndex)>,
+    q: Query<(
+        Entity,
+        &Interaction,
+        &PresentationElementHost,
+        &GlobalZIndex,
+    )>,
 ) {
     if !session.active {
         return;
@@ -55,7 +65,12 @@ pub fn presentation_editor_drag(
     mut layout: ResMut<TitleSceneLayout>,
     mut drag: ResMut<PresentationEditorDragState>,
     accumulated: Res<AccumulatedMouseMotion>,
-    q: Query<(Entity, &Interaction, &PresentationElementHost, &GlobalZIndex)>,
+    q: Query<(
+        Entity,
+        &Interaction,
+        &PresentationElementHost,
+        &GlobalZIndex,
+    )>,
 ) {
     let shift = kb.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
 

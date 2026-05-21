@@ -1,15 +1,16 @@
 //! In-engine presentation editor: session state, overlay UI, and (later) mouse / gizmos.
 
-mod overlay;
 mod mouse;
+mod overlay;
 mod selection;
 
 pub use overlay::{
-    spawn_presentation_editor_overlay, PresentationEditorBannerHintText, PresentationEditorBannerTitleText,
-    PresentationEditorHierarchyButton, PresentationEditorPivotSummaryText, PresentationEditorReloadButton,
-    PresentationEditorRoot, PresentationEditorSaveButton, PresentationEditorSettingsToggleButton,
-    PresentationEditorSettingsToggleText, PresentationEditorTuneDeltaButton, PresentationEditorTuneField,
-    PresentationEditorTuneValueText,
+    spawn_presentation_editor_overlay, PresentationEditorBannerHintText,
+    PresentationEditorBannerTitleText, PresentationEditorHierarchyButton,
+    PresentationEditorPivotSummaryText, PresentationEditorReloadButton, PresentationEditorRoot,
+    PresentationEditorSaveButton, PresentationEditorSettingsToggleButton,
+    PresentationEditorSettingsToggleText, PresentationEditorTuneDeltaButton,
+    PresentationEditorTuneField, PresentationEditorTuneValueText,
 };
 
 #[cfg(debug_assertions)]
@@ -99,8 +100,12 @@ impl PresentationEditorSession {
     #[must_use]
     pub fn target(&self) -> crate::presentation::scene::TitleCampSceneTuneTarget {
         match self.selected_element.as_deref() {
-            Some(TITLE_ELEMENT_LEAD_SLOT) => crate::presentation::scene::TitleCampSceneTuneTarget::LeadSlot,
-            Some(TITLE_ELEMENT_ALLY_SLOT) => crate::presentation::scene::TitleCampSceneTuneTarget::AllySlot,
+            Some(TITLE_ELEMENT_LEAD_SLOT) => {
+                crate::presentation::scene::TitleCampSceneTuneTarget::LeadSlot
+            }
+            Some(TITLE_ELEMENT_ALLY_SLOT) => {
+                crate::presentation::scene::TitleCampSceneTuneTarget::AllySlot
+            }
             Some(TITLE_ELEMENT_FIREPLACE) | None | Some(_) => {
                 crate::presentation::scene::TitleCampSceneTuneTarget::Fireplace
             }
@@ -166,7 +171,10 @@ pub fn sync_presentation_editor_ui(
 ) {
     use crate::ui::scene_tune::TITLE_SCENE_TUNE_BANNER_HINT;
 
-    let hint_changed = hint_logged.as_ref().map(|r| r.is_changed()).unwrap_or(false);
+    let hint_changed = hint_logged
+        .as_ref()
+        .map(|r| r.is_changed())
+        .unwrap_or(false);
     let show_first_visit = hint_logged.as_ref().map(|h| !h.0).unwrap_or(false);
 
     if !session.is_changed() && !layout.is_changed() && !hint_changed && !show_first_visit {

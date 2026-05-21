@@ -1,16 +1,16 @@
 //! Full-screen presentation editor chrome (title camp first).
 
-use crate::presentation::element::PresentationElementId;
 use crate::presentation::editor::{
     PresentationEditorSession, TITLE_ELEMENT_ALLY_SLOT, TITLE_ELEMENT_FIREPLACE,
     TITLE_ELEMENT_LEAD_SLOT,
 };
+use crate::presentation::element::PresentationElementId;
 use crate::ui::components::{UiButtonPalette, UiTooltip};
 use crate::ui::theme::{section_title, UiTheme};
 use bevy::picking::prelude::Pickable;
 use bevy::prelude::*;
 use bevy::text::{Justify, TextColor, TextFont, TextLayout};
-use bevy::ui::{GlobalZIndex, FocusPolicy};
+use bevy::ui::{FocusPolicy, GlobalZIndex};
 
 /// Root node for the presentation editor overlay (spawned under title [`UiRoot`](`crate::ui::components::UiRoot`)).
 #[derive(Component)]
@@ -259,16 +259,46 @@ fn spawn_inspector_column(parent: &mut ChildSpawnerCommands<'_>) {
         ))
         .with_children(|col| {
             col.spawn(section_title("Inspector"));
-            tune_row(col, "Offset X (px)", PresentationEditorTuneField::OffsetX, "±1 px");
-            tune_row(col, "Offset Y (px)", PresentationEditorTuneField::OffsetY, "±1 px");
+            tune_row(
+                col,
+                "Offset X (px)",
+                PresentationEditorTuneField::OffsetX,
+                "±1 px",
+            );
+            tune_row(
+                col,
+                "Offset Y (px)",
+                PresentationEditorTuneField::OffsetY,
+                "±1 px",
+            );
             tune_row(col, "Scale X", PresentationEditorTuneField::ScaleX, "±0.01");
             tune_row(col, "Scale Y", PresentationEditorTuneField::ScaleY, "±0.01");
-            tune_row(col, "Size basis", PresentationEditorTuneField::SizeBasis, "±2 px");
-            tune_row(col, "Rotation °", PresentationEditorTuneField::RotationDeg, "±1°");
-            tune_row(col, "Exposure", PresentationEditorTuneField::Exposure, "±0.02");
+            tune_row(
+                col,
+                "Size basis",
+                PresentationEditorTuneField::SizeBasis,
+                "±2 px",
+            );
+            tune_row(
+                col,
+                "Rotation °",
+                PresentationEditorTuneField::RotationDeg,
+                "±1°",
+            );
+            tune_row(
+                col,
+                "Exposure",
+                PresentationEditorTuneField::Exposure,
+                "±0.02",
+            );
             tune_row(col, "Glow", PresentationEditorTuneField::Glow, "±0.02");
             tune_row(col, "Bloom", PresentationEditorTuneField::Bloom, "±0.02");
-            tune_row(col, "Global Z", PresentationEditorTuneField::GlobalZ, "±1 layer");
+            tune_row(
+                col,
+                "Global Z",
+                PresentationEditorTuneField::GlobalZ,
+                "±1 layer",
+            );
             col.spawn((
                 Text::new("Pivot: …"),
                 TextFont::from_font_size(UiTheme::FONT_CAPTION),
@@ -428,10 +458,9 @@ pub(super) fn banner_selected_id(session: &PresentationEditorSession) -> &str {
         .unwrap_or(TITLE_ELEMENT_FIREPLACE)
 }
 
-pub(super) fn format_pivot_line(tune: &crate::presentation::element::PresentationElementTune) -> String {
-    let anchor = tune
-        .anchor_ref
-        .as_deref()
-        .unwrap_or("(none)");
+pub(super) fn format_pivot_line(
+    tune: &crate::presentation::element::PresentationElementTune,
+) -> String {
+    let anchor = tune.anchor_ref.as_deref().unwrap_or("(none)");
     format!("Pivot: {:?} · Anchor: {anchor}", tune.pivot)
 }
