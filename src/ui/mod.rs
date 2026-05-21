@@ -51,9 +51,11 @@ use crate::ui::components::{
 };
 use crate::ui::placeholder_graphics::UiPlaceholderImages;
 use crate::presentation::editor::{
-    apply_presentation_tune_delta, tune_for_scene_mut, PresentationEditorHierarchyButton,
-    PresentationEditorReloadButton, PresentationEditorSaveButton, PresentationEditorSettingsToggleButton,
-    PresentationEditorTuneDeltaButton,
+    apply_presentation_tune_delta, presentation_editor_tune_field_keyboard, tune_for_scene,
+    tune_for_scene_mut, PresentationEditorFieldEditState, PresentationEditorHierarchyButton,
+    PresentationEditorReloadButton, PresentationEditorSaveButton,
+    PresentationEditorSettingsToggleButton, PresentationEditorTuneDeltaButton,
+    PresentationEditorTuneValueButton,
 };
 use crate::presentation::editor::TITLE_ELEMENT_FIREPLACE;
 use crate::presentation::PresentationEditorSession;
@@ -114,6 +116,7 @@ impl Plugin for UiPlugin {
         app.init_resource::<PresentationEditorSession>();
         #[cfg(debug_assertions)]
         app.init_resource::<crate::presentation::editor::PresentationEditorDragState>();
+        app.init_resource::<PresentationEditorFieldEditState>();
         #[cfg(debug_assertions)]
         app.init_resource::<crate::ui::scene_tune::TitleSceneTuneHintLogged>();
         app.add_systems(PreUpdate, raise_tooltip_above_modals);
@@ -261,6 +264,7 @@ impl Plugin for UiPlugin {
             (
                 handle_presentation_editor_overlay_buttons,
                 handle_presentation_editor_settings_toggle,
+                presentation_editor_tune_field_keyboard,
                 crate::presentation::editor::toggle_presentation_editor_visibility,
                 crate::presentation::editor::presentation_editor_pick,
                 crate::presentation::editor::presentation_editor_drag,
@@ -392,6 +396,13 @@ struct UiClickResolveMarkers<'w, 's> {
     playback_speed_inc: Query<'w, 's, (), With<PlaybackSpeedIncButton>>,
     settings_close: Query<'w, 's, (), With<SettingsModalCloseButton>>,
     settings_back: Query<'w, 's, (), With<SettingsModalBackdrop>>,
+    #[cfg(debug_assertions)]
+    presentation_settings_toggle: Query<
+        'w,
+        's,
+        (),
+        With<PresentationEditorSettingsToggleButton>,
+    >,
     sbook_pick: Query<'w, 's, (), With<SkillBookPickButton>>,
     sbook_close: Query<'w, 's, (), With<SkillBookCloseButton>>,
     sbook_back: Query<'w, 's, (), With<SkillBookBackdrop>>,
@@ -440,16 +451,19 @@ fn capture_ui_click_start(
     if !overlay.settings.is_empty() {
         pressed.retain(|&e| {
             m.reset.get(e).is_ok()
+                || m.presentation_settings_toggle.get(e).is_ok()
                 || m.settings_close.get(e).is_ok()
                 || m.settings_back.get(e).is_ok()
         });
         press.0 = pressed.iter().copied().min_by_key(|&e| {
-            let tier = if m.reset.get(e).is_ok() {
+            let tier = if m.presentation_settings_toggle.get(e).is_ok() {
                 0u8
-            } else if m.settings_close.get(e).is_ok() {
+            } else if m.reset.get(e).is_ok() {
                 1
-            } else if m.settings_back.get(e).is_ok() {
+            } else if m.settings_close.get(e).is_ok() {
                 2
+            } else if m.settings_back.get(e).is_ok() {
+                3
             } else {
                 255
             };
@@ -1394,12 +1408,15 @@ fn open_settings_modal(
 #[cfg(debug_assertions)]
 fn handle_presentation_editor_overlay_buttons(
     mouse: Res<ButtonInput<MouseButton>>,
+    kb: Res<ButtonInput<KeyCode>>,
     press: Res<UiClickPress>,
     mut layout: ResMut<TitleSceneLayout>,
     mut session: ResMut<PresentationEditorSession>,
+    mut field_edit: ResMut<PresentationEditorFieldEditState>,
     save: Query<(Entity, &Interaction), With<PresentationEditorSaveButton>>,
     reload: Query<(Entity, &Interaction), With<PresentationEditorReloadButton>>,
     hierarchy: Query<(Entity, &Interaction, &PresentationEditorHierarchyButton)>,
+    value_btns: Query<(Entity, &Interaction, &PresentationEditorTuneValueButton)>,
     deltas: Query<(Entity, &Interaction, &PresentationEditorTuneDeltaButton)>,
 ) {
     if !mouse.just_released(MouseButton::Left) {
@@ -1412,6 +1429,7 @@ fn handle_presentation_editor_overlay_buttons(
     for (entity, interaction, hb) in &hierarchy {
         if entity == target && ui_click_release_confirms(*interaction) {
             session.selected_element = Some(hb.0.clone());
+            field_edit.clear();
             return;
         }
     }
@@ -1434,10 +1452,21 @@ fn handle_presentation_editor_overlay_buttons(
         .selected_element
         .as_deref()
         .unwrap_or(TITLE_ELEMENT_FIREPLACE);
+
+    for (entity, interaction, vb) in &value_btns {
+        if entity == target && ui_click_release_confirms(*interaction) {
+            let tune = tune_for_scene(&layout, sel);
+            field_edit.begin(vb.0, tune);
+            return;
+        }
+    }
+
+    let coarse = kb.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
     for (entity, interaction, delta) in &deltas {
         if entity == target && ui_click_release_confirms(*interaction) {
             let tune = tune_for_scene_mut(&mut layout, sel);
-            apply_presentation_tune_delta(tune, delta.field, delta.positive);
+            apply_presentation_tune_delta(tune, delta.field, delta.positive, coarse);
+            field_edit.clear();
             return;
         }
     }
@@ -1458,7 +1487,8 @@ fn handle_presentation_editor_settings_toggle(
     };
     for (entity, interaction) in &buttons {
         if entity == target && ui_click_release_confirms(*interaction) {
-            session.active = !session.active;
+            let on = session.layout_mode();
+            session.set_layout_mode(!on);
             break;
         }
     }

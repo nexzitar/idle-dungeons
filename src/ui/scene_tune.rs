@@ -296,12 +296,12 @@ pub fn title_scene_tune_selection_gizmo(
         .as_deref()
         .unwrap_or(TITLE_ELEMENT_FIREPLACE);
     let col_active = BorderColor::all(Color::srgba(1.0, 0.2, 0.85, 0.95));
-    let col_off = BorderColor::DEFAULT;
+    let col_idle = BorderColor::all(Color::srgba(0.0, 0.0, 0.0, 0.0));
 
     for (mut border, mut node) in &mut fireplace {
         let on = show && sel == TITLE_ELEMENT_FIREPLACE;
-        *border = if on { col_active } else { col_off };
-        node.border = UiRect::all(Val::Px(if on { 2.0 } else { 0.0 }));
+        *border = if on { col_active } else { col_idle };
+        node.border = UiRect::all(Val::Px(2.0));
     }
     for (marker, mut border, mut node) in &mut figures {
         let id = if marker.0 == 0 {
@@ -310,8 +310,8 @@ pub fn title_scene_tune_selection_gizmo(
             TITLE_ELEMENT_ALLY_SLOT
         };
         let on = show && sel == id;
-        *border = if on { col_active } else { col_off };
-        node.border = UiRect::all(Val::Px(if on { 2.0 } else { 0.0 }));
+        *border = if on { col_active } else { col_idle };
+        node.border = UiRect::all(Val::Px(2.0));
     }
 }
 
@@ -320,6 +320,7 @@ pub fn title_scene_tune_hotkeys(
     kb: Res<ButtonInput<KeyCode>>,
     mut layout: ResMut<TitleSceneLayout>,
     mut session: ResMut<PresentationEditorSession>,
+    field_edit: Res<crate::presentation::editor::PresentationEditorFieldEditState>,
 ) {
     if kb.just_pressed(KeyCode::Backquote) {
         session.toggle_layout_mode();
@@ -330,6 +331,10 @@ pub fn title_scene_tune_hotkeys(
         );
     }
     if !session.layout_mode() {
+        return;
+    }
+
+    if field_edit.is_editing() {
         return;
     }
 

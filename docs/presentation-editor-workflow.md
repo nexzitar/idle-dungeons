@@ -24,7 +24,7 @@ When the session is active:
 |------|------|
 | **Banner** | `Presentation Mode · {element id}` plus a short hint pointing at backtick / Tab cycling. |
 | **Left — Hierarchy** | Buttons **Fireplace**, **Lead slot**, **Ally slot** (ids `fireplace`, `lead_slot`, `ally_slot`). Sets **`selected_element`** for the inspector. |
-| **Right — Inspector** | Stepped edits for offsets, scales, size basis, rotation, exposure / glow / bloom, global Z; **Pivot** / **Anchor** summary is read-only. **− / +** mirror the debug hotkey step sizes in **`TITLE_SCENE_TUNE_HINT`** in `src/ui/scene_tune.rs`. |
+| **Right — Inspector** | **Click a value** to type directly (**Enter** applies, **Esc** cancels). **− / +** use fine steps; hold **Shift** for **10×** steps. **Pivot** / **Anchor** summary is read-only. |
 | **Footer** | **Save to disk** (same as **Ctrl+S**) and **Reload from disk** (same as **F5**). |
 
 **Backtick** toggles layout mode globally. Persistence uses **`TitleSceneLayout::try_save_to_disk`** / **`try_load_from_disk`**, wired to **`assets/tuning/title_scene.json`** (see below).
@@ -38,7 +38,7 @@ Implementation reference: `src/presentation/editor/overlay.rs` (spawn), `src/ui/
 With the editor active:
 
 - **Pick:** left **mouse down** on a tunable stage host selects that element (**topmost by `GlobalZIndex`**, ties broken by stable entity ordering). Hosts carry `PresentationElementHost` (`src/ui/components.rs`).
-- **Drag:** after pressing on a host, **move** while holding the button to accumulate motion into **`offset_x`** / **`offset_y`**. Hold **Shift** for a **×10** step on drag deltas.
+- **Drag:** after pressing on a host, **move** at least a few pixels while holding the button to nudge **`offset_x`** / **`offset_y`** (avoids click-only jitter). Hold **Shift** for **×10** drag steps.
 
 Panel hits use picking / focus so hierarchy and inspector do not accidentally drive stage selection. Logic: `src/presentation/editor/mouse.rs`.
 

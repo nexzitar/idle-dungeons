@@ -63,6 +63,10 @@ pub enum PresentationEditorTuneField {
 #[derive(Component)]
 pub struct PresentationEditorTuneValueText(pub PresentationEditorTuneField);
 
+/// Click the value to type a number directly (Enter applies, Esc cancels).
+#[derive(Component)]
+pub struct PresentationEditorTuneValueButton(pub PresentationEditorTuneField);
+
 /// Read-only pivot / anchor summary at the bottom of the inspector.
 #[derive(Component)]
 pub struct PresentationEditorPivotSummaryText;
@@ -402,7 +406,7 @@ fn tune_row(
                         field,
                         positive: false,
                     },
-                    UiTooltip::txt("Decrease value (same step as debug hotkeys)."),
+                    UiTooltip::txt("Decrease (Shift = 10× step)."),
                 ))
                 .with_children(|b| {
                     b.spawn((
@@ -411,13 +415,33 @@ fn tune_row(
                         TextColor(UiTheme::body()),
                     ));
                 });
+                let val_pal = UiButtonPalette::panel_secondary();
                 r.spawn((
-                    Text::new("0.00"),
-                    TextFont::from_font_size(UiTheme::FONT_CAPTION),
-                    TextColor(UiTheme::muted_cream()),
-                    TextLayout::new_with_justify(Justify::Center),
-                    PresentationEditorTuneValueText(field),
-                ));
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        min_width: Val::Px(72.0),
+                        min_height: Val::Px(26.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(Val::Px(1.0)),
+                        ..default()
+                    },
+                    Button,
+                    BackgroundColor(val_pal.idle_bg.into()),
+                    BorderColor::from(val_pal.idle_border),
+                    val_pal,
+                    PresentationEditorTuneValueButton(field),
+                    UiTooltip::txt("Click to type a value. Enter applies, Esc cancels. Hold Shift with −/+ for 10× steps."),
+                ))
+                .with_children(|b| {
+                    b.spawn((
+                        Text::new("0.00"),
+                        TextFont::from_font_size(UiTheme::FONT_CAPTION),
+                        TextColor(UiTheme::muted_cream()),
+                        TextLayout::new_with_justify(Justify::Center),
+                        PresentationEditorTuneValueText(field),
+                    ));
+                });
                 r.spawn((
                     Node {
                         box_sizing: BoxSizing::BorderBox,
@@ -436,7 +460,7 @@ fn tune_row(
                         field,
                         positive: true,
                     },
-                    UiTooltip::txt("Increase value (same step as debug hotkeys)."),
+                    UiTooltip::txt("Increase (Shift = 10× step)."),
                 ))
                 .with_children(|b| {
                     b.spawn((

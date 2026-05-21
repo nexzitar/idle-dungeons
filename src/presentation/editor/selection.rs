@@ -57,6 +57,6 @@ pub fn presentation_editor_hover_outline(
     let mut paint = set.p1();
     if let Ok((mut border, mut node)) = paint.get_mut(hovered_entity) {
         *border = hover_col;
-        node.border = UiRect::all(Val::Px(1.0));
+        node.border = UiRect::all(Val::Px(2.0));
     }
 }

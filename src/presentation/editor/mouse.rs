@@ -2,6 +2,7 @@
 
 use crate::presentation::editor::{
     tune_for_scene_mut, PresentationEditorDragState, PresentationEditorSession,
+    DRAG_START_THRESHOLD_PX,
 };
 use crate::presentation::element::PresentationElementId;
 use crate::ui::components::PresentationElementHost;
@@ -39,6 +40,7 @@ fn top_pressed_presentation_host(
 pub fn presentation_editor_pick(
     mouse: Res<ButtonInput<MouseButton>>,
     mut session: ResMut<PresentationEditorSession>,
+    mut field_edit: ResMut<crate::presentation::editor::PresentationEditorFieldEditState>,
     q: Query<(
         Entity,
         &Interaction,
@@ -54,6 +56,7 @@ pub fn presentation_editor_pick(
     }
     if let Some(id) = top_pressed_presentation_host(&q) {
         session.selected_element = Some(id);
+        field_edit.clear();
     }
 }
 
@@ -76,15 +79,18 @@ pub fn presentation_editor_drag(
 
     if !session.active {
         drag.active_host_drag = None;
+        drag.pending_delta = Vec2::ZERO;
         return;
     }
 
     if mouse.just_released(MouseButton::Left) {
         drag.active_host_drag = None;
+        drag.pending_delta = Vec2::ZERO;
     }
 
     if mouse.just_pressed(MouseButton::Left) {
         drag.active_host_drag = top_pressed_presentation_host(&q);
+        drag.pending_delta = Vec2::ZERO;
     }
 
     let Some(host_id) = drag.active_host_drag.clone() else {
@@ -92,6 +98,11 @@ pub fn presentation_editor_drag(
     };
 
     if !mouse.pressed(MouseButton::Left) || accumulated.delta == Vec2::ZERO {
+        return;
+    }
+
+    drag.pending_delta += accumulated.delta;
+    if drag.pending_delta.length() < DRAG_START_THRESHOLD_PX {
         return;
     }
 

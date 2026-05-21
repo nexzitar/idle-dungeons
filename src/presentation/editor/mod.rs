@@ -1,5 +1,6 @@
 //! In-engine presentation editor: session state, overlay UI, and (later) mouse / gizmos.
 
+mod field_edit;
 mod mouse;
 mod overlay;
 mod selection;
@@ -10,7 +11,11 @@ pub use overlay::{
     PresentationEditorPivotSummaryText, PresentationEditorReloadButton, PresentationEditorRoot,
     PresentationEditorSaveButton, PresentationEditorSettingsToggleButton,
     PresentationEditorSettingsToggleText, PresentationEditorTuneDeltaButton,
-    PresentationEditorTuneField, PresentationEditorTuneValueText,
+    PresentationEditorTuneField, PresentationEditorTuneValueButton, PresentationEditorTuneValueText,
+};
+
+pub use field_edit::{
+    presentation_editor_tune_field_keyboard, PresentationEditorFieldEditState,
 };
 
 #[cfg(debug_assertions)]
@@ -52,7 +57,11 @@ impl Default for PresentationEditorGizmoFlags {
 #[derive(Resource, Default)]
 pub struct PresentationEditorDragState {
     pub active_host_drag: Option<PresentationElementId>,
+    /// Pointer motion accumulated before layout offsets change (avoids click nudge).
+    pub pending_delta: Vec2,
 }
+
+pub(crate) const DRAG_START_THRESHOLD_PX: f32 = 3.0;
 
 /// Authoring session for layout / scene presentation editing (title camp first consumer).
 #[derive(Resource)]
@@ -151,6 +160,7 @@ pub fn toggle_presentation_editor_visibility(
 pub fn sync_presentation_editor_ui(
     session: Res<PresentationEditorSession>,
     layout: Res<TitleSceneLayout>,
+    field_edit: Res<PresentationEditorFieldEditState>,
     hint_logged: Option<Res<crate::ui::scene_tune::TitleSceneTuneHintLogged>>,
     mut text_queries: ParamSet<(
         Query<&mut Text, With<PresentationEditorBannerTitleText>>,
@@ -177,7 +187,12 @@ pub fn sync_presentation_editor_ui(
         .unwrap_or(false);
     let show_first_visit = hint_logged.as_ref().map(|h| !h.0).unwrap_or(false);
 
-    if !session.is_changed() && !layout.is_changed() && !hint_changed && !show_first_visit {
+    if !session.is_changed()
+        && !layout.is_changed()
+        && !field_edit.is_changed()
+        && !hint_changed
+        && !show_first_visit
+    {
         return;
     }
 
@@ -209,7 +224,11 @@ pub fn sync_presentation_editor_ui(
     }
 
     for (marker, mut text) in text_queries.p3() {
-        **text = format_tune_field(tune, marker.0);
+        **text = if field_edit.field == Some(marker.0) {
+            format!("{}▏", field_edit.buffer)
+        } else {
+            format_tune_field(tune, marker.0)
+        };
     }
 
     let sel_owned = sel.to_string();
@@ -230,32 +249,38 @@ pub fn apply_presentation_tune_delta(
     tune: &mut PresentationElementTune,
     field: PresentationEditorTuneField,
     positive: bool,
+    coarse: bool,
 ) {
     let sign = if positive { 1.0 } else { -1.0 };
+    let mult = if coarse { 10.0 } else { 1.0 };
     match field {
-        PresentationEditorTuneField::OffsetX => tune.offset_x += sign * 1.0,
-        PresentationEditorTuneField::OffsetY => tune.offset_y += sign * 1.0,
+        PresentationEditorTuneField::OffsetX => tune.offset_x += sign * mult,
+        PresentationEditorTuneField::OffsetY => tune.offset_y += sign * mult,
         PresentationEditorTuneField::ScaleX => {
-            tune.scale_x = (tune.scale_x + sign * 0.01).clamp(0.15, 3.0);
+            tune.scale_x = (tune.scale_x + sign * 0.01 * mult).clamp(0.15, 3.0);
         }
         PresentationEditorTuneField::ScaleY => {
-            tune.scale_y = (tune.scale_y + sign * 0.01).clamp(0.15, 3.0);
+            tune.scale_y = (tune.scale_y + sign * 0.01 * mult).clamp(0.15, 3.0);
         }
         PresentationEditorTuneField::SizeBasis => {
-            tune.size_basis = (tune.size_basis + sign * 2.0).clamp(20.0, 640.0);
+            tune.size_basis = (tune.size_basis + sign * 2.0 * mult).clamp(20.0, 640.0);
         }
-        PresentationEditorTuneField::RotationDeg => tune.rotation_deg += sign * 1.0,
+        PresentationEditorTuneField::RotationDeg => tune.rotation_deg += sign * mult,
         PresentationEditorTuneField::Exposure => {
-            tune.exposure = (tune.exposure + sign * 0.02).clamp(0.0, 4.0);
+            tune.exposure = (tune.exposure + sign * 0.02 * mult).clamp(0.0, 4.0);
         }
         PresentationEditorTuneField::Glow => {
-            tune.glow = (tune.glow + sign * 0.02).clamp(0.0, 3.0);
+            tune.glow = (tune.glow + sign * 0.02 * mult).clamp(0.0, 3.0);
         }
         PresentationEditorTuneField::Bloom => {
-            tune.bloom = (tune.bloom + sign * 0.02).clamp(0.0, 2.0);
+            tune.bloom = (tune.bloom + sign * 0.02 * mult).clamp(0.0, 2.0);
         }
         PresentationEditorTuneField::GlobalZ => {
-            let d = if positive { 1 } else { -1 };
+            let d = if positive {
+                mult as i32
+            } else {
+                -(mult as i32)
+            };
             tune.global_z = tune.global_z.saturating_add(d);
         }
     }
@@ -272,7 +297,7 @@ pub(crate) fn tune_for_scene_mut<'a>(
     }
 }
 
-pub(crate) fn tune_for_scene<'a>(
+pub fn tune_for_scene<'a>(
     layout: &'a TitleCampSceneLayout,
     id: &str,
 ) -> &'a PresentationElementTune {
@@ -283,7 +308,7 @@ pub(crate) fn tune_for_scene<'a>(
     }
 }
 
-fn format_tune_field(tune: &PresentationElementTune, field: PresentationEditorTuneField) -> String {
+pub(crate) fn format_tune_field(tune: &PresentationElementTune, field: PresentationEditorTuneField) -> String {
     match field {
         PresentationEditorTuneField::OffsetX => format!("{:.1}", tune.offset_x),
         PresentationEditorTuneField::OffsetY => format!("{:.1}", tune.offset_y),
