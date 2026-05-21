@@ -10,15 +10,16 @@ mod fire;
 pub mod markers;
 pub mod pivot;
 pub mod scene;
+mod track;
 
 pub use anchor::{resolve_element_translation_px, SceneAnchorPose};
 pub use editor::{PresentationEditorGizmoFlags, PresentationEditorSession};
 pub use element::{PresentationElementId, PresentationElementTune};
 pub use fire::{
-    spawn_title_fire_layers, PresentationFirePart, PresentationFireStackRoot, TitleFirePresentationTune,
-    TITLE_FIRE_GROUND_LIGHT_H_PX, TITLE_FIRE_GROUND_LIGHT_W_MULT,
+    spawn_title_fire_layers, PresentationFirePart, PresentationFireStackRoot,
+    TitleFirePresentationTune, TITLE_FIRE_GROUND_LIGHT_H_PX, TITLE_FIRE_GROUND_LIGHT_W_MULT,
+    TITLE_FIRE_TRACK_EVAL_SEED,
 };
 pub use pivot::{pivot_translation_compensation_px, ScenePivot};
-pub use scene::{
-    TitleAmbientPresentationTune, TitleCampSceneLayout, TitleCampSceneTuneTarget,
-};
+pub use scene::{TitleAmbientPresentationTune, TitleCampSceneLayout, TitleCampSceneTuneTarget};
+pub use track::{CurveBlendMode, CurveKind, CurveLayer, PresentationTrack};

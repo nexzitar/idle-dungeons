@@ -8,6 +8,11 @@ use bevy::prelude::*;
 use bevy::ui::{BorderRadius, UiTransform, ZIndex};
 use serde::{Deserialize, Serialize};
 
+use crate::presentation::track::{CurveBlendMode, CurveKind, CurveLayer, PresentationTrack};
+
+/// Deterministic seed for [`PresentationTrack::evaluate`] on title fire ambient layers.
+pub const TITLE_FIRE_TRACK_EVAL_SEED: u64 = 0xF1EE_CAFE_DA7A_u64;
+
 /// Width multiplier (`base_w × this`) for the soft ground ellipse under the fire.
 pub const TITLE_FIRE_GROUND_LIGHT_W_MULT: f32 = 1.5;
 /// Layout height (px) for the ground wash; kept low versus width for an elliptical pool of light.
@@ -40,6 +45,12 @@ pub struct TitleFirePresentationTune {
     pub glow_min_alpha: f32,
     pub ground_flicker_hz: f32,
     pub ground_max_alpha: f32,
+    /// Optional compositional glow alpha (`ImageNode` radial). Absent → legacy scalar synthesis.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub glow_alpha: Option<PresentationTrack>,
+    /// Optional compositional ground wash alpha. Absent → legacy scalar synthesis.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ground_alpha: Option<PresentationTrack>,
 }
 
 impl Default for TitleFirePresentationTune {
@@ -54,6 +65,70 @@ impl Default for TitleFirePresentationTune {
             glow_min_alpha: 0.08_f32,
             ground_flicker_hz: 0.28_f32,
             ground_max_alpha: 0.28_f32,
+            glow_alpha: None,
+            ground_alpha: None,
+        }
+    }
+}
+
+impl TitleFirePresentationTune {
+    /// Legacy glow scalar mapping → compositional track (matches absent `glow_alpha` runtime path).
+    #[must_use]
+    pub fn synthesize_glow_track_from_legacy(&self) -> PresentationTrack {
+        PresentationTrack {
+            base_value: self.glow_max_alpha * 0.9,
+            layers: vec![CurveLayer {
+                kind: CurveKind::Sine,
+                frequency_hz: self.glow_pulse_hz,
+                amplitude: self.glow_pulse_scale,
+                phase: 0.0,
+                weight: 1.0,
+                blend: CurveBlendMode::Multiplicative,
+            }],
+        }
+    }
+
+    /// Legacy ground scalar approximation → compositional track (single sine vs nested legacy sine).
+    #[must_use]
+    pub fn synthesize_ground_track_from_legacy(&self) -> PresentationTrack {
+        PresentationTrack {
+            base_value: self.ground_max_alpha * 0.5,
+            layers: vec![CurveLayer {
+                kind: CurveKind::Sine,
+                frequency_hz: self.ground_flicker_hz,
+                amplitude: self.ground_max_alpha * 0.11,
+                phase: 0.0,
+                weight: 1.0,
+                blend: CurveBlendMode::Additive,
+            }],
+        }
+    }
+
+    /// Glow opacity before clamp to `[glow_min_alpha, 1]`.
+    #[must_use]
+    pub fn evaluate_glow_alpha_at(&self, t_secs: f32, seed: u64) -> f32 {
+        match &self.glow_alpha {
+            Some(track) => track.evaluate(t_secs, seed),
+            None => {
+                let pulse = (1.0_f32
+                    + self.glow_pulse_scale
+                        * (std::f32::consts::TAU * t_secs * self.glow_pulse_hz).sin())
+                .max(0.0);
+                self.glow_max_alpha * 0.9 * pulse
+            }
+        }
+    }
+
+    /// Ground wash RGBA alpha factor before clamp.
+    #[must_use]
+    pub fn evaluate_ground_alpha_at(&self, t_secs: f32, seed: u64) -> f32 {
+        match &self.ground_alpha {
+            Some(track) => track.evaluate(t_secs, seed),
+            None => {
+                let ground_phase = std::f32::consts::TAU * t_secs * self.ground_flicker_hz
+                    + 0.3 * (std::f32::consts::TAU * t_secs * (self.ground_flicker_hz * 0.5)).sin();
+                self.ground_max_alpha * (0.5 + 0.11 * ground_phase.sin())
+            }
         }
     }
 }
@@ -80,9 +155,7 @@ pub fn spawn_title_fire_layers(
                 border_radius: BorderRadius::percent(62.0, 62.0, 54.0, 54.0),
                 ..default()
             },
-            BackgroundColor(
-                Color::srgba(0.86, 0.36, 0.13, cfg.ground_max_alpha * 0.36).into(),
-            ),
+            BackgroundColor(Color::srgba(0.86, 0.36, 0.13, cfg.ground_max_alpha * 0.36).into()),
             ZIndex(-4),
             PresentationFirePart::GroundLight,
         ));
@@ -173,4 +246,19 @@ pub fn spawn_title_fire_layers(
             ));
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn synthesized_glow_track_matches_scalar_fallback() {
+        let cfg = TitleFirePresentationTune::default();
+        let t = 0.777_f32;
+        let seed = 12_u64;
+        let a = cfg.evaluate_glow_alpha_at(t, seed);
+        let b = cfg.synthesize_glow_track_from_legacy().evaluate(t, seed);
+        assert!((a - b).abs() < 1e-5, "a={} b={}", a, b);
+    }
 }

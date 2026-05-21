@@ -6,10 +6,6 @@
 //!   selection. Hotkeys run **before** UI focus navigation so arrows do not drive the wrong node.
 //! - **Bloom:** stored in JSON for future post-processing; not drawn in the minimal `2d` pipeline.
 
-use bevy::log::{info, warn};
-use bevy::prelude::*;
-use bevy::text::{TextColor, TextFont};
-use bevy::ui::{GlobalZIndex, UiTransform, Val2};
 use crate::presentation::editor::{
     TITLE_ELEMENT_ALLY_SLOT, TITLE_ELEMENT_FIREPLACE, TITLE_ELEMENT_LEAD_SLOT,
 };
@@ -17,7 +13,12 @@ use crate::presentation::{
     pivot_translation_compensation_px, resolve_element_translation_px, PresentationEditorSession,
     PresentationFirePart, PresentationFireStackRoot, SceneAnchorPose, TitleCampSceneLayout,
     TitleCampSceneTuneTarget, TITLE_FIRE_GROUND_LIGHT_H_PX, TITLE_FIRE_GROUND_LIGHT_W_MULT,
+    TITLE_FIRE_TRACK_EVAL_SEED,
 };
+use bevy::log::{info, warn};
+use bevy::prelude::*;
+use bevy::text::{TextColor, TextFont};
+use bevy::ui::{GlobalZIndex, UiTransform, Val2};
 use std::collections::HashMap;
 use std::f32::consts::TAU;
 
@@ -91,13 +92,8 @@ pub fn apply_fireplace_host(
         tune.offset_x,
         tune.offset_y,
     );
-    let comp = pivot_translation_compensation_px(
-        tune.pivot,
-        base_w,
-        base_h,
-        tune.scale_x,
-        tune.scale_y,
-    );
+    let comp =
+        pivot_translation_compensation_px(tune.pivot, base_w, base_h, tune.scale_x, tune.scale_y);
     ui_tx.translation = Val2::px(base.x + comp.x, base.y + comp.y);
     ui_tx.scale = Vec2::new(tune.scale_x, tune.scale_y);
     ui_tx.rotation = Rot2::degrees(tune.rotation_deg);
@@ -129,11 +125,7 @@ pub fn sync_title_scene_elements(
     layout: Res<TitleSceneLayout>,
     mut groups: ParamSet<(
         Query<
-            (
-                &mut Node,
-                &mut UiTransform,
-                &mut GlobalZIndex,
-            ),
+            (&mut Node, &mut UiTransform, &mut GlobalZIndex),
             With<crate::ui::components::TitleCampfireTuneMarker>,
         >,
         Query<
@@ -242,19 +234,22 @@ pub fn tick_title_fire_ambient(
     let glow_pulse =
         (1.0_f32 + cfg.glow_pulse_scale * (TAU * t * cfg.glow_pulse_hz).sin()).max(0.0);
 
+    let glow_alpha_eval = cfg.evaluate_glow_alpha_at(t, TITLE_FIRE_TRACK_EVAL_SEED);
+    let ground_alpha_eval = cfg.evaluate_ground_alpha_at(t, TITLE_FIRE_TRACK_EVAL_SEED);
+
     for (part, mut img) in parts.p0().iter_mut() {
         match *part {
             PresentationFirePart::Flame(idx) => {
                 let i = idx as f32;
-                let wave = 0.5 + 0.5 * (TAU * t / period + i / n * TAU).sin();
+                let stagger = TAU * i / n + 0.27_f32 * i;
+                let wave = 0.5 + 0.5 * (TAU * t / period + stagger).sin();
                 let norm_den = (n * 0.5).max(1.0);
                 let alpha = (wave / norm_den).clamp(0.12, 0.42);
                 let base = img.color.to_srgba();
                 img.color = Color::srgba(base.red, base.green, base.blue, alpha);
             }
             PresentationFirePart::Glow => {
-                let a = (cfg.glow_max_alpha * 0.9 * glow_pulse)
-                    .clamp(cfg.glow_min_alpha.max(0.0_f32), 1.0);
+                let a = glow_alpha_eval.clamp(cfg.glow_min_alpha.max(0.0_f32), 1.0);
                 img.color = Color::srgba(1.0, 0.55, 0.18, a);
             }
             _ => {}
@@ -268,10 +263,7 @@ pub fn tick_title_fire_ambient(
         }
     }
 
-    let ground_phase =
-        TAU * t * cfg.ground_flicker_hz + 0.3 * (TAU * t * (cfg.ground_flicker_hz * 0.5)).sin();
-    let g_alpha =
-        cfg.ground_max_alpha * (0.5 + 0.11 * ground_phase.sin());
+    let g_alpha = ground_alpha_eval;
 
     for (part, mut bg) in parts.p1().iter_mut() {
         if matches!(*part, PresentationFirePart::GroundLight) {
@@ -298,8 +290,7 @@ pub fn title_scene_tune_selection_gizmo(
         Without<crate::ui::components::TitleCampfireTuneMarker>,
     >,
 ) {
-    let show = session.layout_mode()
-        && session.gizmo_flags.selection_outline;
+    let show = session.layout_mode() && session.gizmo_flags.selection_outline;
     let sel = session
         .selected_element
         .as_deref()

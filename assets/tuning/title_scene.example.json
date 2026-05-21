@@ -88,7 +88,49 @@
     "glow_max_alpha": 0.22,
     "glow_min_alpha": 0.08,
     "ground_flicker_hz": 0.28,
-    "ground_max_alpha": 0.28
+    "ground_max_alpha": 0.28,
+    "glow_alpha": {
+      "base_value": 0.198,
+      "layers": [
+        {
+          "kind": "sine",
+          "frequency_hz": 0.22,
+          "amplitude": 0.04,
+          "phase": 0.0,
+          "weight": 1.0,
+          "blend": "multiplicative"
+        },
+        {
+          "kind": "smooth_noise",
+          "frequency_hz": 0.17,
+          "amplitude": 0.024,
+          "phase": 1.37,
+          "weight": 1.0,
+          "blend": "additive"
+        }
+      ]
+    },
+    "ground_alpha": {
+      "base_value": 0.14,
+      "layers": [
+        {
+          "kind": "sine",
+          "frequency_hz": 0.23,
+          "amplitude": 0.065,
+          "phase": 2.09,
+          "weight": 1.0,
+          "blend": "additive"
+        },
+        {
+          "kind": "smooth_noise",
+          "frequency_hz": 0.09,
+          "amplitude": 0.028,
+          "phase": 0.62,
+          "weight": 0.85,
+          "blend": "additive"
+        }
+      ]
+    }
   },
   "ambient": {
     "near_fire_prop_tint": 0.0
