@@ -11,8 +11,9 @@ use bevy::prelude::*;
 use bevy::text::{TextColor, TextFont};
 use bevy::ui::{GlobalZIndex, UiTransform, Val2};
 use crate::presentation::{
-    pivot_translation_compensation_px, resolve_element_translation_px, PresentationFirePart,
-    PresentationFireStackRoot, SceneAnchorPose, TitleCampSceneLayout, TitleCampSceneTuneTarget,
+    pivot_translation_compensation_px, resolve_element_translation_px, PresentationEditorSession,
+    PresentationFirePart, PresentationFireStackRoot, SceneAnchorPose, TitleCampSceneLayout,
+    TitleCampSceneTuneTarget,
 };
 use std::collections::HashMap;
 use std::f32::consts::TAU;
@@ -20,6 +21,9 @@ use std::f32::consts::TAU;
 pub type TitleUiElementTune = crate::presentation::PresentationElementTune;
 pub type TitleSceneLayout = TitleCampSceneLayout;
 pub type TitleSceneTuneTarget = TitleCampSceneTuneTarget;
+
+/// Legacy name for [`PresentationEditorSession`] (title camp scene tuning).
+pub type TitleSceneTuneSession = PresentationEditorSession;
 
 const FIREPLACE_IMG_W: f32 = 1254.0;
 const FIREPLACE_IMG_H: f32 = 1254.0;
@@ -29,13 +33,6 @@ Title · scene layout (debug): **`** = toggle layout mode; Tab / Shift+Tab = tar
 arrows or IJKL = move; [ ] = scale (Alt=width, Shift=height); - / = size basis; \
 Q / E = rotate; N / M = layer (global Z); 1/2 exposure · 3/4 glow · 5/6 bloom (stored); \
 P = print JSON; Ctrl+S = save; F5 = reload";
-
-#[derive(Resource, Default)]
-pub struct TitleSceneTuneSession {
-    /// Backtick toggles; when false, layout hotkeys are inactive (UI nav uses arrows normally).
-    pub layout_mode: bool,
-    pub target: TitleSceneTuneTarget,
-}
 
 /// Pixel width × height of the fireplace art box from [`TitleUiElementTune::size_basis`] (image height).
 #[must_use]
@@ -272,7 +269,7 @@ pub fn tick_title_fire_ambient(
 
 /// Magenta outline on the selected target while layout mode is on.
 pub fn title_scene_tune_selection_gizmo(
-    session: Res<TitleSceneTuneSession>,
+    session: Res<PresentationEditorSession>,
     mut fireplace: Query<
         (&mut BorderColor, &mut Node),
         With<crate::ui::components::TitleCampfireTuneMarker>,
@@ -286,8 +283,9 @@ pub fn title_scene_tune_selection_gizmo(
         Without<crate::ui::components::TitleCampfireTuneMarker>,
     >,
 ) {
-    let show = session.layout_mode;
-    let sel = session.target;
+    let show = session.layout_mode()
+        && session.gizmo_flags.selection_outline;
+    let sel = session.target();
     let col_active = BorderColor::all(Color::srgba(1.0, 0.2, 0.85, 0.95));
     let col_off = BorderColor::DEFAULT;
 
@@ -312,16 +310,17 @@ pub fn title_scene_tune_selection_gizmo(
 pub fn title_scene_tune_hotkeys(
     kb: Res<ButtonInput<KeyCode>>,
     mut layout: ResMut<TitleSceneLayout>,
-    mut session: ResMut<TitleSceneTuneSession>,
+    mut session: ResMut<PresentationEditorSession>,
 ) {
     if kb.just_pressed(KeyCode::Backquote) {
-        session.layout_mode = !session.layout_mode;
+        session.toggle_layout_mode();
         info!(
             "Title scene layout mode: {} (target: {:?})",
-            session.layout_mode, session.target
+            session.layout_mode(),
+            session.target()
         );
     }
-    if !session.layout_mode {
+    if !session.layout_mode() {
         return;
     }
 
@@ -332,15 +331,16 @@ pub fn title_scene_tune_hotkeys(
     let scale_step = if shift { 0.05 } else { 0.01 };
 
     if kb.just_pressed(KeyCode::Tab) {
-        session.target = if shift {
-            session.target.prev()
+        let next = if shift {
+            session.target().prev()
         } else {
-            session.target.next()
+            session.target().next()
         };
-        info!("Layout target: {:?}", session.target);
+        session.set_target(next);
+        info!("Layout target: {:?}", session.target());
     }
 
-    let t = layout.tune_mut(session.target);
+    let t = layout.tune_mut(session.target());
     let move_left = kb.just_pressed(KeyCode::ArrowLeft) || kb.just_pressed(KeyCode::KeyJ);
     let move_right = kb.just_pressed(KeyCode::ArrowRight) || kb.just_pressed(KeyCode::KeyL);
     let move_up = kb.just_pressed(KeyCode::ArrowUp) || kb.just_pressed(KeyCode::KeyI);

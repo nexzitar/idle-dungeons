@@ -4,6 +4,7 @@
 //! See `docs/presentation-scene-composition.md`.
 
 mod anchor;
+pub mod editor;
 pub mod element;
 mod fire;
 pub mod markers;
@@ -11,6 +12,7 @@ pub mod pivot;
 pub mod scene;
 
 pub use anchor::{resolve_element_translation_px, SceneAnchorPose};
+pub use editor::{PresentationEditorGizmoFlags, PresentationEditorSession};
 pub use element::{PresentationElementId, PresentationElementTune};
 pub use fire::{
     spawn_title_fire_layers, PresentationFirePart, PresentationFireStackRoot, TitleFirePresentationTune,

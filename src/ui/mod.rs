@@ -6,6 +6,7 @@ pub mod log_panel;
 pub mod mockup_layout;
 pub mod placeholder_graphics;
 pub mod run_panel;
+pub mod scene_tune;
 pub mod skill_book;
 pub mod skill_shop;
 pub mod stash_sort;
@@ -25,32 +26,32 @@ use crate::domain::items::ItemInstance;
 use crate::domain::run::{RunPlaybackFrameKind, RunSummary};
 use crate::ui::build_panel::build_panel_text;
 use crate::ui::components::{
-    AcceptRewardsButton, BuildScreen, CampfireFlame, EquipItemButton, GearHubBackdrop,
+    AcceptRewardsButton, BuildScreen, EquipItemButton, FloatingCombatPopup, GearHubBackdrop,
     GearHubCloseButton, GearHubOpenButton, GearHubRoot, HeroNameDisplayText, HeroNameEditButton,
     HeroNameEditState, MainCamera, PlaybackAggroArrowLine, PlaybackAggroArrowText,
-    PlaybackAllyPortraitBlock,
-    PlaybackCaptionText, PlaybackCombatLogPanel, PlaybackCombatLogToggleLabel, PlaybackDepthText,
+    PlaybackAllyBarFill, PlaybackAllyCastFill, PlaybackAllyCdFill, PlaybackAllyInstantRechargeFill,
+    PlaybackAllyPortraitBlock, PlaybackAllySkillGcdFill, PlaybackCaptionText,
+    PlaybackCombatLogPanel, PlaybackCombatLogToggleLabel, PlaybackDepthText,
     PlaybackDmgMeterEnemyFill, PlaybackDmgMeterEnemyValue, PlaybackDmgMeterLeadFill,
     PlaybackDmgMeterLeadValue, PlaybackDmgMeterPartnerFill, PlaybackDmgMeterPartnerRow,
     PlaybackDmgMeterPartnerValue, PlaybackEnemyBarFill, PlaybackEnemyDebuffLine,
-    PlaybackEnemyNameText, PlaybackEnemyPortraitBlock, PlaybackHeroBarFill, PlaybackAllyBarFill,
-    PlaybackAllyCastFill, PlaybackAllyCdFill, PlaybackAllyInstantRechargeFill,
-    PlaybackAllySkillGcdFill, PlaybackLeadCastFill, PlaybackLeadCdFill,
-    PlaybackLeadInstantRechargeFill, PlaybackLeadSkillGcdFill, PlaybackFoeCastFill, PlaybackFoeCdFill,
-    PlaybackFoeAltCastFill, PlaybackFoeAltCdFill, PlaybackFoeAltTimingRow,
-    PlaybackHeroDebuffLine, PlaybackLogScrollRegion, PlaybackLogText, PlaybackProgressBarFill,
-    PlaybackProgressLabel, PlaybackRoomKindText, PlaybackTheaterFloatLayer, ResetProgressButton,
-    RunPlaybackScreen, SalvageItemButton, SettingsButton, SettingsModalBackdrop,
-    SettingsModalCloseButton, SettingsModalRoot, SkillBookBackdrop,
-    SkillBookCloseButton, SkillBookPickButton, SkillBookRoot, SkillShopBackdrop,
-    SkillShopBuyButton, SkillShopCloseButton, SkillShopOpenButton, SkillShopRoot, SkillSlotButton,
+    PlaybackEnemyNameText, PlaybackEnemyPortraitBlock, PlaybackFoeAltCastFill,
+    PlaybackFoeAltCdFill, PlaybackFoeAltTimingRow, PlaybackFoeCastFill, PlaybackFoeCdFill,
+    PlaybackHeroBarFill, PlaybackHeroDebuffLine, PlaybackLeadCastFill, PlaybackLeadCdFill,
+    PlaybackLeadInstantRechargeFill, PlaybackLeadSkillGcdFill, PlaybackLogScrollRegion,
+    PlaybackLogText, PlaybackProgressBarFill, PlaybackProgressLabel, PlaybackRoomKindText,
     PlaybackSpeedDecButton, PlaybackSpeedIncButton, PlaybackSpeedValueText,
-    SkipPlaybackButton, StartRunButton, StashSortCycleButton, SummaryScreen,
-    TitleEnterCampButton, TitleQuitButton, TitleScreen, ToggleCombatLogButton, TopBarField,
-    UiButtonPalette, UiRoot, UiScrollContent, UiScrollRegion, UiScrollState, UiTooltip,
-    FloatingCombatPopup,
+    PlaybackTheaterFloatLayer, ResetProgressButton, RunPlaybackScreen, SalvageItemButton,
+    SettingsButton, SettingsModalBackdrop, SettingsModalCloseButton, SettingsModalRoot,
+    SkillBookBackdrop, SkillBookCloseButton, SkillBookPickButton, SkillBookRoot, SkillShopBackdrop,
+    SkillShopBuyButton, SkillShopCloseButton, SkillShopOpenButton, SkillShopRoot, SkillSlotButton,
+    SkipPlaybackButton, StartRunButton, StashSortCycleButton, SummaryScreen, TitleEnterCampButton,
+    TitleQuitButton, TitleScreen, ToggleCombatLogButton, TopBarField, UiButtonPalette, UiRoot,
+    UiScrollContent, UiScrollRegion, UiScrollState, UiTooltip,
 };
 use crate::ui::placeholder_graphics::UiPlaceholderImages;
+use crate::presentation::PresentationEditorSession;
+use crate::ui::scene_tune::TitleSceneLayout;
 use crate::ui::theme::{
     body_text, caption_text, format_item_affix_lines, format_item_stat_summary, rarity_color,
     UiTheme,
@@ -63,9 +64,9 @@ use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::{MouseButton, MouseWheel};
 use bevy::input::{keyboard::KeyboardInput, ButtonState, InputPlugin};
 use bevy::prelude::*;
+use bevy::text::{TextColor, TextFont};
 use bevy::transform::prelude::TransformSystems;
 use bevy::ui::{ComputedNode, RelativeCursorPosition, UiSystems};
-use bevy::text::{TextColor, TextFont};
 
 #[derive(Resource, Default)]
 struct GearHubKeepOpen(pub bool);
@@ -103,10 +104,11 @@ impl Plugin for UiPlugin {
         app.init_resource::<HeroNameEditState>();
         app.init_resource::<PlaybackCombatLogVisible>();
         app.init_resource::<FloatingCombatPopupSeq>();
-        app.add_systems(
-            PreUpdate,
-            raise_tooltip_above_modals,
-        );
+        app.insert_resource(crate::ui::scene_tune::TitleSceneLayout::try_load_from_disk());
+        app.init_resource::<PresentationEditorSession>();
+        #[cfg(debug_assertions)]
+        app.init_resource::<crate::ui::scene_tune::TitleSceneTuneHintLogged>();
+        app.add_systems(PreUpdate, raise_tooltip_above_modals);
         app.add_systems(
             Update,
             crate::ui::tooltip::hide_tooltip_layer_before_pointer_focus.before(UiSystems::Focus),
@@ -119,9 +121,23 @@ impl Plugin for UiPlugin {
         app.world_mut()
             .resource_mut::<MainScheduleOrder>()
             .insert_startup_before(StateTransition, RegisterUiPlaceholderImages);
-        app.add_systems(Startup, spawn_camera)
-            .add_systems(OnEnter(GameState::Title), spawn_title_screen)
-            .add_systems(OnExit(GameState::Title), cleanup_ui)
+        app.add_systems(Startup, spawn_camera);
+        #[cfg(debug_assertions)]
+        {
+            app.add_systems(
+                OnEnter(GameState::Title),
+                (
+                    crate::ui::scene_tune::log_title_scene_tune_hint_on_first_title_visit,
+                    spawn_title_screen,
+                )
+                    .chain(),
+            );
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            app.add_systems(OnEnter(GameState::Title), spawn_title_screen);
+        }
+        app.add_systems(OnExit(GameState::Title), cleanup_ui)
             .add_systems(OnEnter(GameState::Build), spawn_build_screen)
             .add_systems(OnExit(GameState::Build), cleanup_ui)
             .add_systems(
@@ -176,7 +192,6 @@ impl Plugin for UiPlugin {
                         .chain(),
                     sync_top_bar,
                     sync_playback_speed_label,
-                    tick_campfire_flames.run_if(in_state(GameState::Title)),
                     sync_hero_name_labels,
                     sync_run_playback_ui.run_if(in_state(GameState::Running)),
                     sync_playback_cast_bars_party
@@ -224,6 +239,30 @@ impl Plugin for UiPlugin {
                     crate::ui::tooltip::update_tooltip.after(UiSystems::Layout),
                 ),
             );
+        #[cfg(debug_assertions)]
+        app.add_systems(
+            Update,
+            (
+                crate::ui::scene_tune::title_scene_tune_hotkeys,
+                crate::ui::scene_tune::sync_title_scene_elements,
+                crate::ui::scene_tune::sync_title_fire_presentation_from_layout,
+                crate::ui::scene_tune::title_scene_tune_selection_gizmo,
+                crate::ui::scene_tune::tick_title_fire_ambient,
+            )
+                .chain()
+                .run_if(in_state(GameState::Title))
+                .before(UiSystems::Focus),
+        );
+        #[cfg(not(debug_assertions))]
+        app.add_systems(
+            Update,
+            (
+                crate::ui::scene_tune::sync_title_scene_elements,
+                crate::ui::scene_tune::sync_title_fire_presentation_from_layout,
+                crate::ui::scene_tune::tick_title_fire_ambient,
+            )
+                .run_if(in_state(GameState::Title)),
+        );
     }
 }
 
@@ -259,17 +298,15 @@ fn spawn_title_screen(
     profile: Res<ProfileState>,
     speed: Res<RunSpeedSetting>,
     ph: Res<UiPlaceholderImages>,
+    tune: Res<TitleSceneLayout>,
 ) {
-    crate::ui::title_camp::spawn_title_screen(&mut commands, &profile, speed.multiplier(), &ph);
-}
-
-fn tick_campfire_flames(time: Res<Time>, mut q: Query<(&CampfireFlame, &mut BackgroundColor)>) {
-    let t = time.elapsed_secs();
-    for (flame, mut bg) in &mut q {
-        let w = ((t * flame.speed + flame.phase_offset).sin() * 0.5 + 0.5).clamp(0.0, 1.0);
-        let c = flame.base.mix(&flame.peak, w);
-        *bg = c.into();
-    }
+    crate::ui::title_camp::spawn_title_screen(
+        &mut commands,
+        &profile,
+        speed.multiplier(),
+        &ph,
+        &tune,
+    );
 }
 
 fn handle_title_enter_camp(
@@ -421,9 +458,7 @@ fn capture_ui_click_start(
 
     if !overlay.skill_shop.is_empty() {
         pressed.retain(|&e| {
-            m.shop_buy.get(e).is_ok()
-                || m.shop_close.get(e).is_ok()
-                || m.shop_back.get(e).is_ok()
+            m.shop_buy.get(e).is_ok() || m.shop_close.get(e).is_ok() || m.shop_back.get(e).is_ok()
         });
         press.0 = pressed.iter().copied().min_by_key(|&e| {
             let tier = if m.shop_buy.get(e).is_ok() {
@@ -470,9 +505,7 @@ fn capture_ui_click_start(
     press.0 = pressed
         .iter()
         .copied()
-        .filter(|&e| {
-            m.playback_speed_dec.get(e).is_ok() || m.playback_speed_inc.get(e).is_ok()
-        })
+        .filter(|&e| m.playback_speed_dec.get(e).is_ok() || m.playback_speed_inc.get(e).is_ok())
         .min_by_key(|e| e.to_bits())
         .or_else(|| pressed.iter().min_by_key(|e| e.to_bits()).copied());
 }
@@ -516,19 +549,17 @@ fn root_shell() -> impl Bundle {
 }
 
 fn content_column_bundle() -> impl Bundle {
-    (
-        Node {
-            box_sizing: BoxSizing::BorderBox,
-            width: Val::Percent(100.0),
-            flex_grow: 1.0,
-            min_height: Val::Px(0.0),
-            flex_direction: FlexDirection::Column,
-            padding: UiRect::axes(Val::Px(18.0), Val::Px(14.0)),
-            row_gap: Val::Px(12.0),
-            align_items: AlignItems::Stretch,
-            ..default()
-        },
-    )
+    (Node {
+        box_sizing: BoxSizing::BorderBox,
+        width: Val::Percent(100.0),
+        flex_grow: 1.0,
+        min_height: Val::Px(0.0),
+        flex_direction: FlexDirection::Column,
+        padding: UiRect::axes(Val::Px(18.0), Val::Px(14.0)),
+        row_gap: Val::Px(12.0),
+        align_items: AlignItems::Stretch,
+        ..default()
+    },)
 }
 
 fn cleanup_running_exit(mut commands: Commands, roots: Query<Entity, With<UiRoot>>) {
@@ -630,44 +661,42 @@ fn spawn_build_screen_root(
 
     let root_entity = commands.spawn((root_shell(), UiRoot, BuildScreen)).id();
     commands.entity(root_entity).with_children(|root| {
-            spawn_atmosphere(root);
-            root.spawn(content_column_bundle()).with_children(|col| {
-                crate::ui::mockup_layout::spawn_mockup_header(
-                    col,
-                    ph,
-                    meta.gold,
-                    meta.salvage,
-                    meta.unlocked_skill_slots,
-                    lead.equipped_skills.len(),
-                    "—",
-                    speed_mult,
-                );
-                crate::ui::mockup_layout::spawn_three_column_row(col, |row| {
-                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
-                        crate::ui::mockup_layout::spawn_hero_column_mockup(
-                            panel,
-                            ph,
-                            &lead,
-                            partner.as_ref(),
-                            party_slots,
-                            &loadout_lines,
-                            true,
-                            true,
-                        );
-                    });
-                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.25, |panel| {
-                        crate::ui::mockup_layout::spawn_dungeon_briefing_column(
-                            panel, stash, meta,
-                        );
-                    });
+        spawn_atmosphere(root);
+        root.spawn(content_column_bundle()).with_children(|col| {
+            crate::ui::mockup_layout::spawn_mockup_header(
+                col,
+                ph,
+                meta.gold,
+                meta.salvage,
+                meta.unlocked_skill_slots,
+                lead.equipped_skills.len(),
+                "—",
+                speed_mult,
+            );
+            crate::ui::mockup_layout::spawn_three_column_row(col, |row| {
+                crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
+                    crate::ui::mockup_layout::spawn_hero_column_mockup(
+                        panel,
+                        ph,
+                        &lead,
+                        partner.as_ref(),
+                        party_slots,
+                        &loadout_lines,
+                        true,
+                        true,
+                    );
                 });
-                crate::ui::mockup_layout::spawn_mockup_footer(
-                    col,
-                    crate::ui::mockup_layout::FooterMode::Briefing,
-                );
+                crate::ui::mockup_layout::spawn_ornate_column(row, 1.25, |panel| {
+                    crate::ui::mockup_layout::spawn_dungeon_briefing_column(panel, stash, meta);
+                });
             });
-            crate::ui::tooltip::spawn_tooltip_layer(root);
+            crate::ui::mockup_layout::spawn_mockup_footer(
+                col,
+                crate::ui::mockup_layout::FooterMode::Briefing,
+            );
         });
+        crate::ui::tooltip::spawn_tooltip_layer(root);
+    });
     root_entity
 }
 
@@ -703,48 +732,48 @@ fn spawn_summary_screen_root(
 
     let root_entity = commands.spawn((root_shell(), UiRoot, SummaryScreen)).id();
     commands.entity(root_entity).with_children(|root| {
-            spawn_atmosphere(root);
-            root.spawn(content_column_bundle()).with_children(|col| {
-                crate::ui::mockup_layout::spawn_mockup_header(
-                    col,
-                    ph,
-                    meta.gold,
-                    meta.salvage,
-                    meta.unlocked_skill_slots,
-                    lead.equipped_skills.len(),
-                    &summary.deepest_depth.to_string(),
-                    speed_mult,
-                );
-                crate::ui::mockup_layout::spawn_three_column_row(col, |row| {
-                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
-                        crate::ui::mockup_layout::spawn_hero_column_mockup(
-                            panel,
-                            ph,
-                            &lead,
-                            partner.as_ref(),
-                            party_slots,
-                            &loadout_lines,
-                            false,
-                            false,
-                        );
-                    });
-                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.25, |panel| {
-                        crate::ui::mockup_layout::spawn_dungeon_summary_column(panel, summary);
-                    });
-                });
-                crate::ui::mockup_layout::spawn_mockup_footer(
-                    col,
-                    crate::ui::mockup_layout::FooterMode::Summary,
-                );
-            });
-            crate::ui::mockup_layout::spawn_summary_rewards_modal(
-                root,
-                summary,
-                profile.profile.stash_sort,
+        spawn_atmosphere(root);
+        root.spawn(content_column_bundle()).with_children(|col| {
+            crate::ui::mockup_layout::spawn_mockup_header(
+                col,
                 ph,
+                meta.gold,
+                meta.salvage,
+                meta.unlocked_skill_slots,
+                lead.equipped_skills.len(),
+                &summary.deepest_depth.to_string(),
+                speed_mult,
             );
-            crate::ui::tooltip::spawn_tooltip_layer(root);
+            crate::ui::mockup_layout::spawn_three_column_row(col, |row| {
+                crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
+                    crate::ui::mockup_layout::spawn_hero_column_mockup(
+                        panel,
+                        ph,
+                        &lead,
+                        partner.as_ref(),
+                        party_slots,
+                        &loadout_lines,
+                        false,
+                        false,
+                    );
+                });
+                crate::ui::mockup_layout::spawn_ornate_column(row, 1.25, |panel| {
+                    crate::ui::mockup_layout::spawn_dungeon_summary_column(panel, summary);
+                });
+            });
+            crate::ui::mockup_layout::spawn_mockup_footer(
+                col,
+                crate::ui::mockup_layout::FooterMode::Summary,
+            );
         });
+        crate::ui::mockup_layout::spawn_summary_rewards_modal(
+            root,
+            summary,
+            profile.profile.stash_sort,
+            ph,
+        );
+        crate::ui::tooltip::spawn_tooltip_layer(root);
+    });
     root_entity
 }
 
@@ -810,14 +839,15 @@ fn handle_stash_sort_button(
         if let Err(e) = crate::save::save_profile(&save_path.0, &profile.profile) {
             warn!("failed to save stash sort preference: {e}");
         }
-    
+
         match state.get() {
             GameState::Build => {
                 for e in &build_roots {
                     commands.entity(e).despawn();
                 }
                 *name_edit = HeroNameEditState::default();
-                let root = spawn_build_screen_root(&mut commands, &profile, speed.multiplier(), &ph);
+                let root =
+                    spawn_build_screen_root(&mut commands, &profile, speed.multiplier(), &ph);
                 attach_gear_hub_if_kept_open(
                     &mut commands,
                     root,
@@ -876,6 +906,7 @@ fn refresh_profile_screen_on_profile_change(
     summary_roots: Query<Entity, With<SummaryScreen>>,
     title_roots: Query<Entity, With<TitleScreen>>,
     ph: Res<UiPlaceholderImages>,
+    tune: Res<TitleSceneLayout>,
     mut name_edit: ResMut<HeroNameEditState>,
     gear_keep: Res<GearHubKeepOpen>,
 ) {
@@ -890,7 +921,13 @@ fn refresh_profile_screen_on_profile_change(
             for e in &title_roots {
                 commands.entity(e).despawn();
             }
-            crate::ui::title_camp::spawn_title_screen(&mut commands, &profile, speed.multiplier(), &ph);
+            crate::ui::title_camp::spawn_title_screen(
+                &mut commands,
+                &profile,
+                speed.multiplier(),
+                &ph,
+                &tune,
+            );
         }
         GameState::Build => {
             if build_roots.is_empty() {
@@ -923,8 +960,13 @@ fn refresh_profile_screen_on_profile_change(
                 commands.entity(e).despawn();
             }
             *name_edit = HeroNameEditState::default();
-            let root =
-                spawn_summary_screen_root(&mut commands, &profile, &summary, speed.multiplier(), &ph);
+            let root = spawn_summary_screen_root(
+                &mut commands,
+                &profile,
+                &summary,
+                speed.multiplier(),
+                &ph,
+            );
             attach_gear_hub_if_kept_open(
                 &mut commands,
                 root,
@@ -1100,33 +1142,30 @@ pub(crate) fn spawn_item_card_preview(
             BorderColor::from(rarity_color(item.rarity).mix(&Color::BLACK, 0.45)),
         ))
         .with_children(|card| {
-            card.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    width: Val::Percent(100.0),
-                    flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(10.0),
-                    align_items: AlignItems::FlexStart,
-                    ..default()
-                },
-            ))
-            .with_children(|head| {
-                head.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        width: Val::Px(40.0),
-                        height: Val::Px(40.0),
-                        flex_shrink: 0.0,
-                        ..default()
-                    },
-                    ImageNode {
-                        image: ph.item_generic.clone(),
-                        color: rarity_color(item.rarity).mix(&Color::WHITE, 0.35),
-                        ..default()
-                    },
-                ));
-                head.spawn((
-                    Node {
+            card.spawn((Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(10.0),
+                align_items: AlignItems::FlexStart,
+                ..default()
+            },))
+                .with_children(|head| {
+                    head.spawn((
+                        Node {
+                            box_sizing: BoxSizing::BorderBox,
+                            width: Val::Px(40.0),
+                            height: Val::Px(40.0),
+                            flex_shrink: 0.0,
+                            ..default()
+                        },
+                        ImageNode {
+                            image: ph.item_generic.clone(),
+                            color: rarity_color(item.rarity).mix(&Color::WHITE, 0.35),
+                            ..default()
+                        },
+                    ));
+                    head.spawn((Node {
                         box_sizing: BoxSizing::BorderBox,
                         flex_direction: FlexDirection::Column,
                         align_items: AlignItems::FlexStart,
@@ -1134,23 +1173,24 @@ pub(crate) fn spawn_item_card_preview(
                         flex_grow: 1.0,
                         min_width: Val::Px(0.0),
                         ..default()
-                    },
-                ))
-                .with_children(|txt| {
-                    txt.spawn((
-                        Text::new(item.name.clone()),
-                        TextFont::from_font_size(UiTheme::FONT_SECTION),
-                        TextColor(rarity_color(item.rarity)),
-                    ));
-                    txt.spawn(caption_text(format!("{:?} · {:?}", item.rarity, item.slot)));
-                    txt.spawn(body_text(format_item_stat_summary(item)));
-                    let aff = format_item_affix_lines(item);
-                    if !aff.is_empty() {
-                        txt.spawn(caption_text(aff));
-                    }
-                    txt.spawn(caption_text("Added to stash when you Accept rewards.".to_string()));
+                    },))
+                        .with_children(|txt| {
+                            txt.spawn((
+                                Text::new(item.name.clone()),
+                                TextFont::from_font_size(UiTheme::FONT_SECTION),
+                                TextColor(rarity_color(item.rarity)),
+                            ));
+                            txt.spawn(caption_text(format!("{:?} · {:?}", item.rarity, item.slot)));
+                            txt.spawn(body_text(format_item_stat_summary(item)));
+                            let aff = format_item_affix_lines(item);
+                            if !aff.is_empty() {
+                                txt.spawn(caption_text(aff));
+                            }
+                            txt.spawn(caption_text(
+                                "Added to stash when you Accept rewards.".to_string(),
+                            ));
+                        });
                 });
-            });
         });
 }
 
@@ -1266,6 +1306,7 @@ fn fulfill_reset_progress(
     speed: Res<RunSpeedSetting>,
     roots: Query<Entity, With<UiRoot>>,
     ph: Res<UiPlaceholderImages>,
+    tune: Res<TitleSceneLayout>,
     mut name_edit: ResMut<HeroNameEditState>,
     mut gear_keep: ResMut<GearHubKeepOpen>,
 ) {
@@ -1283,7 +1324,13 @@ fn fulfill_reset_progress(
             for e in &roots {
                 commands.entity(e).despawn();
             }
-            crate::ui::title_camp::spawn_title_screen(&mut commands, &profile, speed.multiplier(), &ph);
+            crate::ui::title_camp::spawn_title_screen(
+                &mut commands,
+                &profile,
+                speed.multiplier(),
+                &ph,
+                &tune,
+            );
         } else {
             next_state.set(GameState::Title);
         }
@@ -1365,13 +1412,7 @@ fn handle_open_skill_book(
         };
         let unlocked = profile.profile.meta.unlocked_skill_ids.clone();
         commands.entity(root).with_children(|parent| {
-            crate::ui::skill_book::spawn_skill_book_modal(
-                parent,
-                ev.slot,
-                ev.kind,
-                &unlocked,
-                &ph,
-            );
+            crate::ui::skill_book::spawn_skill_book_modal(parent, ev.slot, ev.kind, &unlocked, &ph);
         });
     }
 }
@@ -1896,9 +1937,9 @@ fn sync_run_playback_party_bars(
     let frame = &playback.frames[idx];
 
     let ally_w = match (frame.partner_snapshot_hp, frame.partner_snapshot_max_hp) {
-        (Some(h), Some(m)) if m > 0 => Val::Percent(
-            ((h as f32 / m as f32).clamp(0.0, 1.0) * 100.0).clamp(0.0, 100.0),
-        ),
+        (Some(h), Some(m)) if m > 0 => {
+            Val::Percent(((h as f32 / m as f32).clamp(0.0, 1.0) * 100.0).clamp(0.0, 100.0))
+        }
         _ => Val::Percent(0.0),
     };
     for mut style in &mut ally_bar {
@@ -2139,11 +2180,7 @@ fn sync_combat_log_toggle_label(
     vis: Res<PlaybackCombatLogVisible>,
     mut labels: Query<&mut Text, With<PlaybackCombatLogToggleLabel>>,
 ) {
-    let s = if vis.0 {
-        "Hide log"
-    } else {
-        "Show log"
-    };
+    let s = if vis.0 { "Hide log" } else { "Show log" };
     for mut text in &mut labels {
         if text.0 != s {
             text.0 = s.to_string();
@@ -2186,14 +2223,14 @@ fn spawn_playback_floating_combat_text(
         UiTheme::FONT_COMPACT
     };
     let mut pos = Node {
-                box_sizing: BoxSizing::BorderBox,
-                position_type: PositionType::Absolute,
-            max_width: Val::Px(200.0),
-            padding: UiRect::axes(Val::Px(6.0), Val::Px(2.0)),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            ..default()
-            };
+        box_sizing: BoxSizing::BorderBox,
+        position_type: PositionType::Absolute,
+        max_width: Val::Px(200.0),
+        padding: UiRect::axes(Val::Px(6.0), Val::Px(2.0)),
+        justify_content: JustifyContent::Center,
+        align_items: AlignItems::Center,
+        ..default()
+    };
     match anchor {
         crate::domain::combat::CombatSfxAnchor::Lead => {
             pos.left = Val::Percent(4.0);
@@ -2218,7 +2255,13 @@ fn spawn_playback_floating_combat_text(
 
     commands.entity(parent).with_children(|layer| {
         layer
-            .spawn((pos, FloatingCombatPopup { ttl: 0.88, seq: my_seq }))
+            .spawn((
+                pos,
+                FloatingCombatPopup {
+                    ttl: 0.88,
+                    seq: my_seq,
+                },
+            ))
             .with_children(|pop| {
                 pop.spawn((
                     Text::new(caption),
@@ -2612,7 +2655,12 @@ fn pin_playback_combat_log_scroll(
 fn apply_ui_scroll(
     mut wheel_events: MessageReader<MouseWheel>,
     mut regions: Query<
-        (Entity, &RelativeCursorPosition, &mut UiScrollState, &ComputedNode),
+        (
+            Entity,
+            &RelativeCursorPosition,
+            &mut UiScrollState,
+            &ComputedNode,
+        ),
         With<UiScrollRegion>,
     >,
     children: Query<&Children>,
@@ -2677,10 +2725,10 @@ mod tests {
         AcceptRunRewards, GameState, IdleDungeonsPlugin, LatestRunSummary, OpenGearHub,
         SkipRunPlayback, StartRun,
     };
+    use bevy::ecs::message::Messages;
     use bevy::input::mouse::MouseButtonInput;
     use bevy::input::ButtonState;
     use bevy::state::app::StatesPlugin;
-    use bevy::ecs::message::Messages;
 
     fn enter_build_from_title(app: &mut App) {
         app.world_mut()
@@ -2805,7 +2853,10 @@ mod tests {
         let button = single_entity::<AcceptRewardsButton>(app.world_mut());
         simulate_primary_click(&mut app, button);
 
-        assert_eq!(app.world().resource::<Messages<AcceptRunRewards>>().len(), 1);
+        assert_eq!(
+            app.world().resource::<Messages<AcceptRunRewards>>().len(),
+            1
+        );
     }
 
     #[test]
@@ -2830,6 +2881,8 @@ mod tests {
 
     fn single_entity<T: Component>(world: &mut World) -> Entity {
         let mut query = world.query_filtered::<Entity, With<T>>();
-        query.single(world).expect("expected exactly one matching entity")
+        query
+            .single(world)
+            .expect("expected exactly one matching entity")
     }
 }
