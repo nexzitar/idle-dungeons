@@ -2,6 +2,17 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## Unreleased
+
+### Presentation editor (phases 0–4)
+
+- **Phase 0 — Types & adapter:** **`PresentationElementTune`**, **`TitleCampSceneLayout`**, and load/save for **`assets/tuning/title_scene.json`** centralized under **`src/presentation/`** with thin aliases in **`src/ui/scene_tune.rs`** (`PresentationScene`-style layering without renaming on-disk JSON in one shot).
+- **Phase 1 — Overlay & discoverability:** **`PresentationEditorSession`**, fullscreen Bevy UI overlay (hierarchy · inspector · save/reload), and **Settings → Debug → Presentation editor** toggle ( **`#[cfg(debug_assertions)]`**, same **`active`** flag as backtick layout mode).
+- **Phase 2 — Mouse editing:** **`presentation_editor_pick`** / **`presentation_editor_drag`** on **`PresentationElementHost`** (top-`GlobalZIndex` selection, **`Shift`** ×10 drag), plus light hover outline synced with keyboard selection gizmo.
+- **Phase 3 — Radial glow:** Campfire **`ImageNode`** soft bloom using **`assets/ui/fire_glow_radial.png`** instead of a flat glow rectangle (**`spawn_title_fire_layers`** / **`TitleFirePresentationTune`**).
+- **Phase 4 — Tracks:** **`PresentationTrack`**, **`CurveLayer`**, and **`CurveKind`** with deterministic **`(t_secs, seed)`** evaluation; optional compositional **`glow_alpha`** / **`ground_alpha`** JSON on **`fire_presentation`** (Examples in **`title_scene.example.json`**).
+- **Docs:** **`docs/presentation-editor-workflow.md`**, **`docs/presentation-scene-composition.md`** cross-links plus spec links for frequency bands / runtime budget. **Phase 5 gizmos** remain future work (**`presentation/editor/gizmo.rs`** stub only).
+
 ## 0.2.31 — 2026-05-09
 
 ### Presentation (Wave 7)
