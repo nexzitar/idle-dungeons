@@ -4,6 +4,12 @@ All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **
 
 ## Unreleased
 
+### Presentation Wave 2 — atmosphere-first (title camp)
+
+- **Softer campfire glow:** dual radial layers (wide halo + core), stack `overflow: visible`, no always-on layer borders (editor outlines only when layout mode is on).
+- **Breathing / flicker:** default compositional `glow_alpha` / `ground_alpha` tracks; flame vertical breathe; three ember sparks; gentler crossfade.
+- **Editor UX:** smoother mouse drag (1 px threshold, committed nudge), hover on sub-layers, **Fire atmosphere** inspector block (glow/ground track bases, breath Hz, crossfade, α floor) when fireplace is selected.
+
 ### Presentation editor (phases 0–4)
 
 - **Phase 0 — Types & adapter:** **`PresentationElementTune`**, **`TitleCampSceneLayout`**, and load/save for **`assets/tuning/title_scene.json`** centralized under **`src/presentation/`** with thin aliases in **`src/ui/scene_tune.rs`** (`PresentationScene`-style layering without renaming on-disk JSON in one shot).

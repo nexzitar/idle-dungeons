@@ -1,8 +1,8 @@
 //! Title screen: campfire hub using **`assets/ui/campfire_scene.png`**.
 //!
 //! - **Fire:** `Fireplace.png` (single still) on the stone ring.
-//! - **Heroes:** [`TitleCampFigureSlot`] (per party index) is the hook for silhouettes or portraits when
-//!   slots unlock (`MetaProgression::party_slots_unlocked` today; extend when more unlock rules exist).
+//! - **Players:** six physical seats (`player1` … `player6`); unlocked roster members are assigned to
+//!   distinct seats at random each time the title screen spawns (`assign_players_to_camp_seats`).
 
 use bevy::prelude::*;
 use bevy::text::{TextColor, TextFont};
@@ -11,10 +11,11 @@ use bevy::ui::{GlobalZIndex, RelativeCursorPosition, UiTransform, Val2};
 use crate::app::ProfileState;
 use crate::domain::progression::MetaProgression;
 use crate::domain::progression::PARTY_SLOT_2_UNLOCK_DEPTH;
-use crate::presentation::editor::{
-    TITLE_ELEMENT_ALLY_SLOT, TITLE_ELEMENT_FIREPLACE, TITLE_ELEMENT_LEAD_SLOT,
-};
-use crate::presentation::spawn_title_fire_layers;
+use crate::domain::title_camp::{assign_players_to_camp_seats, CAMP_FIRE_SEATS};
+use crate::presentation::editor::TITLE_ELEMENT_FIREPLACE;
+use crate::presentation::layer::title_player_element_id;
+use crate::presentation::{compose_layer_id, spawn_title_fire_layers};
+use crate::presentation::markers::PresentationLayerHost;
 use crate::ui::components::{
     PresentationElementHost, TitleCampFigureEmoji, TitleCampFigureSlot, TitleCampFigureTuneMarker,
     TitleCampMilestoneExtras,
@@ -28,8 +29,21 @@ use crate::ui::theme::{body_text, caption_text, section_title, UiTheme};
 use crate::ui::tooltip;
 use crate::ui::widgets::spawn_atmosphere;
 
-/// Max party figures around the fire (matches current party slot design).
-const CAMP_FIGURE_SLOTS: usize = 2;
+fn camp_seat_assignment_seed(meta: &MetaProgression) -> u64 {
+    (meta.gold as u64)
+        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        .wrapping_add(meta.salvage as u64)
+        .wrapping_add(meta.deepest_floor_reached as u64)
+        ^ 0xCAFE_5EA7_u64
+}
+
+fn player_camp_emoji(player_idx: u8) -> &'static str {
+    match player_idx {
+        0 => "\u{1F9DD}",
+        1 => "\u{2694}",
+        _ => "\u{1F464}",
+    }
+}
 
 pub fn spawn_title_screen(
     commands: &mut Commands,
@@ -336,19 +350,16 @@ fn spawn_camp_scene(
                         ..default()
                     })
                     .with_children(|figures| {
-                        for i in 0..CAMP_FIGURE_SLOTS {
-                            let vis = if i == 0 {
-                                Visibility::Visible
-                            } else if meta.party_slots_unlocked() >= 2 {
-                                Visibility::Visible
-                            } else {
-                                Visibility::Hidden
+                        let seat_map = assign_players_to_camp_seats(
+                            meta.party_slots_unlocked(),
+                            camp_seat_assignment_seed(meta),
+                        );
+                        for seat in 0..CAMP_FIRE_SEATS {
+                            let Some(player_idx) = seat_map[seat] else {
+                                continue;
                             };
-                            let tune = if i == 0 {
-                                &layout.lead_slot
-                            } else {
-                                &layout.ally_slot
-                            };
+                            let tune = layout.player_tune(seat);
+                            let element_id = title_player_element_id(seat + 1);
                             figures
                                 .spawn((
                                     Node {
@@ -358,14 +369,9 @@ fn spawn_camp_scene(
                                         row_gap: Val::Px(6.0),
                                         ..default()
                                     },
-                                    vis,
-                                    TitleCampFigureSlot(i as u8),
-                                    TitleCampFigureTuneMarker(i as u8),
-                                    PresentationElementHost(if i == 0 {
-                                        TITLE_ELEMENT_LEAD_SLOT.to_string()
-                                    } else {
-                                        TITLE_ELEMENT_ALLY_SLOT.to_string()
-                                    }),
+                                    TitleCampFigureSlot(seat as u8),
+                                    TitleCampFigureTuneMarker(seat as u8),
+                                    PresentationElementHost(element_id.to_string()),
                                     Interaction::default(),
                                     RelativeCursorPosition::default(),
                                     UiTransform {
@@ -376,12 +382,32 @@ fn spawn_camp_scene(
                                 ))
                                 .with_children(|fig| {
                                     fig.spawn((
-                                        Text::new(if i == 0 { "\u{1F9DD}" } else { "\u{2694}" }),
-                                        TextFont::from_font_size(tune.size_basis.clamp(8.0, 160.0)),
-                                        TextColor(tune_to_figure_emoji_color(tune)),
-                                        TitleCampFigureEmoji(i as u8),
-                                    ));
-                                    fig.spawn(caption_text(if i == 0 { "Lead" } else { "Ally" }));
+                                        Node {
+                                            box_sizing: BoxSizing::BorderBox,
+                                            flex_direction: FlexDirection::Column,
+                                            align_items: AlignItems::Center,
+                                            ..default()
+                                        },
+                                        PresentationLayerHost(compose_layer_id(element_id, "emoji")),
+                                        Interaction::default(),
+                                        RelativeCursorPosition::default(),
+                                        UiTransform::default(),
+                                        GlobalZIndex(tune.global_z + 1),
+                                    ))
+                                    .with_children(|emoji| {
+                                        emoji.spawn((
+                                            Text::new(player_camp_emoji(player_idx)),
+                                            TextFont::from_font_size(
+                                                tune.size_basis.clamp(8.0, 160.0),
+                                            ),
+                                            TextColor(tune_to_figure_emoji_color(tune)),
+                                            TitleCampFigureEmoji(seat as u8),
+                                        ));
+                                    });
+                                    fig.spawn(caption_text(format!(
+                                        "Player {}",
+                                        player_idx as usize + 1
+                                    )));
                                 });
                         }
                     });

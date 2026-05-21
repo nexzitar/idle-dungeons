@@ -1,6 +1,7 @@
 //! Hover feedback for tunable hosts while the presentation editor is active.
 
 use crate::presentation::editor::PresentationEditorSession;
+use crate::presentation::markers::PresentationLayerHost;
 use crate::ui::components::PresentationElementHost;
 use bevy::ecs::system::ParamSet;
 use bevy::prelude::*;
@@ -17,7 +18,17 @@ pub fn presentation_editor_hover_outline(
             &Interaction,
             &GlobalZIndex,
         )>,
+        Query<(
+            Entity,
+            &PresentationLayerHost,
+            &Interaction,
+            &GlobalZIndex,
+        )>,
         Query<(&mut BorderColor, &mut Node), With<PresentationElementHost>>,
+        Query<
+            (&mut BorderColor, &mut Node),
+            (With<PresentationLayerHost>, Without<PresentationElementHost>),
+        >,
     )>,
 ) {
     if !session.active || !session.gizmo_flags.selection_outline {
@@ -27,9 +38,8 @@ pub fn presentation_editor_hover_outline(
     let sel = session.selected_element.as_deref();
 
     let hovered_entity = {
-        let hints = set.p0();
-        let mut best_hover: Option<(i32, Entity)> = None;
-        for (entity, host, interaction, gz) in hints.iter() {
+        let mut best: Option<(i32, Entity)> = None;
+        for (entity, host, interaction, gz) in set.p0().iter() {
             if *interaction != Interaction::Hovered {
                 continue;
             }
@@ -37,15 +47,31 @@ pub fn presentation_editor_hover_outline(
                 continue;
             }
             let z = gz.0;
-            let replace = best_hover
+            let replace = best
                 .as_ref()
                 .map(|&(bz, be)| z > bz || (z == bz && entity > be))
                 .unwrap_or(true);
             if replace {
-                best_hover = Some((z, entity));
+                best = Some((z, entity));
             }
         }
-        best_hover.map(|(_, e)| e)
+        for (entity, host, interaction, gz) in set.p1().iter() {
+            if *interaction != Interaction::Hovered {
+                continue;
+            }
+            if sel.is_some_and(|s| s == host.0.as_str()) {
+                continue;
+            }
+            let z = gz.0;
+            let replace = best
+                .as_ref()
+                .map(|&(bz, be)| z > bz || (z == bz && entity > be))
+                .unwrap_or(true);
+            if replace {
+                best = Some((z, entity));
+            }
+        }
+        best.map(|(_, e)| e)
     };
 
     let Some(hovered_entity) = hovered_entity else {
@@ -54,8 +80,16 @@ pub fn presentation_editor_hover_outline(
 
     let hover_col = BorderColor::all(Color::srgba(1.0, 1.0, 1.0, 0.35));
 
-    let mut paint = set.p1();
-    if let Ok((mut border, mut node)) = paint.get_mut(hovered_entity) {
+    let mut paint_hosts = set.p2();
+    if let Ok((mut border, mut node)) = paint_hosts.get_mut(hovered_entity) {
+        *border = hover_col;
+        node.border = UiRect::all(Val::Px(2.0));
+        return;
+    }
+    drop(paint_hosts);
+
+    let mut paint_layers = set.p3();
+    if let Ok((mut border, mut node)) = paint_layers.get_mut(hovered_entity) {
         *border = hover_col;
         node.border = UiRect::all(Val::Px(2.0));
     }

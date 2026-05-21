@@ -164,7 +164,10 @@ fn debuff_plain_line(line: &str) -> String {
         .map(|part| {
             let part = part.trim_start();
             if part.starts_with("Poison") {
-                format!("[Poison] {}", part.strip_prefix("Poison").unwrap_or("").trim())
+                format!(
+                    "[Poison] {}",
+                    part.strip_prefix("Poison").unwrap_or("").trim()
+                )
             } else {
                 part.to_string()
             }
@@ -264,9 +267,7 @@ pub fn format_item_affix_lines(item: &crate::domain::items::ItemInstance) -> Str
         .join("\n")
 }
 
-pub fn skill_category_chip_colors(
-    cat: crate::domain::skills::SkillCategory,
-) -> (Color, Color) {
+pub fn skill_category_chip_colors(cat: crate::domain::skills::SkillCategory) -> (Color, Color) {
     use crate::domain::skills::SkillCategory;
     match cat {
         SkillCategory::BasicAttack => (UiTheme::stone_mid(), UiTheme::muted_cream()),
@@ -325,7 +326,8 @@ pub fn playback_float_text_color(
             }
             UiTheme::muted_cream()
         }
-        crate::domain::combat::CombatSfxAnchor::Lead | crate::domain::combat::CombatSfxAnchor::Ally => {
+        crate::domain::combat::CombatSfxAnchor::Player0
+        | crate::domain::combat::CombatSfxAnchor::Player1 => {
             if lower.contains("the foe hits")
                 || lower.contains("collapse")
                 || lower.contains(" is down")
@@ -361,7 +363,8 @@ mod playback_float_tests {
 
     #[test]
     fn float_poison_tick_uses_venom_green_on_foe_anchor() {
-        let c = playback_float_text_color("Poison deals 3 damage (2 stacks).", CombatSfxAnchor::Enemy);
+        let c =
+            playback_float_text_color("Poison deals 3 damage (2 stacks).", CombatSfxAnchor::Enemy);
         assert_eq!(c, UiTheme::status_poison());
     }
 

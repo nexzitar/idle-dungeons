@@ -753,7 +753,7 @@ pub fn spawn_hero_column_mockup(
     let inner = move |p: &mut ChildSpawnerCommands<'_>| {
         p.spawn(panel_title_centered("PARTY"));
         spawn_column_flex_scroll(p, None, move |body| {
-            body.spawn(section_title("Lead"));
+            body.spawn(section_title("Player 1"));
             spawn_hero_name_row(body, 0, allow_rename);
             let stats = lead.derived_stats();
             body.spawn(section_title("Vitals"));
@@ -776,11 +776,11 @@ pub fn spawn_hero_column_mockup(
                 ph,
                 lead,
                 skill_slots_interactive,
-                PartyHeroKind::Lead,
+                PartyHeroKind::Player1,
             );
 
             if party_slots_unlocked >= 2 {
-                body.spawn(section_title("Ally"));
+                body.spawn(section_title("Player 2"));
                 if let Some(phero) = partner {
                     spawn_hero_name_row(body, 1, allow_rename);
                     body.spawn(section_title("Vitals"));
@@ -792,7 +792,7 @@ pub fn spawn_hero_column_mockup(
                     body.spawn(section_title("Skills"));
                     if skill_slots_interactive {
                         body.spawn(caption_text(
-                            "Ally has their own skills — click a slot to change them.",
+                            "Player 2 has their own skills — click a slot to change them.",
                         ));
                     }
                     skill_slot_row(
@@ -800,7 +800,7 @@ pub fn spawn_hero_column_mockup(
                         ph,
                         phero,
                         skill_slots_interactive,
-                        PartyHeroKind::Partner,
+                        PartyHeroKind::Player2,
                     );
                 } else {
                     body.spawn(caption_text(
@@ -1654,7 +1654,7 @@ fn spawn_playback_hero_plate_ally(parent: &mut ChildSpawnerCommands<'_>) {
                 TextColor(tone),
             ));
                 });
-            plate.spawn(caption_text("Ally"));
+            plate.spawn(caption_text("Player 2"));
             playback_ally_bar(plate, 1.0);
             playback_cast_cd_stack_ally(plate);
         });
@@ -1756,7 +1756,7 @@ fn spawn_playback_damage_meters_block(parent: &mut ChildSpawnerCommands<'_>) {
                         ..default()
             })
                 .with_children(|n| {
-                    n.spawn(caption_text("Hero"));
+                    n.spawn(caption_text("Player 1"));
                 });
                 r.spawn((
             Node {
@@ -1809,7 +1809,7 @@ fn spawn_playback_damage_meters_block(parent: &mut ChildSpawnerCommands<'_>) {
                         ..default()
             })
                 .with_children(|n| {
-                    n.spawn(caption_text("Ally"));
+                    n.spawn(caption_text("Player 2"));
                 });
                 r.spawn((
             Node {

@@ -2,20 +2,22 @@
 //!
 //! - **File:** `assets/tuning/title_scene.json` (falls back to legacy `title_campfire.json`).
 //! - **Debug:** press **`** (backtick) on Title to enter **layout mode** (hint logs once). Then
-//!   **Tab** / **Shift+Tab** cycles **Fireplace · Lead · Ally**; arrows **or IJKL** nudge the
+//!   **Tab** / **Shift+Tab** cycles **Fireplace · Player 1–6**; arrows **or IJKL** nudge the
 //!   selection. Hotkeys run **before** UI focus navigation so arrows do not drive the wrong node.
 //! - **Bloom:** stored in JSON for future post-processing; not drawn in the minimal `2d` pipeline.
 
-use crate::presentation::editor::{
-    TITLE_ELEMENT_ALLY_SLOT, TITLE_ELEMENT_FIREPLACE, TITLE_ELEMENT_LEAD_SLOT,
-};
-use crate::presentation::markers::PresentationFireLayerHost;
+use crate::presentation::editor::TITLE_ELEMENT_FIREPLACE;
+use crate::presentation::layer::title_player_element_id;
+use crate::presentation::markers::PresentationLayerHost;
 use crate::presentation::{
-    apply_layer_ui_transform, is_fire_layer_id, pivot_translation_compensation_px,
-    resolve_element_translation_px, PresentationEditorSession, PresentationFirePart,
-    PresentationFireStackRoot, SceneAnchorPose,
-    TitleCampSceneLayout, TitleCampSceneTuneTarget, TITLE_FIRE_GROUND_LIGHT_H_PX,
-    TITLE_FIRE_GROUND_LIGHT_W_MULT, TITLE_FIRE_TRACK_EVAL_SEED,
+    apply_layer_ui_transform, is_presentation_layer_id, normalize_layer_id,
+    pivot_translation_compensation_px, resolve_element_translation_px,
+    PresentationEditorSession, PresentationFirePart, PresentationFireStackRoot, SceneAnchorPose,
+    TitleCampSceneLayout, TitleCampSceneTuneTarget, TITLE_FIRE_FLAME_BREATHE_AMP,
+    TITLE_FIRE_FLAME_BREATHE_HZ, TITLE_FIRE_GLOW_CORE_INSET_X, TITLE_FIRE_GLOW_CORE_INSET_Y_BOTTOM,
+    TITLE_FIRE_GLOW_CORE_INSET_Y_TOP, TITLE_FIRE_GLOW_HALO_INSET_X,
+    TITLE_FIRE_GLOW_HALO_INSET_Y_BOTTOM, TITLE_FIRE_GLOW_HALO_INSET_Y_TOP,
+    TITLE_FIRE_GROUND_LIGHT_H_PX, TITLE_FIRE_GROUND_LIGHT_W_MULT, TITLE_FIRE_TRACK_EVAL_SEED,
 };
 use bevy::log::{info, warn};
 use bevy::prelude::*;
@@ -157,20 +159,31 @@ pub fn sync_title_scene_elements(
         gz.0 = layout.fireplace.global_z;
     }
     for (marker, mut node, mut ui_tx, mut gz) in groups.p1().iter_mut() {
-        let tune = match marker.0 {
-            0 => &layout.lead_slot,
-            _ => &layout.ally_slot,
-        };
+        let tune = layout.player_tune(marker.0 as usize);
         apply_figure_root(&mut node, &mut ui_tx, tune, &layout.anchors);
         gz.0 = tune.global_z;
     }
     for (marker, mut font, mut color) in groups.p2().iter_mut() {
-        let tune = match marker.0 {
-            0 => &layout.lead_slot,
-            _ => &layout.ally_slot,
-        };
+        let seat = marker.0 as usize;
+        let tune = layout.player_tune(seat);
         font.font_size = tune.size_basis.clamp(8.0, 160.0);
         color.0 = tune_to_figure_emoji_color(tune);
+    }
+}
+
+/// Sub-layer placement for any [`PresentationLayerHost`] (fire stack, figure emoji, future assets).
+pub fn sync_presentation_layer_transforms(
+    layout: Res<TitleSceneLayout>,
+    mut layers: Query<(&PresentationLayerHost, &mut UiTransform)>,
+) {
+    if !layout.is_changed() {
+        return;
+    }
+    for (host, mut ui) in &mut layers {
+        let Some(tune) = layout.layer_tune(host.0.as_str()) else {
+            continue;
+        };
+        apply_layer_ui_transform(&mut ui, tune);
     }
 }
 
@@ -200,11 +213,17 @@ pub fn sync_title_fire_presentation_from_layout(
                 node.width = Val::Px(base_w * TITLE_FIRE_GROUND_LIGHT_W_MULT);
                 node.height = Val::Px(TITLE_FIRE_GROUND_LIGHT_H_PX);
             }
+            PresentationFirePart::GlowHalo if cfg.enabled && cfg.glow_max_alpha > 0.001 => {
+                node.left = Val::Px(-base_w * TITLE_FIRE_GLOW_HALO_INSET_X);
+                node.top = Val::Px(-base_h * TITLE_FIRE_GLOW_HALO_INSET_Y_TOP);
+                node.right = Val::Px(-base_w * TITLE_FIRE_GLOW_HALO_INSET_X);
+                node.bottom = Val::Px(-base_h * TITLE_FIRE_GLOW_HALO_INSET_Y_BOTTOM);
+            }
             PresentationFirePart::Glow if cfg.enabled && cfg.glow_max_alpha > 0.001 => {
-                node.left = Val::Px(-base_w * 0.42);
-                node.top = Val::Px(-base_h * 0.32);
-                node.right = Val::Px(-base_w * 0.42);
-                node.bottom = Val::Px(-base_h * 0.52);
+                node.left = Val::Px(-base_w * TITLE_FIRE_GLOW_CORE_INSET_X);
+                node.top = Val::Px(-base_h * TITLE_FIRE_GLOW_CORE_INSET_Y_TOP);
+                node.right = Val::Px(-base_w * TITLE_FIRE_GLOW_CORE_INSET_X);
+                node.bottom = Val::Px(-base_h * TITLE_FIRE_GLOW_CORE_INSET_Y_BOTTOM);
             }
             _ => {}
         }
@@ -235,26 +254,42 @@ pub fn tick_title_fire_ambient(
     let period = cfg.crossfade_period_secs.max(0.25);
     let n = cfg.flame_variants.clamp(2, 8) as f32;
 
-    let glow_pulse =
-        (1.0_f32 + cfg.glow_pulse_scale * (TAU * t * cfg.glow_pulse_hz).sin()).max(0.0);
-
     let glow_alpha_eval = cfg.evaluate_glow_alpha_at(t, TITLE_FIRE_TRACK_EVAL_SEED);
     let ground_alpha_eval = cfg.evaluate_ground_alpha_at(t, TITLE_FIRE_TRACK_EVAL_SEED);
     let layers = &cfg.layers;
+    let glow_breathe = 1.0_f32 + 0.022 * (TAU * t * cfg.glow_pulse_hz).sin();
 
     for (part, mut ui) in parts.p2().iter_mut() {
         let layer = match *part {
             PresentationFirePart::GroundLight => &layers.ground,
             PresentationFirePart::BaseStatic => &layers.base,
             PresentationFirePart::Flame(_) => &layers.flame,
-            PresentationFirePart::Glow => &layers.glow,
+            PresentationFirePart::GlowHalo | PresentationFirePart::Glow => &layers.glow,
+            PresentationFirePart::Ember(_) => &layers.flame,
         };
         apply_layer_ui_transform(&mut ui, layer);
-        if matches!(*part, PresentationFirePart::Glow) {
-            ui.scale = Vec2::new(layer.scale_x, layer.scale_y) * Vec2::splat(glow_pulse);
-            ui.rotation = Rot2::degrees(0.0_f32);
+        match *part {
+            PresentationFirePart::Flame(idx) => {
+                let i = idx as f32;
+                let stagger = 0.6 * i;
+                let breathe = 1.0
+                    + TITLE_FIRE_FLAME_BREATHE_AMP
+                        * (TAU * t * TITLE_FIRE_FLAME_BREATHE_HZ + stagger).sin();
+                ui.scale = Vec2::new(layer.scale_x, layer.scale_y * breathe);
+            }
+            PresentationFirePart::GlowHalo => {
+                ui.scale = Vec2::new(layer.scale_x, layer.scale_y)
+                    * Vec2::splat(glow_breathe * 1.06);
+            }
+            PresentationFirePart::Glow => {
+                ui.scale = Vec2::new(layer.scale_x, layer.scale_y)
+                    * Vec2::new(glow_breathe, glow_breathe * 1.03);
+            }
+            _ => {}
         }
     }
+
+    let glow_a = glow_alpha_eval.clamp(cfg.glow_min_alpha.max(0.0_f32), 1.0);
 
     for (part, mut img) in parts.p0().iter_mut() {
         match *part {
@@ -262,14 +297,17 @@ pub fn tick_title_fire_ambient(
                 let i = idx as f32;
                 let stagger = TAU * i / n + 0.27_f32 * i;
                 let wave = 0.5 + 0.5 * (TAU * t / period + stagger).sin();
-                let norm_den = (n * 0.5).max(1.0);
-                let alpha = (wave / norm_den).clamp(0.12, 0.42);
+                let norm_den = (n * 0.55).max(1.0);
+                let alpha = (wave / norm_den).clamp(0.1, 0.38);
                 let base = img.color.to_srgba();
                 img.color = Color::srgba(base.red, base.green, base.blue, alpha);
             }
+            PresentationFirePart::GlowHalo => {
+                let halo = (glow_a * 0.44).clamp(cfg.glow_min_alpha * 0.55, 0.5);
+                img.color = Color::srgba(1.0, 0.5, 0.14, halo);
+            }
             PresentationFirePart::Glow => {
-                let a = glow_alpha_eval.clamp(cfg.glow_min_alpha.max(0.0_f32), 1.0);
-                img.color = Color::srgba(1.0, 0.55, 0.18, a);
+                img.color = Color::srgba(1.0, 0.58, 0.2, glow_a);
             }
             _ => {}
         }
@@ -278,10 +316,18 @@ pub fn tick_title_fire_ambient(
     let g_alpha = ground_alpha_eval;
 
     for (part, mut bg) in parts.p1().iter_mut() {
-        if matches!(*part, PresentationFirePart::GroundLight) {
-            let c = bg.0;
-            let s = c.to_srgba();
-            bg.0 = Color::srgba(s.red, s.green, s.blue, g_alpha.clamp(0.0, 1.0));
+        match *part {
+            PresentationFirePart::Ember(i) => {
+                let phase = TAU * t * (0.75 + 0.12 * i as f32) + i as f32 * 1.4;
+                let a = (0.22 + 0.35 * (0.5 + 0.5 * phase.sin())).clamp(0.0, 0.65);
+                let s = bg.0.to_srgba();
+                bg.0 = Color::srgba(s.red, s.green, s.blue, a);
+            }
+            PresentationFirePart::GroundLight => {
+                let s = bg.0.to_srgba();
+                bg.0 = Color::srgba(s.red, s.green, s.blue, g_alpha.clamp(0.0, 1.0));
+            }
+            _ => {}
         }
     }
 }
@@ -300,7 +346,11 @@ pub fn title_scene_tune_selection_gizmo(
             Without<crate::ui::components::TitleCampfireTuneMarker>,
         >,
         Query<
-            (&PresentationFireLayerHost, &mut BorderColor),
+            (
+                &PresentationLayerHost,
+                &mut BorderColor,
+                &mut Node,
+            ),
             Without<crate::ui::components::TitleCampfireTuneMarker>,
         >,
     )>,
@@ -309,7 +359,9 @@ pub fn title_scene_tune_selection_gizmo(
     let sel = session
         .selected_element
         .as_deref()
-        .unwrap_or(TITLE_ELEMENT_FIREPLACE);
+        .map(normalize_layer_id)
+        .unwrap_or_else(|| TITLE_ELEMENT_FIREPLACE.to_string());
+    let sel = sel.as_str();
     let col_active = BorderColor::all(Color::srgba(1.0, 0.2, 0.85, 0.95));
     let col_idle = BorderColor::all(Color::srgba(0.0, 0.0, 0.0, 0.0));
     let col_fire_sel = BorderColor::all(Color::srgba(0.35, 0.85, 1.0, 0.9));
@@ -320,18 +372,19 @@ pub fn title_scene_tune_selection_gizmo(
         node.border = UiRect::all(Val::Px(2.0));
     }
     for (marker, mut border, mut node) in groups.p1().iter_mut() {
-        let id = if marker.0 == 0 {
-            TITLE_ELEMENT_LEAD_SLOT
-        } else {
-            TITLE_ELEMENT_ALLY_SLOT
-        };
+        let id = title_player_element_id(marker.0 as usize + 1);
         let on = show && sel == id;
         *border = if on { col_active } else { col_idle };
         node.border = UiRect::all(Val::Px(2.0));
     }
-    for (host, mut border) in groups.p2().iter_mut() {
-        let on = show && is_fire_layer_id(sel) && host.0 == sel;
+    for (host, mut border, mut node) in groups.p2().iter_mut() {
+        let on = show && is_presentation_layer_id(sel) && host.0.as_str() == sel;
         *border = if on { col_fire_sel } else { col_idle };
+        node.border = if show {
+            UiRect::all(Val::Px(2.0))
+        } else {
+            UiRect::ZERO
+        };
     }
 }
 

@@ -1,12 +1,7 @@
 //! Full-screen presentation editor chrome (title camp first).
 
-use crate::presentation::editor::{
-    PresentationEditorSession, TITLE_ELEMENT_ALLY_SLOT, TITLE_ELEMENT_FIREPLACE,
-    TITLE_ELEMENT_LEAD_SLOT,
-};
-use crate::presentation::fire::{
-    FIRE_LAYER_BASE, FIRE_LAYER_FLAME, FIRE_LAYER_GLOW, FIRE_LAYER_GROUND, FIRE_LAYER_STACK,
-};
+use crate::presentation::editor::PresentationEditorSession;
+use crate::presentation::layer::{TITLE_CAMP_LAYER_REGISTRY, TITLE_ELEMENT_FIREPLACE};
 use crate::presentation::element::PresentationElementId;
 use crate::ui::components::{UiButtonPalette, UiTooltip};
 use crate::ui::theme::{section_title, UiTheme};
@@ -68,7 +63,21 @@ pub enum PresentationEditorTuneField {
     Glow,
     Bloom,
     GlobalZ,
+    /// `fire_presentation.glow_alpha.base_value` (compositional track).
+    FireGlowAlphaBase,
+    /// First sine layer on glow track — breathing rate (Hz).
+    FireGlowBreathHz,
+    /// `fire_presentation.ground_alpha.base_value`.
+    FireGroundAlphaBase,
+    /// Flame crossfade period (seconds).
+    FireCrossfadeSecs,
+    /// Minimum glow alpha floor.
+    FireGlowMinAlpha,
 }
+
+/// Inspector block for campfire atmosphere scalars / tracks (visible for fireplace selection).
+#[derive(Component)]
+pub struct PresentationEditorFireAtmosphereBlock;
 
 /// Value text for a tune field row.
 #[derive(Component)]
@@ -230,14 +239,12 @@ fn spawn_hierarchy_column(parent: &mut ChildSpawnerCommands<'_>) {
         ))
         .with_children(|col| {
             col.spawn(section_title("Elements"));
-            hierarchy_row(col, "Fireplace (host)", TITLE_ELEMENT_FIREPLACE);
-            hierarchy_row_indented(col, "Fire · stack", FIRE_LAYER_STACK);
-            hierarchy_row_indented(col, "Fire · base", FIRE_LAYER_BASE);
-            hierarchy_row_indented(col, "Fire · flame", FIRE_LAYER_FLAME);
-            hierarchy_row_indented(col, "Fire · glow", FIRE_LAYER_GLOW);
-            hierarchy_row_indented(col, "Fire · ground", FIRE_LAYER_GROUND);
-            hierarchy_row(col, "Lead slot", TITLE_ELEMENT_LEAD_SLOT);
-            hierarchy_row(col, "Ally slot", TITLE_ELEMENT_ALLY_SLOT);
+            for entry in TITLE_CAMP_LAYER_REGISTRY {
+                hierarchy_row(col, entry.host_label, entry.element_id);
+                for layer in entry.layers {
+                    hierarchy_row_indented(col, layer.label, layer.id);
+                }
+            }
         });
 }
 
@@ -344,6 +351,50 @@ fn spawn_inspector_column(parent: &mut ChildSpawnerCommands<'_>) {
                 PresentationEditorTuneField::GlobalZ,
                 "±1 layer",
             );
+            col.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(4.0),
+                    margin: UiRect::top(Val::Px(8.0)),
+                    ..default()
+                },
+                Visibility::Hidden,
+                PresentationEditorFireAtmosphereBlock,
+            ))
+            .with_children(|atm| {
+                atm.spawn(section_title("Fire atmosphere"));
+                tune_row(
+                    atm,
+                    "Glow α base",
+                    PresentationEditorTuneField::FireGlowAlphaBase,
+                    "±0.01",
+                );
+                tune_row(
+                    atm,
+                    "Glow breath Hz",
+                    PresentationEditorTuneField::FireGlowBreathHz,
+                    "±0.01",
+                );
+                tune_row(
+                    atm,
+                    "Ground α base",
+                    PresentationEditorTuneField::FireGroundAlphaBase,
+                    "±0.01",
+                );
+                tune_row(
+                    atm,
+                    "Flame period s",
+                    PresentationEditorTuneField::FireCrossfadeSecs,
+                    "±0.1",
+                );
+                tune_row(
+                    atm,
+                    "Glow α floor",
+                    PresentationEditorTuneField::FireGlowMinAlpha,
+                    "±0.01",
+                );
+            });
             col.spawn((
                 Text::new("Pivot: …"),
                 TextFont::from_font_size(UiTheme::FONT_CAPTION),

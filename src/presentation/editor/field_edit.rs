@@ -4,7 +4,7 @@ use crate::presentation::editor::{
     banner_selected_id, format_editor_tune_field, tune_for_scene_mut, PresentationEditorTuneField,
 };
 use crate::presentation::element::{PresentationElementTune, PresentationLayerTune};
-use crate::presentation::fire::is_fire_layer_id;
+use crate::presentation::is_presentation_layer_id;
 use crate::presentation::PresentationEditorSession;
 use crate::ui::scene_tune::TitleSceneLayout;
 use bevy::input::keyboard::KeyboardInput;
@@ -88,6 +88,67 @@ fn apply_buffer_to_element(
                 tune.global_z = v;
             }
         }
+        PresentationEditorTuneField::FireGlowAlphaBase
+        | PresentationEditorTuneField::FireGlowBreathHz
+        | PresentationEditorTuneField::FireGroundAlphaBase
+        | PresentationEditorTuneField::FireCrossfadeSecs
+        | PresentationEditorTuneField::FireGlowMinAlpha => {}
+    }
+}
+
+fn apply_buffer_to_fire_atmosphere(
+    fire: &mut crate::presentation::TitleFirePresentationTune,
+    field: PresentationEditorTuneField,
+    buf: &str,
+) -> bool {
+    let trimmed = buf.trim();
+    if trimmed.is_empty() {
+        return matches!(
+            field,
+            PresentationEditorTuneField::FireGlowAlphaBase
+                | PresentationEditorTuneField::FireGlowBreathHz
+                | PresentationEditorTuneField::FireGroundAlphaBase
+                | PresentationEditorTuneField::FireCrossfadeSecs
+                | PresentationEditorTuneField::FireGlowMinAlpha
+        );
+    }
+    let Ok(v) = trimmed.parse::<f32>() else {
+        return false;
+    };
+    match field {
+        PresentationEditorTuneField::FireGlowAlphaBase => {
+            fire.glow_alpha_track_mut().base_value = v.clamp(0.0, 1.0);
+            true
+        }
+        PresentationEditorTuneField::FireGlowBreathHz => {
+            let track = fire.glow_alpha_track_mut();
+            if track.layers.is_empty() {
+                track.layers.push(crate::presentation::CurveLayer {
+                    kind: crate::presentation::CurveKind::Sine,
+                    frequency_hz: v.clamp(0.03, 1.2),
+                    amplitude: 0.03,
+                    phase: 0.0,
+                    weight: 1.0,
+                    blend: crate::presentation::CurveBlendMode::Multiplicative,
+                });
+            } else {
+                track.layers[0].frequency_hz = v.clamp(0.03, 1.2);
+            }
+            true
+        }
+        PresentationEditorTuneField::FireGroundAlphaBase => {
+            fire.ground_alpha_track_mut().base_value = v.clamp(0.0, 1.0);
+            true
+        }
+        PresentationEditorTuneField::FireCrossfadeSecs => {
+            fire.crossfade_period_secs = v.clamp(1.0, 24.0);
+            true
+        }
+        PresentationEditorTuneField::FireGlowMinAlpha => {
+            fire.glow_min_alpha = v.clamp(0.0, 0.5);
+            true
+        }
+        _ => false,
     }
 }
 
@@ -141,8 +202,9 @@ pub fn presentation_editor_tune_field_keyboard(
 
     if keys.just_pressed(KeyCode::Enter) {
         let sel = banner_selected_id(&session);
-        if is_fire_layer_id(sel) {
-            if let Some(layer) = layout.fire_presentation.layers.get_mut(sel) {
+        if apply_buffer_to_fire_atmosphere(&mut layout.fire_presentation, field, &edit.buffer) {
+        } else if is_presentation_layer_id(sel) {
+            if let Some(layer) = layout.layer_tune_mut(sel) {
                 apply_buffer_to_layer(layer, field, &edit.buffer);
             }
         } else {

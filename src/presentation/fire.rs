@@ -10,15 +10,29 @@ use serde::{Deserialize, Serialize};
 
 use crate::presentation::element::PresentationLayerTune;
 use crate::presentation::track::{CurveBlendMode, CurveKind, CurveLayer, PresentationTrack};
-use crate::presentation::markers::PresentationFireLayerHost;
+use crate::presentation::layer::{compose_layer_id, TITLE_ELEMENT_FIREPLACE};
+use crate::presentation::markers::PresentationLayerHost;
 
 /// Deterministic seed for [`PresentationTrack::evaluate`] on title fire ambient layers.
 pub const TITLE_FIRE_TRACK_EVAL_SEED: u64 = 0xF1EE_CAFE_DA7A_u64;
 
 /// Width multiplier (`base_w × this`) for the soft ground ellipse under the fire.
-pub const TITLE_FIRE_GROUND_LIGHT_W_MULT: f32 = 1.5;
+pub const TITLE_FIRE_GROUND_LIGHT_W_MULT: f32 = 1.65;
 /// Layout height (px) for the ground wash; kept low versus width for an elliptical pool of light.
-pub const TITLE_FIRE_GROUND_LIGHT_H_PX: f32 = 20.0;
+pub const TITLE_FIRE_GROUND_LIGHT_H_PX: f32 = 26.0;
+
+/// Outer halo extends further than the core glow (fraction of `base_w` / `base_h`).
+pub const TITLE_FIRE_GLOW_HALO_INSET_X: f32 = 0.58;
+pub const TITLE_FIRE_GLOW_HALO_INSET_Y_TOP: f32 = 0.44;
+pub const TITLE_FIRE_GLOW_HALO_INSET_Y_BOTTOM: f32 = 0.62;
+/// Inner core glow sits tighter on the flame art.
+pub const TITLE_FIRE_GLOW_CORE_INSET_X: f32 = 0.34;
+pub const TITLE_FIRE_GLOW_CORE_INSET_Y_TOP: f32 = 0.26;
+pub const TITLE_FIRE_GLOW_CORE_INSET_Y_BOTTOM: f32 = 0.44;
+
+/// Subtle vertical breathe on flame layers (scale Y multiplier peak).
+pub const TITLE_FIRE_FLAME_BREATHE_AMP: f32 = 0.035;
+pub const TITLE_FIRE_FLAME_BREATHE_HZ: f32 = 0.19;
 
 /// Root node that sizes to the fireplace slot (children handle layering).
 #[derive(Component)]
@@ -29,15 +43,12 @@ pub enum PresentationFirePart {
     GroundLight,
     BaseStatic,
     Flame(u8),
+    /// Wide, low-alpha radial wash (same texture as core glow).
+    GlowHalo,
     Glow,
+    /// Small warm sparks above the logs (presentation-only).
+    Ember(u8),
 }
-
-/// Editor / JSON ids for individual fireplace presentation layers.
-pub const FIRE_LAYER_STACK: &str = "fire:stack";
-pub const FIRE_LAYER_BASE: &str = "fire:base";
-pub const FIRE_LAYER_FLAME: &str = "fire:flame";
-pub const FIRE_LAYER_GLOW: &str = "fire:glow";
-pub const FIRE_LAYER_GROUND: &str = "fire:ground";
 
 /// Per-layer placement under the fireplace host (offsets relative to parent stack).
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
@@ -51,24 +62,25 @@ pub struct FirePresentationLayerTunes {
 }
 
 impl FirePresentationLayerTunes {
-    pub fn get(&self, id: &str) -> Option<&PresentationLayerTune> {
-        match id {
-            FIRE_LAYER_STACK => Some(&self.stack),
-            FIRE_LAYER_BASE => Some(&self.base),
-            FIRE_LAYER_FLAME => Some(&self.flame),
-            FIRE_LAYER_GLOW => Some(&self.glow),
-            FIRE_LAYER_GROUND => Some(&self.ground),
+    #[must_use]
+    pub fn get_by_key(&self, layer_key: &str) -> Option<&PresentationLayerTune> {
+        match layer_key {
+            "stack" => Some(&self.stack),
+            "base" => Some(&self.base),
+            "flame" => Some(&self.flame),
+            "glow" => Some(&self.glow),
+            "ground" => Some(&self.ground),
             _ => None,
         }
     }
 
-    pub fn get_mut(&mut self, id: &str) -> Option<&mut PresentationLayerTune> {
-        match id {
-            FIRE_LAYER_STACK => Some(&mut self.stack),
-            FIRE_LAYER_BASE => Some(&mut self.base),
-            FIRE_LAYER_FLAME => Some(&mut self.flame),
-            FIRE_LAYER_GLOW => Some(&mut self.glow),
-            FIRE_LAYER_GROUND => Some(&mut self.ground),
+    pub fn get_mut_by_key(&mut self, layer_key: &str) -> Option<&mut PresentationLayerTune> {
+        match layer_key {
+            "stack" => Some(&mut self.stack),
+            "base" => Some(&mut self.base),
+            "flame" => Some(&mut self.flame),
+            "glow" => Some(&mut self.glow),
+            "ground" => Some(&mut self.ground),
             _ => None,
         }
     }
@@ -80,11 +92,6 @@ impl FirePresentationLayerTunes {
         self.glow.reset_placement_to_anchor();
         self.ground.reset_placement_to_anchor();
     }
-}
-
-#[must_use]
-pub fn is_fire_layer_id(id: &str) -> bool {
-    id.starts_with("fire:")
 }
 
 /// Serialized with `TitleCampSceneLayout`; drives fire tick in `scene_tune`.
@@ -117,17 +124,65 @@ impl Default for TitleFirePresentationTune {
         Self {
             enabled: true,
             flame_variants: 4,
-            crossfade_period_secs: 5.5_f32,
-            glow_pulse_hz: 0.22_f32,
-            glow_pulse_scale: 0.04_f32,
-            glow_max_alpha: 0.22_f32,
-            glow_min_alpha: 0.08_f32,
-            ground_flicker_hz: 0.28_f32,
-            ground_max_alpha: 0.28_f32,
-            glow_alpha: None,
-            ground_alpha: None,
+            crossfade_period_secs: 6.2_f32,
+            glow_pulse_hz: 0.21_f32,
+            glow_pulse_scale: 0.035_f32,
+            glow_max_alpha: 0.24_f32,
+            glow_min_alpha: 0.1_f32,
+            ground_flicker_hz: 0.26_f32,
+            ground_max_alpha: 0.26_f32,
+            glow_alpha: Some(default_glow_alpha_track()),
+            ground_alpha: Some(default_ground_alpha_track()),
             layers: FirePresentationLayerTunes::default(),
         }
+    }
+}
+
+fn default_glow_alpha_track() -> PresentationTrack {
+    PresentationTrack {
+        base_value: 0.17,
+        layers: vec![
+            CurveLayer {
+                kind: CurveKind::Sine,
+                frequency_hz: 0.21,
+                amplitude: 0.032,
+                phase: 0.0,
+                weight: 1.0,
+                blend: CurveBlendMode::Multiplicative,
+            },
+            CurveLayer {
+                kind: CurveKind::SmoothNoise,
+                frequency_hz: 0.14,
+                amplitude: 0.018,
+                phase: 1.1,
+                weight: 0.85,
+                blend: CurveBlendMode::Additive,
+            },
+        ],
+    }
+}
+
+fn default_ground_alpha_track() -> PresentationTrack {
+    PresentationTrack {
+        base_value: 0.13,
+        layers: vec![
+            CurveLayer {
+                kind: CurveKind::Sine,
+                frequency_hz: 0.24,
+                amplitude: 0.055,
+                phase: 2.2,
+                weight: 1.0,
+                blend: CurveBlendMode::Additive,
+            },
+            CurveLayer {
+                kind: CurveKind::SmoothNoise,
+                frequency_hz: 0.08,
+                amplitude: 0.022,
+                phase: 0.5,
+                weight: 0.8,
+                blend: CurveBlendMode::Additive,
+            },
+        ],
     }
 }
 
@@ -185,6 +240,22 @@ impl TitleFirePresentationTune {
         }
     }
 
+    /// Ensures a compositional glow track exists (for editor / inspector).
+    pub fn glow_alpha_track_mut(&mut self) -> &mut PresentationTrack {
+        if self.glow_alpha.is_none() {
+            self.glow_alpha = Some(self.synthesize_glow_track_from_legacy());
+        }
+        self.glow_alpha.as_mut().expect("glow_alpha just initialized")
+    }
+
+    /// Ensures a compositional ground track exists (for editor / inspector).
+    pub fn ground_alpha_track_mut(&mut self) -> &mut PresentationTrack {
+        if self.ground_alpha.is_none() {
+            self.ground_alpha = Some(self.synthesize_ground_track_from_legacy());
+        }
+        self.ground_alpha.as_mut().expect("ground_alpha just initialized")
+    }
+
     /// Ground wash RGBA alpha factor before clamp.
     #[must_use]
     pub fn evaluate_ground_alpha_at(&self, t_secs: f32, seed: u64) -> f32 {
@@ -217,15 +288,14 @@ pub fn spawn_title_fire_layers(
                 box_sizing: BoxSizing::BorderBox,
                 width: Val::Px(base_w * TITLE_FIRE_GROUND_LIGHT_W_MULT),
                 height: Val::Px(TITLE_FIRE_GROUND_LIGHT_H_PX),
-                margin: UiRect::top(Val::Px(4.0)),
-                border: UiRect::all(Val::Px(2.0)),
-                border_radius: BorderRadius::percent(62.0, 62.0, 54.0, 54.0),
+                margin: UiRect::top(Val::Px(2.0)),
+                border_radius: BorderRadius::percent(72.0, 72.0, 64.0, 64.0),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.86, 0.36, 0.13, cfg.ground_max_alpha * 0.36).into()),
+            BackgroundColor(Color::srgba(0.92, 0.42, 0.16, cfg.ground_max_alpha * 0.28).into()),
             ZIndex(-4),
             PresentationFirePart::GroundLight,
-            PresentationFireLayerHost(FIRE_LAYER_GROUND.into()),
+            PresentationLayerHost(compose_layer_id(TITLE_ELEMENT_FIREPLACE, "ground")),
             Interaction::default(),
         ));
     }
@@ -236,11 +306,11 @@ pub fn spawn_title_fire_layers(
             position_type: PositionType::Relative,
             width: Val::Px(base_w),
             height: Val::Px(base_h),
-            overflow: Overflow::clip(),
+            overflow: Overflow::visible(),
             ..default()
         },
         PresentationFireStackRoot,
-        PresentationFireLayerHost(FIRE_LAYER_STACK.into()),
+        PresentationLayerHost(compose_layer_id(TITLE_ELEMENT_FIREPLACE, "stack")),
         Interaction::default(),
         UiTransform::default(),
         ZIndex(0),
@@ -254,7 +324,6 @@ pub fn spawn_title_fire_layers(
                 top: Val::Px(0.0),
                 right: Val::Px(0.0),
                 bottom: Val::Px(0.0),
-                border: UiRect::all(Val::Px(2.0)),
                 ..default()
             },
             ImageNode {
@@ -265,7 +334,7 @@ pub fn spawn_title_fire_layers(
             },
             ZIndex(0),
             PresentationFirePart::BaseStatic,
-            PresentationFireLayerHost(FIRE_LAYER_BASE.into()),
+            PresentationLayerHost(compose_layer_id(TITLE_ELEMENT_FIREPLACE, "base")),
             Interaction::default(),
         ));
 
@@ -282,7 +351,6 @@ pub fn spawn_title_fire_layers(
                         top: Val::Px(0.0),
                         right: Val::Px(0.0),
                         bottom: Val::Px(0.0),
-                        border: UiRect::all(Val::Px(2.0)),
                         ..default()
                     },
                     ImageNode {
@@ -291,9 +359,10 @@ pub fn spawn_title_fire_layers(
                         image_mode: NodeImageMode::Auto,
                         ..default()
                     },
+                    UiTransform::default(),
                     ZIndex(1 + i as i32),
                     PresentationFirePart::Flame(i as u8),
-                    PresentationFireLayerHost(FIRE_LAYER_FLAME.into()),
+                    PresentationLayerHost(compose_layer_id(TITLE_ELEMENT_FIREPLACE, "flame")),
                     Interaction::default(),
                 ));
             }
@@ -301,30 +370,77 @@ pub fn spawn_title_fire_layers(
 
         if cfg.enabled && cfg.glow_max_alpha > 0.001 {
             let floor = cfg.glow_min_alpha.max(0.0);
-            let a0 = (cfg.glow_max_alpha * 0.9).clamp(floor, 1.0);
+            let a_core = (cfg.glow_max_alpha * 0.88).clamp(floor, 1.0);
+            let a_halo = (a_core * 0.42).clamp(floor * 0.65, 0.55);
+
             stack.spawn((
                 Node {
                     box_sizing: BoxSizing::BorderBox,
                     position_type: PositionType::Absolute,
-                    left: Val::Px(-base_w * 0.42),
-                    top: Val::Px(-base_h * 0.32),
-                    right: Val::Px(-base_w * 0.42),
-                    bottom: Val::Px(-base_h * 0.52),
-                    border: UiRect::all(Val::Px(2.0)),
+                    left: Val::Px(-base_w * TITLE_FIRE_GLOW_HALO_INSET_X),
+                    top: Val::Px(-base_h * TITLE_FIRE_GLOW_HALO_INSET_Y_TOP),
+                    right: Val::Px(-base_w * TITLE_FIRE_GLOW_HALO_INSET_X),
+                    bottom: Val::Px(-base_h * TITLE_FIRE_GLOW_HALO_INSET_Y_BOTTOM),
                     ..default()
                 },
                 ImageNode {
                     image: glow_radial_image.clone(),
-                    color: Color::srgba(1.0, 0.55, 0.18, a0),
+                    color: Color::srgba(1.0, 0.5, 0.14, a_halo),
+                    image_mode: NodeImageMode::Auto,
+                    ..default()
+                },
+                UiTransform::default(),
+                ZIndex(22),
+                PresentationFirePart::GlowHalo,
+                Interaction::default(),
+            ));
+
+            stack.spawn((
+                Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(-base_w * TITLE_FIRE_GLOW_CORE_INSET_X),
+                    top: Val::Px(-base_h * TITLE_FIRE_GLOW_CORE_INSET_Y_TOP),
+                    right: Val::Px(-base_w * TITLE_FIRE_GLOW_CORE_INSET_X),
+                    bottom: Val::Px(-base_h * TITLE_FIRE_GLOW_CORE_INSET_Y_BOTTOM),
+                    ..default()
+                },
+                ImageNode {
+                    image: glow_radial_image.clone(),
+                    color: Color::srgba(1.0, 0.58, 0.2, a_core),
                     image_mode: NodeImageMode::Auto,
                     ..default()
                 },
                 UiTransform::IDENTITY,
                 ZIndex(24),
                 PresentationFirePart::Glow,
-                PresentationFireLayerHost(FIRE_LAYER_GLOW.into()),
+                PresentationLayerHost(compose_layer_id(TITLE_ELEMENT_FIREPLACE, "glow")),
                 Interaction::default(),
             ));
+        }
+
+        if cfg.enabled {
+            const EMBER_COUNT: u8 = 3;
+            for i in 0..EMBER_COUNT {
+                let x = base_w * (0.28 + 0.18 * i as f32);
+                let y = base_h * (0.08 + 0.04 * (i % 2) as f32);
+                stack.spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(x),
+                        top: Val::Px(-y),
+                        width: Val::Px(5.0 + (i as f32) * 1.5),
+                        height: Val::Px(5.0 + (i as f32) * 1.5),
+                        border_radius: BorderRadius::MAX,
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(1.0, 0.72, 0.32, 0.0).into()),
+                    ZIndex(18 + i as i32),
+                    PresentationFirePart::Ember(i),
+                    Interaction::default(),
+                ));
+            }
         }
     });
 }
@@ -335,11 +451,21 @@ mod tests {
 
     #[test]
     fn synthesized_glow_track_matches_scalar_fallback() {
-        let cfg = TitleFirePresentationTune::default();
+        let mut cfg = TitleFirePresentationTune::default();
+        cfg.glow_alpha = None;
         let t = 0.777_f32;
         let seed = 12_u64;
         let a = cfg.evaluate_glow_alpha_at(t, seed);
         let b = cfg.synthesize_glow_track_from_legacy().evaluate(t, seed);
         assert!((a - b).abs() < 1e-5, "a={} b={}", a, b);
+    }
+
+    #[test]
+    fn default_glow_track_is_in_fire_breathing_band() {
+        let cfg = TitleFirePresentationTune::default();
+        let track = cfg.glow_alpha.as_ref().expect("default includes glow_alpha");
+        assert!(track.base_value > 0.05 && track.base_value < 0.4);
+        let hz = track.layers.first().map(|l| l.frequency_hz).unwrap_or(0.0);
+        assert!(hz >= 0.15 && hz <= 0.35, "hz={hz}");
     }
 }

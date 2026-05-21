@@ -272,6 +272,7 @@ impl Plugin for UiPlugin {
                 crate::presentation::editor::presentation_editor_drag,
                 crate::presentation::editor::sync_presentation_editor_ui,
                 crate::ui::scene_tune::sync_title_scene_elements,
+                crate::ui::scene_tune::sync_presentation_layer_transforms,
                 crate::ui::scene_tune::sync_title_fire_presentation_from_layout,
                 crate::ui::scene_tune::title_scene_tune_selection_gizmo,
                 crate::presentation::editor::presentation_editor_hover_outline,
@@ -287,6 +288,7 @@ impl Plugin for UiPlugin {
             Update,
             (
                 crate::ui::scene_tune::sync_title_scene_elements,
+                crate::ui::scene_tune::sync_presentation_layer_transforms,
                 crate::ui::scene_tune::sync_title_fire_presentation_from_layout,
                 crate::ui::scene_tune::tick_title_fire_ambient,
             )
@@ -1989,14 +1991,14 @@ fn sync_playback_cast_bars_party(
     let crate::domain::run::RunPlaybackFrameKind::Combat(c) = &f.kind else {
         return;
     };
-    let lc = Val::Percent((c.lead_cast * 100.0).clamp(0.0, 100.0));
-    let lcdn = Val::Percent((c.lead_cd * 100.0).clamp(0.0, 100.0));
-    let lsg = Val::Percent((c.lead_skill_gcd * 100.0).clamp(0.0, 100.0));
-    let lir = Val::Percent((c.lead_instant_recharge * 100.0).clamp(0.0, 100.0));
-    let ac = Val::Percent((c.ally_cast * 100.0).clamp(0.0, 100.0));
-    let acdn = Val::Percent((c.ally_cd * 100.0).clamp(0.0, 100.0));
-    let asg = Val::Percent((c.ally_skill_gcd * 100.0).clamp(0.0, 100.0));
-    let air = Val::Percent((c.ally_instant_recharge * 100.0).clamp(0.0, 100.0));
+    let lc = Val::Percent((c.player0_cast * 100.0).clamp(0.0, 100.0));
+    let lcdn = Val::Percent((c.player0_cd * 100.0).clamp(0.0, 100.0));
+    let lsg = Val::Percent((c.player0_skill_gcd * 100.0).clamp(0.0, 100.0));
+    let lir = Val::Percent((c.player0_instant_recharge * 100.0).clamp(0.0, 100.0));
+    let ac = Val::Percent((c.player1_cast * 100.0).clamp(0.0, 100.0));
+    let acdn = Val::Percent((c.player1_cd * 100.0).clamp(0.0, 100.0));
+    let asg = Val::Percent((c.player1_skill_gcd * 100.0).clamp(0.0, 100.0));
+    let air = Val::Percent((c.player1_instant_recharge * 100.0).clamp(0.0, 100.0));
     for mut n in params.p0().iter_mut() {
         n.width = lc;
     }
@@ -2376,12 +2378,12 @@ fn spawn_playback_floating_combat_text(
         ..default()
     };
     match anchor {
-        crate::domain::combat::CombatSfxAnchor::Lead => {
+        crate::domain::combat::CombatSfxAnchor::Player0 => {
             pos.left = Val::Percent(4.0);
             pos.right = Val::Auto;
             pos.top = Val::Percent(10.0);
         }
-        crate::domain::combat::CombatSfxAnchor::Ally => {
+        crate::domain::combat::CombatSfxAnchor::Player1 => {
             pos.left = Val::Percent(4.0);
             pos.right = Val::Auto;
             pos.top = Val::Percent(52.0);

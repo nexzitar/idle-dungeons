@@ -438,11 +438,11 @@ pub struct TitleQuitButton;
 #[derive(Component)]
 pub struct TitleCampFigureSlot(pub u8);
 
-/// Debug tuning: figure column root for party slot `0 = Lead`, `1 = Ally`.
+/// Debug tuning: figure column root for physical campfire seat `0..5` (`player1` … `player6`).
 #[derive(Component)]
 pub struct TitleCampFigureTuneMarker(pub u8);
 
-/// Emoji row in a figure column (same slot index as [`TitleCampFigureTuneMarker`]).
+/// Emoji row in a figure column (physical seat index, same as [`TitleCampFigureTuneMarker`]).
 #[derive(Component)]
 pub struct TitleCampFigureEmoji(pub u8);
 
@@ -465,4 +465,4 @@ pub struct TitleCampStageRoot;
 pub struct PresentationElementHost(pub PresentationElementId);
 
 /// Re-export — defined in [`crate::presentation::markers`].
-pub use crate::presentation::markers::PresentationFireLayerHost;
+pub use crate::presentation::markers::{PresentationFireLayerHost, PresentationLayerHost};

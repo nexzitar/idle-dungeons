@@ -1,8 +1,8 @@
 //! Panel primitives and atmospheric backdrop layering.
 
 use bevy::prelude::*;
-use bevy::ui::{FocusPolicy, RelativeCursorPosition};
 use bevy::text::{TextColor, TextFont};
+use bevy::ui::{FocusPolicy, RelativeCursorPosition};
 
 use crate::ui::components::{
     SettingsButton, TopBarField, UiButtonPalette, UiScrollContent, UiScrollRegion, UiScrollState,
@@ -119,29 +119,27 @@ pub fn spawn_top_resource_bar(
                 TextColor(UiTheme::muted_gold()),
             ));
 
-            row.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    flex_grow: 1.0,
-                    flex_direction: FlexDirection::Row,
-                    justify_content: JustifyContent::FlexEnd,
-                    align_items: AlignItems::Center,
-                    flex_wrap: FlexWrap::Wrap,
-                    column_gap: Val::Px(18.0),
-                    row_gap: Val::Px(6.0),
-                    ..default()
-                },
-            ))
-            .with_children(|metrics| {
-                metric_chip(metrics, TopBarField::Gold, format!("Gold: {gold}"));
-                metric_chip(metrics, TopBarField::Salvage, format!("Salvage: {salvage}"));
-                metric_chip(
-                    metrics,
-                    TopBarField::SkillSlots,
-                    format!("Skills: {skill_slots}"),
-                );
-                metric_chip(metrics, TopBarField::Depth, format!("Depth: {depth_label}"));
-            });
+            row.spawn((Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_grow: 1.0,
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::FlexEnd,
+                align_items: AlignItems::Center,
+                flex_wrap: FlexWrap::Wrap,
+                column_gap: Val::Px(18.0),
+                row_gap: Val::Px(6.0),
+                ..default()
+            },))
+                .with_children(|metrics| {
+                    metric_chip(metrics, TopBarField::Gold, format!("Gold: {gold}"));
+                    metric_chip(metrics, TopBarField::Salvage, format!("Salvage: {salvage}"));
+                    metric_chip(
+                        metrics,
+                        TopBarField::SkillSlots,
+                        format!("Skills: {skill_slots}"),
+                    );
+                    metric_chip(metrics, TopBarField::Depth, format!("Depth: {depth_label}"));
+                });
 
             let p = UiButtonPalette::panel_outlined();
             row.spawn((
@@ -179,7 +177,10 @@ fn metric_chip(parent: &mut ChildSpawnerCommands<'_>, field: TopBarField, label:
     ));
 }
 
-fn spawn_panel_scroll_viewport(parent: &mut ChildSpawnerCommands<'_>, content: impl FnOnce(&mut ChildSpawnerCommands<'_>)) {
+fn spawn_panel_scroll_viewport(
+    parent: &mut ChildSpawnerCommands<'_>,
+    content: impl FnOnce(&mut ChildSpawnerCommands<'_>),
+) {
     parent
         .spawn((
             Node {
@@ -235,9 +236,7 @@ pub fn spawn_scrollable_flex_column(
                 flex_grow: 1.0,
                 flex_shrink: 1.0,
                 flex_basis: Val::Px(0.0),
-                min_height: min_viewport_height_px
-                    .map(Val::Px)
-                    .unwrap_or(Val::Px(0.0)),
+                min_height: min_viewport_height_px.map(Val::Px).unwrap_or(Val::Px(0.0)),
                 position_type: PositionType::Relative,
                 overflow: Overflow::clip_y(),
                 ..default()
@@ -296,7 +295,10 @@ pub fn spawn_framed_panel(
         });
 }
 
-pub fn spawn_bottom_strip(parent: &mut ChildSpawnerCommands<'_>, content: impl FnOnce(&mut ChildSpawnerCommands<'_>)) {
+pub fn spawn_bottom_strip(
+    parent: &mut ChildSpawnerCommands<'_>,
+    content: impl FnOnce(&mut ChildSpawnerCommands<'_>),
+) {
     parent
         .spawn((
             Node {

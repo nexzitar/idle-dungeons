@@ -1,21 +1,21 @@
 {
   "fireplace": {
-    "offset_x": 0.0,
-    "offset_y": 0.0,
-    "scale_x": 1.0,
-    "scale_y": 1.0,
+    "offset_x": -191.0,
+    "offset_y": 44.0,
+    "scale_x": 1.21,
+    "scale_y": 0.6999999,
     "size_basis": 210.0,
     "rotation_deg": 0.0,
-    "exposure": 1.0,
-    "glow": 0.0,
+    "exposure": 1.04,
+    "glow": 0.08,
     "bloom": 0.0,
     "global_z": 0,
     "pivot": "bottom_center",
     "anchor_ref": "fire_center"
   },
   "lead_slot": {
-    "offset_x": 0.0,
-    "offset_y": 0.0,
+    "offset_x": -88.0,
+    "offset_y": 98.0,
     "scale_x": 1.0,
     "scale_y": 1.0,
     "size_basis": 42.0,
@@ -42,13 +42,7 @@
     "anchor_ref": "ally_slot"
   },
   "anchors": {
-    "fire_center": {
-      "offset_x": 0.0,
-      "offset_y": 0.0,
-      "rotation_deg": 0.0,
-      "pivot": "center"
-    },
-    "lead_slot": {
+    "loot_spawn": {
       "offset_x": 0.0,
       "offset_y": 0.0,
       "rotation_deg": 0.0,
@@ -60,13 +54,19 @@
       "rotation_deg": 0.0,
       "pivot": "center"
     },
-    "loot_spawn": {
+    "lead_slot": {
       "offset_x": 0.0,
       "offset_y": 0.0,
       "rotation_deg": 0.0,
       "pivot": "center"
     },
     "camera_focus": {
+      "offset_x": 0.0,
+      "offset_y": 0.0,
+      "rotation_deg": 0.0,
+      "pivot": "center"
+    },
+    "fire_center": {
       "offset_x": 0.0,
       "offset_y": 0.0,
       "rotation_deg": 0.0,

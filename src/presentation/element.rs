@@ -67,22 +67,24 @@ impl PresentationElementTune {
         }
     }
 
+    /// Default tune for physical campfire seat `seat_one_based` (1..=6).
     #[must_use]
-    pub fn default_figure_lead() -> Self {
+    pub fn default_figure_seat(seat_one_based: usize) -> Self {
+        let spread_x = match seat_one_based {
+            1 => -88.0,
+            2 => 88.0,
+            3 => -140.0,
+            4 => 140.0,
+            5 => -44.0,
+            6 => 44.0,
+            _ => 0.0,
+        };
         Self {
+            offset_x: spread_x,
+            offset_y: 98.0,
             size_basis: 42.0,
             pivot: ScenePivot::BottomCenter,
-            anchor_ref: Some("lead_slot".into()),
-            ..Default::default()
-        }
-    }
-
-    #[must_use]
-    pub fn default_figure_ally() -> Self {
-        Self {
-            size_basis: 42.0,
-            pivot: ScenePivot::BottomCenter,
-            anchor_ref: Some("ally_slot".into()),
+            anchor_ref: Some(format!("player{seat_one_based}")),
             ..Default::default()
         }
     }

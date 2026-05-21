@@ -268,9 +268,7 @@ mod tests {
             let rooms = generate_dungeon(35, seed);
             rooms.iter().any(|r| {
                 r.kind == RoomKind::Elite
-                    && r.encounter
-                        .as_ref()
-                        .is_some_and(|e| e.enemy_b.is_some())
+                    && r.encounter.as_ref().is_some_and(|e| e.enemy_b.is_some())
             })
         });
         assert!(

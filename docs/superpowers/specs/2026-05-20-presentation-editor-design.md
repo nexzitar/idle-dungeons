@@ -4,21 +4,100 @@
 
 **Approved design.** First implementation target: **title camp scene** only. Architecture must generalize for combat theater, dungeon staging, props, VFX, and evolving camp composition without title-specific naming in core modules.
 
-**Approved for implementation planning.** Spec refined 2026-05-20. Plan: [`docs/superpowers/plans/2026-05-20-presentation-editor.md`](../plans/2026-05-20-presentation-editor.md).
+**Initial wave (Phases 0–4 + registry sub-layers):** delivered — discoverable editor, mouse editing, radial glow stack, `PresentationTrack` on fire ambient, `element:layer` hierarchy. See [`docs/presentation-editor-workflow.md`](../../presentation-editor-workflow.md).
+
+**Next wave (approved refinement 2026-05-20):** **atmosphere-first iteration** — polish glow, breathing, drag feel, and layered camp atmosphere **before** advanced gizmos or deep curve UX. Plan addendum: [`docs/superpowers/plans/2026-05-20-presentation-editor.md`](../plans/2026-05-20-presentation-editor.md) § Wave 2.
 
 ---
 
 ## Problem
 
-Delvers already has a strong presentation foundation: JSON persistence, anchors/pivots, hot reload, keyboard layout mode, and layered fire spawn. The workflow still reads as **debug tooling**, and the campfire atmosphere still reveals **geometric UI shapes** (rectangular glow, hard-edged ground bar). Iteration speed and artistic control lag behind what the architecture can support.
+Delvers already has a strong presentation foundation: JSON persistence, anchors/pivots, hot reload, layered fire spawn, and an in-engine presentation editor. Remaining gaps are **emotional payoff** and **iteration velocity**: the camp can still read as geometric UI layers, and tooling can still feel like debug layout mode instead of **atmospheric scene composition**.
 
-Goals for this initiative:
+Goals for the overall initiative (unchanged):
 
 1. **Discoverable in-engine editor** — not hidden behind backtick-only hints.
 2. **Mouse-driven scene editing** — complement keyboard nudging.
 3. **Atmospheric fire/glow** — environmental softness before advanced gizmos.
 4. **Composable presentation curves** — reusable, data-driven motion across systems.
 5. **Future-ready boundaries** — presentation states, camp evolution, shader hooks without real-time lighting.
+
+**Follow-on emphasis (next wave):** maximize **immediate visual feedback** so the editor is actively used; defer CAD-like precision tooling.
+
+---
+
+## Editor direction: atmospheric composition workflow
+
+The presentation editor should evolve from **debug transform tooling** into a **lightweight atmospheric scene composition workflow**.
+
+| Optimize for | De-prioritize |
+|--------------|----------------|
+| Rapid experimentation | CAD-like precision |
+| Low friction (toggle, drag, save) | Heavyweight scene authoring |
+| Emotional visual iteration | Multi-handle transform suites |
+| Safe tweaking (reset, reload; future undo) | Effect spam and busy motion |
+| Immediate live feedback | Export/rebuild loops |
+
+Delvers presentation remains **handcrafted, painterly, atmospheric, and organic**. Authoring guidance: [`docs/presentation-editor-workflow.md`](../../presentation-editor-workflow.md) § Workflow philosophy.
+
+---
+
+## Living atmosphere pipeline (conceptual framing)
+
+Delvers is building a **layered atmospheric presentation pipeline** (presentation-only; simulation stays deterministic):
+
+```
+Scene composition (anchors, elements, JSON)
+    → Layered stacks (element:layer hosts)
+    → Runtime modulation (PresentationTrack)
+    → Editable transforms (editor)
+    → Atmospheric presets (fire, ambient, future props)
+    ── separate from ──
+Domain / combat / playback truth
+```
+
+The editor and tooling exist to support:
+
+- **Iteration velocity** and polish passes
+- **Emotional scene building** (camp hub, later theater)
+- **Progression visualization** (tents, forge, trophies as layered elements)
+
+Contributors should treat this as **infrastructure for atmosphere**, not a general-purpose level editor.
+
+---
+
+## Layered effects standard (composable over monolithic)
+
+**Prefer composable layered effects over giant monolithic effect entities.**
+
+| Pattern | Example (title camp) |
+|---------|----------------------|
+| Separate layers per role | `fireplace:stack`, `base`, `flame`, `glow`, `ground` |
+| Shared modulation | `PresentationTrack` per property path |
+| Registry + spawn | `TITLE_CAMP_LAYER_REGISTRY` + `PresentationLayerHost` |
+
+Future camp/theater assets should add **layers** (glow, ember, fog, lantern halo, boss aura wash) rather than one opaque “effect node.” Monoliths hide tuning, break isolation (see solo-layer preview), and encourage synchronized buzzing.
+
+Reference stack: `src/presentation/fire.rs` + `docs/presentation-scene-composition.md`.
+
+---
+
+## Next execution wave (approved priority)
+
+**Do not** add deep gizmo/handle complexity until atmosphere reads well at normal zoom. Approved order for follow-on implementation:
+
+| # | Deliverable | Rationale |
+|---|-------------|-----------|
+| 1 | Softer radial glow system | Largest fix for “UI rectangle” fire read |
+| 2 | Better fire breathing / flicker | Emotional ROI; uses tracks + frequency bands |
+| 3 | Smooth drag interaction | Editor friction reduction |
+| 4 | Layered atmosphere improvements | Embers, props, washes — composable layers |
+| 5 | Curve tuning UX | Author tracks in-editor without JSON-only loops |
+| 6 | Advanced gizmos + sub-layer handles | Precision after atmosphere rewards iteration |
+
+This **reorders depth work** relative to the original phase table (below): Phases 1–4 established **capability**; Wave 2 optimizes **payoff and usability**.
+
+Original phase table remains the **historical delivery sequence**; Wave 2 is the **active execution priority**.
 
 ---
 
@@ -197,7 +276,7 @@ Hierarchy for phase 1 (title camp):
 - `lead_slot`
 - `ally_slot`
 
-Phase 5+ (sub-layer editing): expand tree under fireplace host (`fire_stack`, `glow`, `ground_wash`, flame group) as selectable `PresentationLayer` targets.
+Sub-layer editing: **delivered** via `element:layer` ids and `TITLE_CAMP_LAYER_REGISTRY` (e.g. `fireplace:glow`, `lead_slot:emoji`). Further hierarchy entries follow the same registry + host pattern for new assets.
 
 ### Inspector fields
 
@@ -440,9 +519,9 @@ JSON may add `presets: { ... }` and `active_preset: "camp_stage_2"` on the scene
 
 ---
 
-## Advanced gizmos & sub-layer editing (phase 5 — lowest priority)
+## Advanced gizmos (phase 5 — lowest priority)
 
-`PresentationEditorGizmoFlags`:
+`PresentationEditorGizmoFlags` (mostly off until atmosphere wave completes):
 
 - `selection_outline` (default on)
 - `pivot_marker`
@@ -450,21 +529,58 @@ JSON may add `presets: { ... }` and `active_preset: "camp_stage_2"` on the scene
 - `layer_label`
 - `glow_radius_preview`
 
-Sub-layer hierarchy selection (glow vs ground vs flame group) after atmosphere and curves prove the stack.
+Corner scale handles, rotation handles, anchor diamonds, and glow-radius rings remain **Wave 2 item #6** — after softer glow, breathing, drag polish, and layered atmosphere.
+
+Sub-layer **selection** in hierarchy is **delivered**; sub-layer **gizmo precision** is not.
 
 ---
 
-## Implementation phases (approved order)
+## Iteration safety (future — not implemented)
+
+Once mouse drag and inspector typing are daily drivers, authors need **safe iteration**:
+
+| Capability | Intent |
+|------------|--------|
+| **Undo / redo** | Revert last nudge, field edit, or drag delta |
+| **Temporary edit snapshots** | Session buffer before commit-to-JSON |
+| **Revert-to-last-save** | One action to disk-known-good without hand-editing JSON |
+
+**Architecture awareness only** — no storage format or command stack in the current wave. Session and layout resources should remain structured so a command history can wrap `layer_tune_mut` / `apply_editor_tune_delta` later without domain coupling.
+
+---
+
+## Solo-layer preview (future — not implemented)
+
+As presentation complexity grows (combat theater, particles, fog, UI overlays), tuning one layer in a stack becomes painful. Planned **solo-layer preview** modes:
+
+| Isolate | Use when |
+|---------|----------|
+| Glow only | Radial falloff and alpha tracks |
+| Flame group | Crossfade and tint stacks |
+| Particles / embers | Density without wash drowning |
+| Ground wash | Ellipse shape vs fire base |
+| UI overlays | Theater chrome vs stage atmosphere |
+
+Editor would temporarily hide or dim non-selected layers while keeping host transforms editable. Critical for **combat theater** and **VFX stacks** where everything shares the same focal point.
+
+**Not implemented** — flags or session field reserved in design only (`solo_preview_layer: Option<ElementLayerId>` sketch). No UI in Wave 2 unless explicitly scoped.
+
+---
+
+## Implementation phases (initial delivery — complete)
 
 | Phase | Deliverable | Outcome |
 |-------|-------------|---------|
+| **0** | Types + `title_scene.json` adapter | Generalized presentation model |
 | **1** | `PresentationEditor` overlay, Settings toggle, hierarchy, inspector, save/reload | Discoverable tooling |
-| **2** | Mouse select + drag on element hosts | Faster layout iteration |
-| **3** | Radial glow texture + ground wash softness + atmospheric tuning pass | Largest visual quality jump |
-| **4** | `PresentationTrack` + `CurveLayer` + JSON migration + fire tick rewire | Organic motion, reusable infra |
-| **5** | Advanced gizmos + sub-layer targets in hierarchy | Precision editing |
+| **2** | Mouse select + drag on hosts | Faster layout iteration |
+| **3** | Radial glow texture + ground wash softness | Visual quality baseline |
+| **4** | `PresentationTrack` + fire tick rewire | Composable motion |
+| **5** | Advanced gizmos | **Deferred** — see Wave 2 #6 |
 
-Phases 1–3 may land as one or more PRs; **do not** block phase 1 on curve completeness.
+**Active priority:** [Next execution wave](#next-execution-wave-approved-priority) (atmosphere and usability before Phase 5 depth).
+
+Phases 1–3 were allowed to land before curve completeness; that rule still applies to Wave 2 atmosphere tasks (do not block glow polish on curve UX).
 
 ---
 
@@ -517,14 +633,34 @@ Serde aliases on JSON fields preserve existing `title_scene.json` files on disk.
 
 ## Success criteria
 
+### Initial wave (delivered / verifying)
+
 1. Artist/designer can open Presentation editor from Settings without knowing backtick.
-2. Click-drag moves fireplace and figure slots; JSON persists correctly.
-3. Fire glow no longer reads as an obvious UI rectangle at normal zoom.
-4. `PresentationTrack` can combine sine + noise layers on one property; tests prove determinism.
-5. New scene ids and elements can be added via JSON + spawn wiring without renaming core `PresentationEditor` types.
-6. Domain layer remains free of presentation imports.
-7. Default fire/UI modulation frequencies sit in spec bands; no synchronized multi-layer buzzing on title camp.
-8. Presentation ticks do not allocate or spawn/despawn per frame on the title scene path.
+2. Click-drag moves fireplace, figure slots, and registered sub-layers; JSON persists correctly.
+3. `PresentationTrack` can combine sine + noise layers on one property; tests prove determinism.
+4. New scene ids and elements can be added via registry + JSON + spawn wiring without renaming core editor types.
+5. Domain layer remains free of presentation imports.
+6. Presentation ticks do not allocate or spawn/despawn per frame on the title scene path.
+
+### Wave 2 (next execution — atmosphere-first)
+
+7. Fire glow reads **environmental** at normal zoom (soft radial, minimum alpha floor, no obvious UI rect).
+8. Fire motion feels like **breathing**, not arcade flicker (bands respected, phases staggered).
+9. Drag/layout interaction feels **smooth** enough for repeated tuning sessions.
+10. New atmosphere work uses **layered** spawn pattern, not monolithic effect nodes.
+11. Default modulation stays in spec frequency bands; readability constraints unchanged.
+
+---
+
+## Spec self-review (refinement 2026-05-20)
+
+| Topic | Location | Notes |
+|-------|----------|-------|
+| Day-to-day authoring | `presentation-editor-workflow.md` | Philosophy, Wave 2 table, file paths |
+| Types, budget, future APIs | This spec | Runtime budget unchanged; future sections labeled |
+| Task checkboxes | Implementation plan | Wave 2 addendum only |
+| Overlap removed | Phase 5 vs sub-layers | Selection delivered; gizmos still deferred |
+| Future vs now | Undo, solo preview, states, presets | Clearly **not implemented** |
 
 ---
 

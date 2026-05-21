@@ -2,11 +2,11 @@ use crate::domain::combat::{
     combat_playback_frames_from_result, party_strike_damage_white_yellow,
     simulate_party_vs_encounter_foes, CombatOutcome, CombatPlaybackFrame, CombatSimOptions,
 };
+use crate::domain::combat_archetype::hints_for_hero;
 use crate::domain::combat_timing::encounter_initiative_seed;
 use crate::domain::dungeon::{
     generate_dungeon, peak_risk_note, room_risk_hint, room_risk_rank, DungeonRoom, RoomKind,
 };
-use crate::domain::combat_archetype::hints_for_hero;
 use crate::domain::hero::HeroProfile;
 use crate::domain::items::ItemInstance;
 use crate::domain::loot::{
@@ -85,13 +85,7 @@ impl RunSummary {
         if den == 0 {
             None
         } else {
-            Some(
-                (self
-                    .party_strike_damage_yellow
-                    .saturating_mul(100)
-                    / den)
-                .min(100) as u32,
-            )
+            Some((self.party_strike_damage_yellow.saturating_mul(100) / den).min(100) as u32)
         }
     }
 }
@@ -257,7 +251,11 @@ fn simulate_run_with_playback_for_rooms(
                     }
                     v
                 };
-                let foe_display = foes.iter().map(|e| e.name.as_str()).collect::<Vec<_>>().join(" · ");
+                let foe_display = foes
+                    .iter()
+                    .map(|e| e.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" · ");
                 let enemy_max_hp_bar: i32 = foes.iter().map(|e| e.max_health).sum();
                 let combat = simulate_party_vs_encounter_foes(
                     lead,
@@ -526,8 +524,7 @@ mod tests {
             )
         );
         assert!(
-            a.summary.party_strike_damage_white > 0
-                || a.summary.party_strike_damage_yellow > 0,
+            a.summary.party_strike_damage_white > 0 || a.summary.party_strike_damage_yellow > 0,
             "expected some strike damage over a multi-room run"
         );
         let pct = a.summary.strike_ability_share_percent().expect("share");

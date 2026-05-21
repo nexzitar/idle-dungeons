@@ -13,7 +13,9 @@ use crate::ui::components::{
     UiScrollContent, UiScrollRegion, UiScrollState, UiTooltip,
 };
 use crate::ui::placeholder_graphics::UiPlaceholderImages;
-use crate::ui::theme::{caption_text, headline_text, section_title, skill_category_chip_colors, UiTheme};
+use crate::ui::theme::{
+    caption_text, headline_text, section_title, skill_category_chip_colors, UiTheme,
+};
 
 pub fn spawn_skill_book_modal(
     parent: &mut ChildSpawnerCommands<'_>,
@@ -89,8 +91,8 @@ pub fn spawn_skill_book_modal(
         ))
                 .with_children(|dialog| {
                     let who = match sheet {
-                        PartyHeroKind::Lead => "Lead",
-                        PartyHeroKind::Partner => "Ally",
+                        PartyHeroKind::Player1 => "Player 1",
+                        PartyHeroKind::Player2 => "Player 2",
                     };
                     dialog.spawn(headline_text(format!(
                         "Skill book — {who} — slot {}",
@@ -230,12 +232,12 @@ fn spawn_pick_row(
             Node {
                 box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
-                    min_height: Val::Px(44.0),
-                    justify_content: JustifyContent::FlexStart,
-                    align_items: AlignItems::Center,
-                    padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
+                min_height: Val::Px(44.0),
+                justify_content: JustifyContent::FlexStart,
+                align_items: AlignItems::Center,
+                padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
             },
             Button,
             BackgroundColor(p.idle_bg.into()),
@@ -252,10 +254,10 @@ fn spawn_pick_row(
             b.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
-                    flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(10.0),
-                    align_items: AlignItems::Center,
-                    ..default()
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(10.0),
+                align_items: AlignItems::Center,
+                ..default()
             })
             .with_children(|row| {
                 if let Some(id) = skill {
@@ -285,9 +287,9 @@ fn spawn_pick_row(
                 } else {
                     row.spawn((Node {
                         box_sizing: BoxSizing::BorderBox,
-                            width: Val::Px(30.0),
-                            flex_shrink: 0.0,
-                            ..default()
+                        width: Val::Px(30.0),
+                        flex_shrink: 0.0,
+                        ..default()
                     },));
                 }
                 row.spawn((
@@ -305,10 +307,10 @@ fn spawn_pick_row(
                     },
                 ));
                 row.spawn((
-                Text::new(label),
-                TextFont::from_font_size(UiTheme::FONT_COMPACT),
-                TextColor(UiTheme::body()),
-            ));
+                    Text::new(label),
+                    TextFont::from_font_size(UiTheme::FONT_COMPACT),
+                    TextColor(UiTheme::body()),
+                ));
             });
         });
 }

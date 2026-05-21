@@ -7,6 +7,9 @@ use bevy::prelude::*;
 #[derive(Component)]
 pub struct CampfirePresentationRoot;
 
-/// Hit target for an individual fireplace presentation layer (glow, base, flame, …).
+/// Hit target for a sub-layer of a composite presentation element (`element:layer` id).
 #[derive(Component)]
-pub struct PresentationFireLayerHost(pub PresentationElementId);
+pub struct PresentationLayerHost(pub PresentationElementId);
+
+/// Legacy alias for [`PresentationLayerHost`].
+pub type PresentationFireLayerHost = PresentationLayerHost;
