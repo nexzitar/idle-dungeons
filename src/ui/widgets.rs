@@ -4,12 +4,13 @@ use bevy::prelude::*;
 use bevy::text::{TextColor, TextFont};
 use bevy::ui::FocusPolicy;
 
-use crate::ui::components::{SettingsButton, TopBarField, UiButtonPalette};
+use crate::ui::components::{SettingsButton, TopBarField};
 use crate::ui::theme::UiTheme;
 
 pub use crate::ui::primitives::scroll::{
     spawn_scroll_viewport, spawn_scrollable_flex_column, spawn_scrollable_log,
 };
+use crate::ui::primitives::{spawn_button, UiButtonConfig, UiButtonVariant};
 
 pub fn spawn_atmosphere(parent: &mut ChildSpawnerCommands<'_>) {
     parent
@@ -143,30 +144,17 @@ pub fn spawn_top_resource_bar(
                     metric_chip(metrics, TopBarField::Depth, format!("Depth: {depth_label}"));
                 });
 
-            let p = UiButtonPalette::panel_outlined();
-            row.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
+            let settings = spawn_button(
+                row,
+                UiButtonConfig {
+                    label: "Settings",
+                    variant: UiButtonVariant::PanelOutlined,
                     width: Val::Px(96.0),
                     height: Val::Px(34.0),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
+                    font_size: UiTheme::FONT_COMPACT,
                 },
-                Button,
-                BackgroundColor(p.idle_bg),
-                BorderColor::from(p.idle_border),
-                SettingsButton,
-                p,
-            ))
-            .with_children(|btn| {
-                btn.spawn((
-                    Text::new("Settings"),
-                    TextFont::from_font_size(UiTheme::FONT_COMPACT),
-                    TextColor(Color::WHITE),
-                ));
-            });
+            );
+            row.commands_mut().entity(settings).insert(SettingsButton);
         });
 }
 
