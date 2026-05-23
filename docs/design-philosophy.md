@@ -52,7 +52,7 @@ The philosophy is **player-owned progression** (single-player, offline-friendly)
 
 The current UI is a deliberate **structured shell**: columns for hero, delve/summary, and stash; modals for gear and skills; **tooltips** for clarity; and **release-on-click** handling tuned so purchases and assignments feel reliable on real hardware.
 
-Visual polish (animation, art pass) is expected to trail **mechanical depth**—the product should remain playable and testable at every step, with presentation catching up rather than the reverse.
+Visual polish (animation, art pass) is expected to trail **mechanical depth**—the product should remain playable and testable at every step, with presentation catching up rather than the reverse. **Concrete art-direction constraints** (palette, UI metaphor, combat readability pillars) live in [`visual-bible-foundation-v1.md`](visual-bible-foundation-v1.md). **Canonical UI tokens, inspect policy, and component recipes** live in [`ui-design-system.md`](ui-design-system.md).
 
 ## Testing and change discipline
 
