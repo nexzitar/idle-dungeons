@@ -187,7 +187,7 @@ fn spawn_stash_column(
             for &i in col_ix {
                 let item = &rows[i];
                 if interactive_inventory {
-                    crate::ui::spawn_item_card(col, item, ph);
+                    crate::ui::primitives::spawn_item_card(col, item, ph);
                 } else {
                     col.spawn(caption_text(format!(
                         "\u{2022} {} ({:?})",

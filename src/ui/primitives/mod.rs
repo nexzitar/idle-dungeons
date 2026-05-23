@@ -1,5 +1,6 @@
 pub mod bar;
 pub mod button;
+pub mod card;
 pub mod modal;
 pub mod panel;
 pub mod scroll;
@@ -8,6 +9,7 @@ pub mod text;
 
 pub use bar::*;
 pub use button::*;
+pub use card::*;
 pub use modal::*;
 pub use panel::*;
 pub use scroll::*;

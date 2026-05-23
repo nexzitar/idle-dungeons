@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use bevy::ui::FocusPolicy;
 
-use crate::ui::components::UiButtonPalette;
+use crate::ui::theme::UiModalStyle;
 
 /// Layout and interaction for [`spawn_modal_shell`].
 #[derive(Clone, Copy, Debug)]
@@ -46,14 +46,7 @@ pub fn spawn_modal_shell_with_handles(
     config: ModalShellConfig,
     content: impl FnOnce(&mut ChildSpawnerCommands<'_>),
 ) -> ModalShellHandles {
-    let backdrop_pal = UiButtonPalette {
-        idle_bg: Color::srgba(0.02, 0.02, 0.04, 0.58),
-        hover_bg: Color::srgba(0.04, 0.04, 0.06, 0.65),
-        pressed_bg: Color::srgba(0.06, 0.06, 0.08, 0.72),
-        idle_border: Color::NONE,
-        hover_border: Color::NONE,
-        pressed_border: Color::NONE,
-    };
+    let backdrop_pal = UiModalStyle::standard().backdrop_palette();
 
     let backdrop = parent
         .spawn((

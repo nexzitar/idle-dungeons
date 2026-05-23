@@ -25,7 +25,6 @@ use crate::app::{
     ProfileState, ResetProgress, RunSpeedSetting, SalvageInventoryItem, SkipRunPlayback,
 };
 use crate::domain::combat::COMBAT_TICK_DISPLAY_SECS;
-use crate::domain::items::ItemInstance;
 use crate::domain::run::{RunPlaybackFrameKind, RunSummary};
 use crate::presentation::editor::TITLE_ELEMENT_FIREPLACE;
 use crate::presentation::editor::{
@@ -39,7 +38,7 @@ use crate::presentation::editor::{
 use crate::presentation::PresentationEditorSession;
 use crate::ui::build_panel::build_panel_text;
 use crate::ui::components::{
-    AcceptRewardsButton, BuildScreen, EquipItemButton, FloatingCombatPopup, GearHubBackdrop,
+    AcceptRewardsButton, BuildScreen, FloatingCombatPopup, GearHubBackdrop,
     GearHubCloseButton, GearHubOpenButton, GearHubRoot, HeroNameDisplayText, HeroNameEditButton,
     HeroNameEditState, MainCamera, PlaybackAggroArrowLine, PlaybackAggroArrowText,
     PlaybackCaptionText, PlaybackCombatLogPanel, PlaybackCombatLogToggleLabel, PlaybackDepthText,
@@ -54,7 +53,7 @@ use crate::ui::components::{
     PlaybackPlayer1InstantRechargeFill, PlaybackPlayer1PortraitBlock, PlaybackPlayer1SkillGcdFill,
     PlaybackProgressBarFill, PlaybackProgressLabel, PlaybackRoomKindText, PlaybackSpeedDecButton,
     PlaybackSpeedIncButton, PlaybackSpeedValueText, PlaybackTheaterFloatLayer, ResetProgressButton,
-    RunPlaybackScreen, SalvageItemButton, SettingsButton, SettingsModalBackdrop,
+    RunPlaybackScreen, SettingsButton, SettingsModalBackdrop,
     SettingsModalCloseButton, SettingsModalRoot, SkillBookBackdrop, SkillBookCloseButton,
     SkillBookPickButton, SkillBookRoot, SkillShopBackdrop, SkillShopBuyButton,
     SkillShopCloseButton, SkillShopOpenButton, SkillShopRoot, SkillSlotButton, SkipPlaybackButton,
@@ -63,10 +62,7 @@ use crate::ui::components::{
 };
 use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::scene_tune::TitleSceneLayout;
-use crate::ui::theme::{
-    body_text, caption_text, format_item_affix_lines, format_item_stat_summary, rarity_color,
-    UiTheme,
-};
+use crate::ui::theme::UiTheme;
 use crate::ui::primitives::spawn_atmosphere;
 use bevy::app::MainScheduleOrder;
 use bevy::asset::AssetPlugin;
@@ -674,221 +670,6 @@ fn refresh_profile_screen_on_profile_change(
         }
         GameState::Running => {}
     }
-}
-
-pub(crate) fn spawn_item_card(
-    parent: &mut ChildSpawnerCommands<'_>,
-    item: &ItemInstance,
-    ph: &UiPlaceholderImages,
-) {
-    parent
-        .spawn((
-            Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Percent(100.0),
-                padding: UiRect::all(Val::Px(UiTheme::PANEL_INSET)),
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::FlexStart,
-                row_gap: Val::Px(8.0),
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
-            BackgroundColor(UiTheme::panel_bg_deep()),
-            BorderColor::from(rarity_color(item.rarity).mix(&Color::BLACK, 0.45)),
-        ))
-        .with_children(|card| {
-            card.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    width: Val::Percent(100.0),
-                    flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(10.0),
-                    align_items: AlignItems::FlexStart,
-                    ..default()
-                },
-            ))
-            .with_children(|head| {
-                head.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        width: Val::Px(40.0),
-                        height: Val::Px(40.0),
-                        flex_shrink: 0.0,
-                        ..default()
-                    },
-                    ImageNode {
-                        image: ph.item_generic.clone(),
-                        color: rarity_color(item.rarity).mix(&Color::WHITE, 0.35),
-                        ..default()
-                    },
-                ));
-                head.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        flex_direction: FlexDirection::Column,
-                        align_items: AlignItems::FlexStart,
-                        row_gap: Val::Px(4.0),
-                        flex_grow: 1.0,
-                        min_width: Val::Px(0.0),
-                        ..default()
-                    },
-                ))
-                .with_children(|txt| {
-                    txt.spawn((
-                        Text::new(item.name.clone()),
-                        TextFont::from_font_size(UiTheme::FONT_SECTION),
-                        TextColor(rarity_color(item.rarity)),
-                    ));
-                    txt.spawn(caption_text(format!("{:?} · {:?}", item.rarity, item.slot)));
-                    txt.spawn(body_text(format_item_stat_summary(item)));
-                    let aff = format_item_affix_lines(item);
-                    if !aff.is_empty() {
-                        txt.spawn(caption_text(aff));
-                    }
-                });
-            });
-            card.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(10.0),
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-            ))
-            .with_children(|row| {
-                let equip_pal = UiButtonPalette::equip();
-                row.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        width: Val::Px(108.0),
-                        height: Val::Px(36.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        border: UiRect::all(Val::Px(1.0)),
-                        ..default()
-                    },
-                    Button,
-                    BackgroundColor(equip_pal.idle_bg),
-                    BorderColor::from(equip_pal.idle_border),
-                    EquipItemButton { item_id: item.id },
-                    interaction::UiClickAction::EquipItem,
-                    equip_pal,
-                    UiTooltip::txt(
-                        "Equip this item on your hero. It replaces whatever is currently in this gear slot.",
-                    ),
-                ))
-                .with_children(|b| {
-                    b.spawn((
-                        Text::new("Equip"),
-                        TextFont::from_font_size(UiTheme::FONT_BODY),
-                        TextColor(Color::WHITE),
-                    ));
-                });
-                let salvage_pal = UiButtonPalette::salvage();
-                row.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        width: Val::Px(108.0),
-                        height: Val::Px(36.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        border: UiRect::all(Val::Px(1.0)),
-                        ..default()
-                    },
-                    Button,
-                    BackgroundColor(salvage_pal.idle_bg),
-                    BorderColor::from(salvage_pal.idle_border),
-                    SalvageItemButton { item_id: item.id },
-                    interaction::UiClickAction::SalvageItem,
-                    salvage_pal,
-                    UiTooltip::txt(
-                        "Salvage this item for currency. The item is removed from your stash permanently.",
-                    ),
-                ))
-                .with_children(|b| {
-                    b.spawn((
-                        Text::new("Salvage"),
-                        TextFont::from_font_size(UiTheme::FONT_BODY),
-                        TextColor(UiTheme::body()),
-                    ));
-                });
-            });
-        });
-}
-
-/// Read-only stash-style card for run rewards (loot not yet in profile).
-pub(crate) fn spawn_item_card_preview(
-    parent: &mut ChildSpawnerCommands<'_>,
-    item: &ItemInstance,
-    ph: &UiPlaceholderImages,
-) {
-    parent
-        .spawn((
-            Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Percent(100.0),
-                padding: UiRect::all(Val::Px(UiTheme::PANEL_INSET)),
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::FlexStart,
-                row_gap: Val::Px(8.0),
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
-            BackgroundColor(UiTheme::panel_bg_deep()),
-            BorderColor::from(rarity_color(item.rarity).mix(&Color::BLACK, 0.45)),
-        ))
-        .with_children(|card| {
-            card.spawn((Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Percent(100.0),
-                flex_direction: FlexDirection::Row,
-                column_gap: Val::Px(10.0),
-                align_items: AlignItems::FlexStart,
-                ..default()
-            },))
-                .with_children(|head| {
-                    head.spawn((
-                        Node {
-                            box_sizing: BoxSizing::BorderBox,
-                            width: Val::Px(40.0),
-                            height: Val::Px(40.0),
-                            flex_shrink: 0.0,
-                            ..default()
-                        },
-                        ImageNode {
-                            image: ph.item_generic.clone(),
-                            color: rarity_color(item.rarity).mix(&Color::WHITE, 0.35),
-                            ..default()
-                        },
-                    ));
-                    head.spawn((Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        flex_direction: FlexDirection::Column,
-                        align_items: AlignItems::FlexStart,
-                        row_gap: Val::Px(4.0),
-                        flex_grow: 1.0,
-                        min_width: Val::Px(0.0),
-                        ..default()
-                    },))
-                        .with_children(|txt| {
-                            txt.spawn((
-                                Text::new(item.name.clone()),
-                                TextFont::from_font_size(UiTheme::FONT_SECTION),
-                                TextColor(rarity_color(item.rarity)),
-                            ));
-                            txt.spawn(caption_text(format!("{:?} · {:?}", item.rarity, item.slot)));
-                            txt.spawn(body_text(format_item_stat_summary(item)));
-                            let aff = format_item_affix_lines(item);
-                            if !aff.is_empty() {
-                                txt.spawn(caption_text(aff));
-                            }
-                            txt.spawn(caption_text(
-                                "Added to stash when you Accept rewards.".to_string(),
-                            ));
-                        });
-                });
-        });
 }
 
 fn sync_playback_speed_label(

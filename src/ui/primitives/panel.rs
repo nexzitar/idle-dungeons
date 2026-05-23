@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy::ui::FocusPolicy;
 
 use crate::ui::primitives::scroll::spawn_scroll_viewport;
-use crate::ui::theme::UiTheme;
+use crate::ui::theme::{UiPanelStyle, UiTheme};
 
 /// Full-screen atmospheric backdrop (stone bands, torch glow, vignette).
 pub fn spawn_atmosphere(parent: &mut ChildSpawnerCommands<'_>) {
@@ -90,6 +90,7 @@ pub fn spawn_framed_panel(
     flex: f32,
     content: impl FnOnce(&mut ChildSpawnerCommands<'_>),
 ) {
+    let style = UiPanelStyle::framed();
     parent
         .spawn((
             Node {
@@ -99,16 +100,16 @@ pub fn spawn_framed_panel(
                 flex_shrink: 1.0,
                 min_width: Val::Px(220.0),
                 min_height: Val::Px(0.0),
-                padding: UiRect::all(Val::Px(UiTheme::PANEL_INSET_LG)),
+                padding: UiRect::all(Val::Px(style.padding_px)),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Stretch,
-                row_gap: Val::Px(10.0),
-                border: UiRect::all(Val::Px(1.0)),
+                row_gap: Val::Px(style.row_gap_px),
+                border: UiRect::all(Val::Px(style.border_px)),
                 overflow: Overflow::clip_y(),
                 ..default()
             },
-            BackgroundColor(UiTheme::panel_bg()),
-            BorderColor::from(UiTheme::panel_border()),
+            BackgroundColor(style.background),
+            BorderColor::from(style.border),
         ))
         .with_children(|panel| {
             spawn_scroll_viewport(panel, content);
@@ -119,6 +120,7 @@ pub fn spawn_bottom_strip(
     parent: &mut ChildSpawnerCommands<'_>,
     content: impl FnOnce(&mut ChildSpawnerCommands<'_>),
 ) {
+    let style = UiPanelStyle::bottom_strip();
     parent
         .spawn((
             Node {
@@ -128,16 +130,16 @@ pub fn spawn_bottom_strip(
                 flex_shrink: 0.0,
                 min_height: Val::Px(120.0),
                 max_height: Val::Percent(38.0),
-                padding: UiRect::all(Val::Px(UiTheme::PANEL_INSET_LG)),
+                padding: UiRect::all(Val::Px(style.padding_px)),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Stretch,
-                row_gap: Val::Px(12.0),
-                border: UiRect::all(Val::Px(1.0)),
+                row_gap: Val::Px(style.row_gap_px),
+                border: UiRect::all(Val::Px(style.border_px)),
                 overflow: Overflow::clip_y(),
                 ..default()
             },
-            BackgroundColor(UiTheme::panel_bg()),
-            BorderColor::from(UiTheme::panel_border()),
+            BackgroundColor(style.background),
+            BorderColor::from(style.border),
         ))
         .with_children(|strip| {
             spawn_scroll_viewport(strip, content);

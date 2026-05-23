@@ -169,7 +169,7 @@ pub fn spawn_summary_rewards_modal(
                             );
                             for &i in ix.iter() {
                                 let item = &summary.loot[i];
-                                crate::ui::spawn_item_card_preview(scroll, item, ph);
+                                crate::ui::primitives::spawn_item_card_preview(scroll, item, ph);
                             }
                         }
                     });
