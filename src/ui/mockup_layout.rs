@@ -39,6 +39,7 @@ use crate::ui::theme::{
     body_text, caption_text, format_item_affix_lines, format_item_stat_summary, headline_text,
     log_line_present, rarity_color, section_title, UiTheme,
 };
+use crate::ui::primitives::bar::{spawn_horizontal_bar, UiBarStyle};
 use crate::ui::primitives::scroll::{spawn_scrollable_flex_column, spawn_scrollable_log};
 
 fn ornate_shell(content: impl FnOnce(&mut ChildSpawnerCommands<'_>)) -> impl FnOnce(&mut ChildSpawnerCommands<'_>) {
@@ -1161,58 +1162,31 @@ pub fn room_kind_label(kind: RoomKind) -> &'static str {
 }
 
 fn playback_player0_bar(parent: &mut ChildSpawnerCommands<'_>, fill_pct: f32) {
-    parent
-        .spawn((
-            Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Percent(100.0),
-                height: Val::Px(14.0),
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
-            BackgroundColor(UiTheme::void_black().into()),
-            BorderColor::from(UiTheme::panel_border())
-        ))
-        .with_children(|bar| {
-            bar.spawn((
-                Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Percent((fill_pct * 100.0).clamp(0.0, 100.0)),
-                        height: Val::Percent(100.0),
-                        ..default()
-            },
-            BackgroundColor(UiTheme::healing().into()),
-                PlaybackPlayer0BarFill,
-            ));
-        });
+    spawn_horizontal_bar(
+        parent,
+        UiBarStyle {
+            track: UiTheme::void_black(),
+            fill: UiTheme::healing(),
+            height_px: 14.0,
+            border: true,
+        },
+        PlaybackPlayer0BarFill,
+        fill_pct,
+    );
 }
 
 fn playback_player1_bar(parent: &mut ChildSpawnerCommands<'_>, fill_pct: f32) {
-    let tone = Color::srgb(0.38, 0.72, 0.92);
-    parent
-        .spawn((
-            Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Percent(100.0),
-                height: Val::Px(14.0),
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
-            BackgroundColor(UiTheme::void_black().into()),
-            BorderColor::from(UiTheme::panel_border())
-        ))
-        .with_children(|bar| {
-            bar.spawn((
-                Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Percent((fill_pct * 100.0).clamp(0.0, 100.0)),
-                        height: Val::Percent(100.0),
-                        ..default()
-            },
-            BackgroundColor(tone.into()),
-                PlaybackPlayer1BarFill,
-            ));
-        });
+    spawn_horizontal_bar(
+        parent,
+        UiBarStyle {
+            track: UiTheme::void_black(),
+            fill: Color::srgb(0.38, 0.72, 0.92),
+            height_px: 14.0,
+            border: true,
+        },
+        PlaybackPlayer1BarFill,
+        fill_pct,
+    );
 }
 
 fn playback_enemy_bar(parent: &mut ChildSpawnerCommands<'_>, fill_pct: f32) {
