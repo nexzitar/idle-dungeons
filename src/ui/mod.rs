@@ -1,11 +1,11 @@
 pub mod build_panel;
 pub mod components;
-pub mod primitives;
 pub mod gear_hub;
 pub mod inventory_panel;
 pub mod log_panel;
 pub mod mockup_layout;
 pub mod placeholder_graphics;
+pub mod primitives;
 pub mod run_panel;
 pub mod scene_tune;
 pub mod skill_book;
@@ -25,43 +25,41 @@ use crate::app::{
 use crate::domain::combat::COMBAT_TICK_DISPLAY_SECS;
 use crate::domain::items::ItemInstance;
 use crate::domain::run::{RunPlaybackFrameKind, RunSummary};
+use crate::presentation::editor::TITLE_ELEMENT_FIREPLACE;
+use crate::presentation::editor::{
+    apply_editor_tune_delta, presentation_editor_tune_field_keyboard, reset_all_title_placements,
+    reset_editor_selection_placement, PresentationEditorFieldEditState,
+    PresentationEditorHierarchyButton, PresentationEditorReloadButton,
+    PresentationEditorResetAllButton, PresentationEditorResetCenterButton,
+    PresentationEditorSaveButton, PresentationEditorSettingsToggleButton,
+    PresentationEditorTuneDeltaButton, PresentationEditorTuneValueButton,
+};
+use crate::presentation::PresentationEditorSession;
 use crate::ui::build_panel::build_panel_text;
 use crate::ui::components::{
     AcceptRewardsButton, BuildScreen, EquipItemButton, FloatingCombatPopup, GearHubBackdrop,
     GearHubCloseButton, GearHubOpenButton, GearHubRoot, HeroNameDisplayText, HeroNameEditButton,
     HeroNameEditState, MainCamera, PlaybackAggroArrowLine, PlaybackAggroArrowText,
-    PlaybackPlayer1BarFill, PlaybackPlayer1CastFill, PlaybackPlayer1CdFill, PlaybackPlayer1InstantRechargeFill,
-    PlaybackPlayer1PortraitBlock, PlaybackPlayer1SkillGcdFill, PlaybackCaptionText,
-    PlaybackCombatLogPanel, PlaybackCombatLogToggleLabel, PlaybackDepthText,
+    PlaybackCaptionText, PlaybackCombatLogPanel, PlaybackCombatLogToggleLabel, PlaybackDepthText,
     PlaybackDmgMeterEnemyFill, PlaybackDmgMeterEnemyValue, PlaybackDmgMeterPlayer0Fill,
     PlaybackDmgMeterPlayer0Value, PlaybackDmgMeterPlayer1Fill, PlaybackDmgMeterPlayer1Row,
     PlaybackDmgMeterPlayer1Value, PlaybackEnemyBarFill, PlaybackEnemyDebuffLine,
     PlaybackEnemyNameText, PlaybackEnemyPortraitBlock, PlaybackFoeAltCastFill,
     PlaybackFoeAltCdFill, PlaybackFoeAltTimingRow, PlaybackFoeCastFill, PlaybackFoeCdFill,
-    PlaybackPlayer0BarFill, PlaybackPlayer0DebuffLine, PlaybackPlayer0CastFill, PlaybackPlayer0CdFill,
-    PlaybackPlayer0InstantRechargeFill, PlaybackPlayer0SkillGcdFill, PlaybackLogScrollRegion,
-    PlaybackLogText, PlaybackProgressBarFill, PlaybackProgressLabel, PlaybackRoomKindText,
-    PlaybackSpeedDecButton, PlaybackSpeedIncButton, PlaybackSpeedValueText,
-    PlaybackTheaterFloatLayer, ResetProgressButton, RunPlaybackScreen, SalvageItemButton,
-    SettingsButton, SettingsModalBackdrop, SettingsModalCloseButton, SettingsModalRoot,
-    SkillBookBackdrop, SkillBookCloseButton, SkillBookPickButton, SkillBookRoot, SkillShopBackdrop,
-    SkillShopBuyButton, SkillShopCloseButton, SkillShopOpenButton, SkillShopRoot, SkillSlotButton,
-    SkipPlaybackButton, StartRunButton, StashSortCycleButton, SummaryScreen, TitleEnterCampButton,
-    TitleQuitButton, TitleScreen, ToggleCombatLogButton, TopBarField, UiButtonPalette, UiRoot,
-    UiScrollContent, UiScrollRegion, UiScrollState, UiTooltip,
+    PlaybackLogText, PlaybackPlayer0BarFill, PlaybackPlayer0CastFill, PlaybackPlayer0CdFill,
+    PlaybackPlayer0DebuffLine, PlaybackPlayer0InstantRechargeFill, PlaybackPlayer0SkillGcdFill,
+    PlaybackPlayer1BarFill, PlaybackPlayer1CastFill, PlaybackPlayer1CdFill,
+    PlaybackPlayer1InstantRechargeFill, PlaybackPlayer1PortraitBlock, PlaybackPlayer1SkillGcdFill,
+    PlaybackProgressBarFill, PlaybackProgressLabel, PlaybackRoomKindText, PlaybackSpeedDecButton,
+    PlaybackSpeedIncButton, PlaybackSpeedValueText, PlaybackTheaterFloatLayer, ResetProgressButton,
+    RunPlaybackScreen, SalvageItemButton, SettingsButton, SettingsModalBackdrop,
+    SettingsModalCloseButton, SettingsModalRoot, SkillBookBackdrop, SkillBookCloseButton,
+    SkillBookPickButton, SkillBookRoot, SkillShopBackdrop, SkillShopBuyButton,
+    SkillShopCloseButton, SkillShopOpenButton, SkillShopRoot, SkillSlotButton, SkipPlaybackButton,
+    StartRunButton, StashSortCycleButton, SummaryScreen, TitleEnterCampButton, TitleQuitButton,
+    TitleScreen, ToggleCombatLogButton, TopBarField, UiButtonPalette, UiRoot, UiTooltip,
 };
 use crate::ui::placeholder_graphics::UiPlaceholderImages;
-use crate::presentation::editor::{
-    apply_editor_tune_delta, presentation_editor_tune_field_keyboard,
-    reset_all_title_placements, reset_editor_selection_placement,
-    PresentationEditorFieldEditState, PresentationEditorHierarchyButton,
-    PresentationEditorReloadButton,
-    PresentationEditorResetAllButton, PresentationEditorResetCenterButton,
-    PresentationEditorSaveButton, PresentationEditorSettingsToggleButton,
-    PresentationEditorTuneDeltaButton, PresentationEditorTuneValueButton,
-};
-use crate::presentation::editor::TITLE_ELEMENT_FIREPLACE;
-use crate::presentation::PresentationEditorSession;
 use crate::ui::scene_tune::TitleSceneLayout;
 use crate::ui::theme::{
     body_text, caption_text, format_item_affix_lines, format_item_stat_summary, rarity_color,
@@ -72,18 +70,18 @@ use bevy::app::MainScheduleOrder;
 use bevy::asset::AssetPlugin;
 use bevy::ecs::schedule::ScheduleLabel;
 use bevy::ecs::system::SystemParam;
-use bevy::input::mouse::{MouseButton, MouseWheel};
+use bevy::input::mouse::MouseButton;
 use bevy::input::{keyboard::KeyboardInput, ButtonState, InputPlugin};
 use bevy::prelude::*;
 use bevy::text::{TextColor, TextFont};
 use bevy::transform::prelude::TransformSystems;
-use bevy::ui::{ComputedNode, RelativeCursorPosition, UiSystems};
+use bevy::ui::UiSystems;
 
 #[derive(Resource, Default)]
 struct GearHubKeepOpen(pub bool);
 
 #[derive(Resource, Default)]
-struct PlaybackCombatLogVisible(pub bool);
+pub(crate) struct PlaybackCombatLogVisible(pub bool);
 
 /// Button that received [`Interaction::Pressed`] on press; used to confirm click on mouse-up.
 #[derive(Resource, Default)]
@@ -245,10 +243,11 @@ impl Plugin for UiPlugin {
             .add_systems(
                 PostUpdate,
                 (
-                    apply_ui_scroll.after(TransformSystems::Propagate),
-                    pin_playback_combat_log_scroll
+                    crate::ui::primitives::scroll::apply_ui_scroll
+                        .after(TransformSystems::Propagate),
+                    crate::ui::primitives::scroll::pin_playback_combat_log_scroll
                         .run_if(in_state(GameState::Running))
-                        .after(apply_ui_scroll),
+                        .after(crate::ui::primitives::scroll::apply_ui_scroll),
                     refresh_profile_screen_on_profile_change,
                     crate::ui::tooltip::update_tooltip.after(UiSystems::Layout),
                 ),
@@ -402,12 +401,7 @@ struct UiClickResolveMarkers<'w, 's> {
     settings_close: Query<'w, 's, (), With<SettingsModalCloseButton>>,
     settings_back: Query<'w, 's, (), With<SettingsModalBackdrop>>,
     #[cfg(debug_assertions)]
-    presentation_settings_toggle: Query<
-        'w,
-        's,
-        (),
-        With<PresentationEditorSettingsToggleButton>,
-    >,
+    presentation_settings_toggle: Query<'w, 's, (), With<PresentationEditorSettingsToggleButton>>,
     sbook_pick: Query<'w, 's, (), With<SkillBookPickButton>>,
     sbook_close: Query<'w, 's, (), With<SkillBookCloseButton>>,
     sbook_back: Query<'w, 's, (), With<SkillBookBackdrop>>,
@@ -2745,117 +2739,6 @@ fn handle_salvage_buttons(
             });
             break;
         }
-    }
-}
-
-fn pin_playback_combat_log_scroll(
-    playback: Res<ActiveRunPlayback>,
-    vis: Res<PlaybackCombatLogVisible>,
-    mut prev_log: Local<String>,
-    mut regions: Query<(Entity, &mut UiScrollState, &ComputedNode), With<PlaybackLogScrollRegion>>,
-    children: Query<&Children>,
-    mut content_set: ParamSet<(
-        Query<&ComputedNode, With<UiScrollContent>>,
-        Query<&mut Node, With<UiScrollContent>>,
-    )>,
-) {
-    if !vis.0 {
-        return;
-    }
-    let body = playback.log_lines.join("\n");
-    if body == *prev_log {
-        return;
-    }
-    *prev_log = body.clone();
-
-    for (entity, mut state, viewport_node) in &mut regions {
-        let view_h = viewport_node.size().y;
-        if view_h <= 0.0 {
-            continue;
-        }
-        let Ok(ch) = children.get(entity) else {
-            continue;
-        };
-        let mut scroll_child = None;
-        for e in ch.iter() {
-            if content_set.p0().get(e).is_ok() {
-                scroll_child = Some(e);
-                break;
-            }
-        }
-        let Some(child) = scroll_child else {
-            continue;
-        };
-        let content_h = content_set
-            .p0()
-            .get(child)
-            .map(|n| n.size().y)
-            .unwrap_or(0.0);
-        let max_scroll = (content_h - view_h).max(0.0);
-        state.offset = max_scroll;
-        if let Ok(mut style) = content_set.p1().get_mut(child) {
-            style.top = Val::Px(-state.offset);
-        }
-    }
-}
-
-fn apply_ui_scroll(
-    mut wheel_events: MessageReader<MouseWheel>,
-    mut regions: Query<
-        (
-            Entity,
-            &RelativeCursorPosition,
-            &mut UiScrollState,
-            &ComputedNode,
-        ),
-        With<UiScrollRegion>,
-    >,
-    children: Query<&Children>,
-    mut content_style: Query<&mut Node, With<UiScrollContent>>,
-    content_node: Query<&ComputedNode, With<UiScrollContent>>,
-) {
-    // Inverted from raw wheel delta: scroll feels like "grab and drag" the content.
-    // Pixels per wheel notch (lower = slower). Trackpads accumulate small y values.
-    const SCROLL_PIXELS_PER_LINE: f32 = 12.0;
-    let delta: f32 = wheel_events
-        .read()
-        .map(|e| -e.y * SCROLL_PIXELS_PER_LINE)
-        .sum();
-    if delta.abs() < f32::EPSILON {
-        return;
-    }
-
-    for (entity, rel_pos, mut state, viewport_node) in &mut regions {
-        if !rel_pos.cursor_over() {
-            continue;
-        }
-        let view_h = viewport_node.size().y;
-        if view_h <= 0.0 {
-            continue;
-        }
-        let Ok(ch) = children.get(entity) else {
-            continue;
-        };
-        let mut scroll_child = None;
-        for e in ch.iter() {
-            if content_node.get(e).is_ok() {
-                scroll_child = Some(e);
-                break;
-            }
-        }
-        let Some(child) = scroll_child else {
-            continue;
-        };
-        let Ok(inner_node) = content_node.get(child) else {
-            continue;
-        };
-        let content_h = inner_node.size().y;
-        let max_scroll = (content_h - view_h).max(0.0);
-        state.offset = (state.offset + delta).clamp(0.0, max_scroll);
-        if let Ok(mut style) = content_style.get_mut(child) {
-            style.top = Val::Px(-state.offset);
-        }
-        break;
     }
 }
 

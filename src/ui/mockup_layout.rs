@@ -39,7 +39,7 @@ use crate::ui::theme::{
     body_text, caption_text, format_item_affix_lines, format_item_stat_summary, headline_text,
     log_line_present, rarity_color, section_title, UiTheme,
 };
-use crate::ui::widgets::{spawn_scrollable_flex_column, spawn_scrollable_log};
+use crate::ui::primitives::scroll::{spawn_scrollable_flex_column, spawn_scrollable_log};
 
 fn ornate_shell(content: impl FnOnce(&mut ChildSpawnerCommands<'_>)) -> impl FnOnce(&mut ChildSpawnerCommands<'_>) {
     move |parent: &mut ChildSpawnerCommands<'_>| {

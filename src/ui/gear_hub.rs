@@ -11,8 +11,8 @@ use crate::ui::components::{
 };
 use crate::ui::mockup_layout::spawn_stash_filters_and_sort_row;
 use crate::ui::placeholder_graphics::UiPlaceholderImages;
+use crate::ui::primitives::scroll::spawn_scrollable_flex_column;
 use crate::ui::theme::{caption_text, headline_text, section_title, UiTheme};
-use crate::ui::widgets::spawn_scrollable_flex_column;
 
 /// Equipped-gear column.
 const GEAR_LOADOUT_PANEL_W: f32 = 292.0;

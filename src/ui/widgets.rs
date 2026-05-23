@@ -2,12 +2,14 @@
 
 use bevy::prelude::*;
 use bevy::text::{TextColor, TextFont};
-use bevy::ui::{FocusPolicy, RelativeCursorPosition};
+use bevy::ui::FocusPolicy;
 
-use crate::ui::components::{
-    SettingsButton, TopBarField, UiButtonPalette, UiScrollContent, UiScrollRegion, UiScrollState,
-};
+use crate::ui::components::{SettingsButton, TopBarField, UiButtonPalette};
 use crate::ui::theme::UiTheme;
+
+pub use crate::ui::primitives::scroll::{
+    spawn_scroll_viewport, spawn_scrollable_flex_column, spawn_scrollable_log,
+};
 
 pub fn spawn_atmosphere(parent: &mut ChildSpawnerCommands<'_>) {
     parent
@@ -177,94 +179,6 @@ fn metric_chip(parent: &mut ChildSpawnerCommands<'_>, field: TopBarField, label:
     ));
 }
 
-fn spawn_panel_scroll_viewport(
-    parent: &mut ChildSpawnerCommands<'_>,
-    content: impl FnOnce(&mut ChildSpawnerCommands<'_>),
-) {
-    parent
-        .spawn((
-            Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Percent(100.0),
-                flex_grow: 1.0,
-                flex_shrink: 1.0,
-                min_height: Val::Px(0.0),
-                position_type: PositionType::Relative,
-                flex_direction: FlexDirection::Column,
-                overflow: Overflow::clip_y(),
-                ..default()
-            },
-            FocusPolicy::Pass,
-            RelativeCursorPosition::default(),
-            UiScrollState::default(),
-            UiScrollRegion,
-        ))
-        .with_children(|viewport| {
-            viewport
-                .spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(0.0),
-                        right: Val::Px(0.0),
-                        top: Val::Px(0.0),
-                        flex_direction: FlexDirection::Column,
-                        align_items: AlignItems::FlexStart,
-                        row_gap: Val::Px(10.0),
-                        ..default()
-                    },
-                    UiScrollContent,
-                ))
-                .with_children(content);
-        });
-}
-
-/// Fills remaining column height in a flex parent; scrolls when content exceeds the viewport.
-///
-/// When `min_viewport_height_px` is set, the viewport is at least that tall (stops flex from
-/// collapsing empty lists).
-pub fn spawn_scrollable_flex_column(
-    parent: &mut ChildSpawnerCommands<'_>,
-    min_viewport_height_px: Option<f32>,
-    content: impl FnOnce(&mut ChildSpawnerCommands<'_>),
-) {
-    parent
-        .spawn((
-            Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Percent(100.0),
-                flex_grow: 1.0,
-                flex_shrink: 1.0,
-                flex_basis: Val::Px(0.0),
-                min_height: min_viewport_height_px.map(Val::Px).unwrap_or(Val::Px(0.0)),
-                position_type: PositionType::Relative,
-                overflow: Overflow::clip_y(),
-                ..default()
-            },
-            FocusPolicy::Pass,
-            RelativeCursorPosition::default(),
-            UiScrollState::default(),
-            UiScrollRegion,
-        ))
-        .with_children(|vp| {
-            vp.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(0.0),
-                    right: Val::Px(0.0),
-                    top: Val::Px(0.0),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(8.0),
-                    align_items: AlignItems::Stretch,
-                    ..default()
-                },
-                UiScrollContent,
-            ))
-            .with_children(content);
-        });
-}
-
 pub fn spawn_framed_panel(
     parent: &mut ChildSpawnerCommands<'_>,
     flex: f32,
@@ -291,7 +205,7 @@ pub fn spawn_framed_panel(
             BorderColor::from(UiTheme::panel_border()),
         ))
         .with_children(|panel| {
-            spawn_panel_scroll_viewport(panel, content);
+            spawn_scroll_viewport(panel, content);
         });
 }
 
@@ -320,61 +234,6 @@ pub fn spawn_bottom_strip(
             BorderColor::from(UiTheme::panel_border()),
         ))
         .with_children(|strip| {
-            spawn_panel_scroll_viewport(strip, content);
-        });
-}
-
-/// Log list with fixed viewport height and wheel scrolling.
-pub fn spawn_scrollable_log(
-    parent: &mut ChildSpawnerCommands<'_>,
-    max_height_px: f32,
-    lines: Vec<(String, f32, Color)>,
-) {
-    parent
-        .spawn((
-            Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Percent(100.0),
-                height: Val::Px(max_height_px),
-                flex_shrink: 0.0,
-                padding: UiRect::all(Val::Px(UiTheme::PAD_TOOLTIP)),
-                position_type: PositionType::Relative,
-                flex_direction: FlexDirection::Column,
-                overflow: Overflow::clip_y(),
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
-            BackgroundColor(UiTheme::panel_bg_deep()),
-            BorderColor::from(UiTheme::panel_border_inner()),
-            FocusPolicy::Pass,
-            RelativeCursorPosition::default(),
-            UiScrollState::default(),
-            UiScrollRegion,
-        ))
-        .with_children(|viewport| {
-            viewport
-                .spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(0.0),
-                        right: Val::Px(0.0),
-                        top: Val::Px(0.0),
-                        flex_direction: FlexDirection::Column,
-                        align_items: AlignItems::FlexStart,
-                        row_gap: Val::Px(4.0),
-                        ..default()
-                    },
-                    UiScrollContent,
-                ))
-                .with_children(|inner| {
-                    for (text, font_size, color) in lines {
-                        inner.spawn((
-                            Text::new(text),
-                            TextFont::from_font_size(font_size),
-                            TextColor(color),
-                        ));
-                    }
-                });
+            spawn_scroll_viewport(strip, content);
         });
 }
