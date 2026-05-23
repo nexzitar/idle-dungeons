@@ -44,15 +44,17 @@ pub(crate) fn spawn_running_screen_root(
                 );
                 shell::spawn_three_column_row(col, |row| {
                     shell::spawn_ornate_column(row, 1.0, |panel| {
-                        shell::spawn_hero_column_mockup(
-                            panel,
-                            ph,
-                            &lead,
-                            partner.as_ref(),
-                            party_slots,
-                            false,
-                            false,
-                        );
+                    shell::spawn_hero_column(
+                        panel,
+                        ph,
+                        &lead,
+                        partner.as_ref(),
+                        shell::HeroColumnConfig {
+                            party_slots_unlocked: party_slots,
+                            skill_slots_interactive: false,
+                            allow_rename: false,
+                        },
+                    );
                     });
                     shell::spawn_ornate_column(row, 1.25, |panel| {
                         shell::spawn_run_playback_middle_column(panel, ph);

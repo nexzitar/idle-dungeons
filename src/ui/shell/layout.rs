@@ -6,9 +6,7 @@ use bevy::ui::FocusPolicy;
 use crate::app::PLAYBACK_SPEED_STEPS;
 use crate::domain::dungeon::RoomKind;
 use crate::domain::items::GearSlot;
-use crate::domain::party::PartyHeroKind;
 use crate::domain::progression::MetaProgression;
-use crate::domain::progression::PARTY_SLOT_2_UNLOCK_DEPTH;
 use crate::domain::run::{RunOutcome, RunSummary, DEFAULT_RUN_MAX_DEPTH, DEFAULT_RUN_SEED};
 use crate::domain::skills::skill_definition;
 use crate::ui::components::{
@@ -18,9 +16,8 @@ use crate::ui::components::{
     TopBarField, UiButtonPalette, UiTooltip,
 };
 use crate::ui::assets::UiPlaceholderImages;
-use crate::ui::primitives::hero_card::{spawn_hero_identity_card, HeroIdentityConfig};
-use crate::ui::primitives::loadout::{spawn_loadout_row, slots_from_hero, LoadoutRowConfig};
-use crate::ui::primitives::skill_bar::SkillBarInteraction;
+use crate::ui::primitives::panel::{spawn_mounted_panel, MountedPanelConfig};
+use crate::ui::primitives::section::spawn_framed_section_header;
 use crate::ui::primitives::scroll::{spawn_scrollable_flex_column, spawn_scrollable_log};
 use crate::ui::theme::{
     body_text, caption_text, format_item_affix_lines, format_item_stat_summary, headline_text,
@@ -638,108 +635,6 @@ pub(super) fn panel_title_centered(text: impl Into<String>) -> impl Bundle {
     )
 }
 
-pub fn spawn_hero_column_mockup(
-    parent: &mut ChildSpawnerCommands<'_>,
-    ph: &UiPlaceholderImages,
-    lead: &crate::domain::hero::HeroProfile,
-    partner: Option<&crate::domain::hero::HeroProfile>,
-    party_slots_unlocked: usize,
-    skill_slots_interactive: bool,
-    allow_rename: bool,
-) {
-    let density = UiDensity::Camp;
-    let inner = move |p: &mut ChildSpawnerCommands<'_>| {
-        p.spawn(panel_title_centered("PARTY"));
-        spawn_column_flex_scroll(p, None, move |body| {
-            spawn_hero_identity_card(
-                body,
-                HeroIdentityConfig {
-                    slot: 0,
-                    hero: lead,
-                    kind: PartyHeroKind::Player1,
-                    allow_rename,
-                    show_stat_strip: true,
-                    density,
-                },
-                ph,
-            );
-            body.spawn(section_title("Skills"));
-            if skill_slots_interactive {
-                body.spawn(caption_text("Click a slot to open Party Buildcraft."));
-            }
-            let lead_slots = slots_from_hero(lead);
-            spawn_loadout_row(
-                body,
-                LoadoutRowConfig {
-                    hero_kind: PartyHeroKind::Player1,
-                    label: None,
-                    slots: &lead_slots,
-                    unlocked: lead.unlocked_skill_slots,
-                    focused_index: None,
-                    interaction: if skill_slots_interactive {
-                        SkillBarInteraction::OpenSkillBook(PartyHeroKind::Player1)
-                    } else {
-                        SkillBarInteraction::None
-                    },
-                    density,
-                },
-                ph,
-            );
-
-            if party_slots_unlocked >= 2 {
-                if let Some(phero) = partner {
-                    spawn_hero_identity_card(
-                        body,
-                        HeroIdentityConfig {
-                            slot: 1,
-                            hero: phero,
-                            kind: PartyHeroKind::Player2,
-                            allow_rename,
-                            show_stat_strip: true,
-                            density,
-                        },
-                        ph,
-                    );
-                    body.spawn(section_title("Skills"));
-                    if skill_slots_interactive {
-                        body.spawn(caption_text(
-                            "Player 2 has their own skills — click a slot to change them.",
-                        ));
-                    }
-                    let partner_slots = slots_from_hero(phero);
-                    spawn_loadout_row(
-                        body,
-                        LoadoutRowConfig {
-                            hero_kind: PartyHeroKind::Player2,
-                            label: None,
-                            slots: &partner_slots,
-                            unlocked: phero.unlocked_skill_slots,
-                            focused_index: None,
-                            interaction: if skill_slots_interactive {
-                                SkillBarInteraction::OpenSkillBook(PartyHeroKind::Player2)
-                            } else {
-                                SkillBarInteraction::None
-                            },
-                            density,
-                        },
-                        ph,
-                    );
-                } else {
-                    body.spawn(caption_text(
-                        "Companion will appear after rewards sync (new unlock).",
-                    ));
-                }
-            } else {
-                body.spawn(caption_text(format!(
-                    "Reach depth {} on a run to unlock a second party hero.",
-                    PARTY_SLOT_2_UNLOCK_DEPTH
-                )));
-            }
-        });
-    };
-    inner(parent);
-}
-
 fn gear_slot_row_color(slot: GearSlot) -> Color {
     match slot {
         GearSlot::MainHand | GearSlot::OffHand | GearSlot::Hands => Color::srgb(1.0, 0.72, 0.45),
@@ -888,84 +783,93 @@ pub fn spawn_dungeon_briefing_column(
     stash_count: usize,
     meta: &MetaProgression,
 ) {
-    let inner = move |p: &mut ChildSpawnerCommands<'_>| {
-        p.spawn(panel_title_centered("DUNGEON RUN"));
-        p.spawn(Node {
-            box_sizing: BoxSizing::BorderBox,
-            flex_direction: FlexDirection::Row,
-            justify_content: JustifyContent::SpaceBetween,
+    spawn_mounted_panel(
+        parent,
+        MountedPanelConfig {
+            style: crate::ui::theme::MountedPanelStyle::Recessed,
             width: Val::Percent(100.0),
-            ..default()
-        })
-        .with_children(|r| {
-            r.spawn(caption_text(format!(
-                "Target depth: {DEFAULT_RUN_MAX_DEPTH}"
-            )));
-            r.spawn(caption_text("Phase: briefing"));
-        });
-        p.spawn(Node {
-            box_sizing: BoxSizing::BorderBox,
-            flex_direction: FlexDirection::Row,
-            column_gap: Val::Px(12.0),
-            align_items: AlignItems::Center,
-            ..default()
-        })
-        .with_children(|row| {
-            row.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    width: Val::Px(96.0),
-                    height: Val::Px(96.0),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    border: UiRect::all(Val::Px(2.0)),
-                    ..default()
-                },
-                BackgroundColor(UiTheme::panel_bg_deep().into()),
-                BorderColor::from(UiTheme::ornate_gold()),
-            ))
-            .with_children(|port| {
-                port.spawn((
-                    Text::new("\u{1F480}"),
-                    TextFont::from_font_size(UiTheme::FONT_DISPLAY_HERO),
-                    TextColor(UiTheme::body_dim()),
-                ));
-            });
-            row.spawn(Node {
+            flex_grow: 1.0,
+            flex_shrink: 1.0,
+            min_height: Val::Px(0.0),
+        },
+        |panel| {
+            spawn_framed_section_header(panel, "DUNGEON RUN");
+            panel.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
-                flex_direction: FlexDirection::Column,
-                flex_grow: 1.0,
-                row_gap: Val::Px(6.0),
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::SpaceBetween,
+                width: Val::Percent(100.0),
                 ..default()
             })
-            .with_children(|col| {
-                col.spawn(headline_text("Awaiting delve"));
-                col.spawn(caption_text(format!(
-                    "Boss at depth {DEFAULT_RUN_MAX_DEPTH} · MVP run seed {DEFAULT_RUN_SEED}",
+            .with_children(|r| {
+                r.spawn(caption_text(format!(
+                    "Target depth: {DEFAULT_RUN_MAX_DEPTH}"
                 )));
-                health_bar(col, 1.0, UiTheme::healing());
-                col.spawn(caption_text(format!("Stash waiting: {stash_count} items")));
-                if meta.party_slots_unlocked() < 2 {
-                    col.spawn(caption_text(format!(
-                        "Reach depth {} to unlock a second hero slot.",
-                        PARTY_SLOT_2_UNLOCK_DEPTH
-                    )));
-                } else {
-                    col.spawn(caption_text(
-                        "Second party slot unlocked — meet your ally in the party panel.",
-                    ));
-                }
+                r.spawn(caption_text("Phase: briefing"));
             });
-        });
-        p.spawn(section_title("COMBAT LOG"));
-        p.spawn(caption_text(
-            "Encounter text streams here once live combat ships; scroll with mouse wheel.",
-        ));
-        p.spawn(caption_text("Mouse wheel scrolls any framed panel."));
-        p.spawn(section_title("PROGRESS"));
-        spawn_static_delve_progress_section(p, 0, DEFAULT_RUN_MAX_DEPTH);
-    };
-    inner(parent);
+            panel.spawn(Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(UiDensity::Camp.gutter_section()),
+                align_items: AlignItems::Center,
+                ..default()
+            })
+            .with_children(|row| {
+                row.spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        width: Val::Px(96.0),
+                        height: Val::Px(96.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(Val::Px(2.0)),
+                        ..default()
+                    },
+                    BackgroundColor(UiTheme::panel_bg_deep().into()),
+                    BorderColor::from(UiTheme::ornate_gold()),
+                ))
+                .with_children(|port| {
+                    port.spawn((
+                        Text::new("\u{1F480}"),
+                        TextFont::from_font_size(UiTheme::FONT_DISPLAY_HERO),
+                        TextColor(UiTheme::body_dim()),
+                    ));
+                });
+                row.spawn(Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    flex_direction: FlexDirection::Column,
+                    flex_grow: 1.0,
+                    row_gap: Val::Px(UiDensity::Camp.gutter_row()),
+                    ..default()
+                })
+                .with_children(|col| {
+                    col.spawn(headline_text("Awaiting delve"));
+                    col.spawn(caption_text(format!(
+                        "Boss at depth {DEFAULT_RUN_MAX_DEPTH} · MVP run seed {DEFAULT_RUN_SEED}",
+                    )));
+                    health_bar(col, 1.0, UiTheme::healing());
+                    col.spawn(caption_text(format!("Stash waiting: {stash_count} items")));
+                    if meta.party_slots_unlocked() < 2 {
+                        col.spawn(caption_text(format!(
+                            "Reach depth {} to unlock a second hero slot.",
+                            crate::domain::progression::PARTY_SLOT_2_UNLOCK_DEPTH
+                        )));
+                    } else {
+                        col.spawn(caption_text(
+                            "Second party slot unlocked — meet your ally in the party panel.",
+                        ));
+                    }
+                });
+            });
+            panel.spawn(section_title("COMBAT LOG"));
+            panel.spawn(caption_text(
+                "Encounter text streams here once live combat ships; scroll with mouse wheel.",
+            ));
+            panel.spawn(caption_text("Mouse wheel scrolls any framed panel."));
+            panel.spawn(section_title("PROGRESS"));
+            spawn_static_delve_progress_section(panel, 0, DEFAULT_RUN_MAX_DEPTH);
+        },
+    );
 }
 
 pub fn spawn_dungeon_camp_column(parent: &mut ChildSpawnerCommands<'_>) {

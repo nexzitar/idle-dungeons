@@ -12,6 +12,7 @@ use crate::ui::components::{
     UiButtonPalette, UiTooltip,
 };
 use crate::ui::interaction::UiClickAction;
+use crate::ui::primitives::button::{spawn_button, UiButtonConfig, UiButtonVariant};
 use crate::ui::theme::{body_text, caption_text, headline_text, section_title, UiTheme};
 
 use super::layout::spawn_column_flex_scroll;
@@ -271,65 +272,42 @@ pub fn spawn_mockup_footer(parent: &mut ChildSpawnerCommands<'_>, mode: FooterMo
                 match mode {
                 FooterMode::Briefing => {
                     footer_skill_shop_button(right);
-                    let p = UiButtonPalette::primary_cta();
-                    right.spawn((
-                        Node {
-                box_sizing: BoxSizing::BorderBox,
-                min_width: Val::Px(220.0),
-                                height: Val::Px(52.0),
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                border: UiRect::all(Val::Px(2.0)),
-                                ..default()
-            },
-            Button,
-            BackgroundColor(p.idle_bg.into()),
-            BorderColor::from(p.idle_border),
+                    let start = spawn_button(
+                        right,
+                        UiButtonConfig {
+                            label: "\u{2694} START RUN",
+                            variant: UiButtonVariant::Primary,
+                            width: Val::Px(220.0),
+                            height: Val::Px(52.0),
+                            font_size: UiTheme::FONT_STRONG,
+                            text_color: Color::WHITE,
+                            flex_shrink: 0.0,
+                        },
+                    );
+                    right.commands_mut().entity(start).insert((
                         crate::ui::components::StartRunButton,
                         UiClickAction::StartRun,
-                        p,
-                        UiTooltip::txt(
-                            "Begin a seeded dungeon run using your current hero build and stash.",
-                        ),
-                    ))
-                    .with_children(|b| {
-                        b.spawn((
-                Text::new("\u{2694} START RUN"),
-                TextFont::from_font_size(UiTheme::FONT_STRONG),
-                TextColor(Color::WHITE),
-            ));
-                    });
+                        UiTooltip::txt("Begin a seeded run with your current build."),
+                    ));
                 }
                 FooterMode::DelvePlayback => {
-                    let p = UiButtonPalette::panel_secondary();
-                    right.spawn((
-                        Node {
-                box_sizing: BoxSizing::BorderBox,
-                min_width: Val::Px(220.0),
-                                height: Val::Px(44.0),
-                                padding: UiRect::axes(Val::Px(14.0), Val::Px(8.0)),
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                border: UiRect::all(Val::Px(1.0)),
-                                ..default()
-            },
-            Button,
-            BackgroundColor(p.idle_bg.into()),
-            BorderColor::from(p.idle_border),
+                    let skip = spawn_button(
+                        right,
+                        UiButtonConfig {
+                            label: "Skip to results",
+                            variant: UiButtonVariant::PanelSecondary,
+                            width: Val::Px(220.0),
+                            height: Val::Px(44.0),
+                            font_size: UiTheme::FONT_SKILL_DIM,
+                            text_color: UiTheme::muted_cream(),
+                            flex_shrink: 0.0,
+                        },
+                    );
+                    right.commands_mut().entity(skip).insert((
                         SkipPlaybackButton,
                         UiClickAction::SkipPlayback,
-                        p,
-                        UiTooltip::txt(
-                            "Jump straight to the run summary without watching the rest of playback.",
-                        ),
-                    ))
-                    .with_children(|b| {
-                        b.spawn((
-                Text::new("Skip to results"),
-                TextFont::from_font_size(UiTheme::FONT_SKILL_DIM),
-                TextColor(UiTheme::muted_cream()),
-            ));
-                    });
+                        UiTooltip::txt("Jump to the run summary."),
+                    ));
                 }
                 FooterMode::Summary => {}
                 }
@@ -338,65 +316,43 @@ pub fn spawn_mockup_footer(parent: &mut ChildSpawnerCommands<'_>, mode: FooterMo
 }
 
 fn footer_gear_hub_button(parent: &mut ChildSpawnerCommands<'_>) {
-    let p = UiButtonPalette::panel_secondary();
-    parent
-        .spawn((
-            Node {
-                box_sizing: BoxSizing::BorderBox,
-                min_width: Val::Px(92.0),
-                height: Val::Px(40.0),
-                padding: UiRect::axes(Val::Px(12.0), Val::Px(8.0)),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
-            Button,
-            BackgroundColor(p.idle_bg.into()),
-            BorderColor::from(p.idle_border),
-            GearHubOpenButton,
-            UiClickAction::OpenGearHub,
-            p,
-            UiTooltip::txt("Open the gear hub (loadout and stash)."),
-        ))
-        .with_children(|b| {
-            b.spawn((
-                Text::new("\u{2692} Gear"),
-                TextFont::from_font_size(UiTheme::FONT_BODY),
-                TextColor(UiTheme::muted_cream()),
-            ));
-        });
+    let gear = spawn_button(
+        parent,
+        UiButtonConfig {
+            label: "\u{2692} Gear",
+            variant: UiButtonVariant::PanelSecondary,
+            width: Val::Px(92.0),
+            height: Val::Px(40.0),
+            font_size: UiTheme::FONT_BODY,
+            text_color: UiTheme::muted_cream(),
+            flex_shrink: 0.0,
+        },
+    );
+    parent.commands_mut().entity(gear).insert((
+        GearHubOpenButton,
+        UiClickAction::OpenGearHub,
+        UiTooltip::txt("Loadout and stash."),
+    ));
 }
 
 fn footer_skill_shop_button(parent: &mut ChildSpawnerCommands<'_>) {
-    let p = UiButtonPalette::panel_secondary();
-    parent
-        .spawn((
-            Node {
-                box_sizing: BoxSizing::BorderBox,
-                min_width: Val::Px(104.0),
-                height: Val::Px(40.0),
-                padding: UiRect::axes(Val::Px(12.0), Val::Px(8.0)),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
-            Button,
-            BackgroundColor(p.idle_bg.into()),
-            BorderColor::from(p.idle_border),
-            SkillShopOpenButton,
-            UiClickAction::OpenSkillShop,
-            p,
-            UiTooltip::txt("Spend gold to add skills to your library."),
-        ))
-        .with_children(|b| {
-            b.spawn((
-                Text::new("\u{1F4DA} Skills"),
-                TextFont::from_font_size(UiTheme::FONT_BODY),
-                TextColor(UiTheme::muted_cream()),
-            ));
-        });
+    let skills = spawn_button(
+        parent,
+        UiButtonConfig {
+            label: "\u{1F4DA} Skills",
+            variant: UiButtonVariant::PanelSecondary,
+            width: Val::Px(104.0),
+            height: Val::Px(40.0),
+            font_size: UiTheme::FONT_BODY,
+            text_color: UiTheme::muted_cream(),
+            flex_shrink: 0.0,
+        },
+    );
+    parent.commands_mut().entity(skills).insert((
+        SkillShopOpenButton,
+        UiClickAction::OpenSkillShop,
+        UiTooltip::txt("Buy skills with gold."),
+    ));
 }
 
 fn footer_pill(parent: &mut ChildSpawnerCommands<'_>, label: &str, active: bool) {

@@ -9,6 +9,7 @@ All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **
 - **Phase 0–1:** Design system doc, `UiDensity` / `MountedPanelStyle` / `SkillDisplayFamily`, `spawn_mounted_panel`, `spawn_framed_section_header`.
 - **Phase 2:** Shared `loadout_row` + `skill_bar` on build, summary, and running camp columns; text chip slots removed (~170 lines from `shell/layout.rs`).
 - **Phase 3:** `hero_identity_card` primitive — portrait frame, name/rename, role subtitle, HP/DMG/ARM stat strip; camp party column uses it for P1/P2 instead of separate title + vitals rows.
+- **Phase 4:** Build screen convergence — `shell/hero_column.rs` (deep mounted panel, framed headers, gold layering captions); briefing column recessed panel; footer dock uses `spawn_button` with one-line hints; `build_panel_text` wall retired.
 
 ### Party buildcraft sheet (Phase 1)
 

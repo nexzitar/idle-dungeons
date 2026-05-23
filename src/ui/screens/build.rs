@@ -45,14 +45,16 @@ pub(crate) fn spawn_build_screen_root(
             );
             shell::spawn_three_column_row(col, |row| {
                 shell::spawn_ornate_column(row, 1.0, |panel| {
-                    shell::spawn_hero_column_mockup(
+                    shell::spawn_hero_column(
                         panel,
                         ph,
                         &lead,
                         partner.as_ref(),
-                        party_slots,
-                        true,
-                        true,
+                        shell::HeroColumnConfig {
+                            party_slots_unlocked: party_slots,
+                            skill_slots_interactive: true,
+                            allow_rename: true,
+                        },
                     );
                 });
                 shell::spawn_ornate_column(row, 1.25, |panel| {
