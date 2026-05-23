@@ -372,7 +372,11 @@ fn stats_two_handed_main(budget: i32) -> Stats {
 fn two_handed_roll(id_seed: u64, depth: u32, allow: bool, slot: GearSlot) -> bool {
     allow
         && slot == GearSlot::MainHand
-        && id_seed.wrapping_add(depth as u64).wrapping_mul(0x9E37_79B97F4A7C15) % 5 == 0
+        && id_seed
+            .wrapping_add(depth as u64)
+            .wrapping_mul(0x9E37_79B97F4A7C15)
+            % 5
+            == 0
 }
 
 fn item_from_slot_and_affixes(
@@ -433,14 +437,7 @@ fn roll_loot_for_slot_impl(
     let rarity = roll_rarity_for_depth(depth, &mut rng);
     let affixes = roll_affixes(&mut rng, slot, rarity, archetype_hints);
     let id_seed = seed ^ lane_shift;
-    item_from_slot_and_affixes(
-        depth,
-        id_seed,
-        slot,
-        rarity,
-        affixes,
-        allow_two_handed,
-    )
+    item_from_slot_and_affixes(depth, id_seed, slot, rarity, affixes, allow_two_handed)
 }
 
 pub fn roll_loot(depth: u32, seed: u64) -> ItemInstance {

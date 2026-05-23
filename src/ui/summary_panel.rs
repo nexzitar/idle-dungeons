@@ -73,9 +73,7 @@ pub fn reward_digest(summary: &RunSummary) -> String {
         let _ = write!(
             &mut out,
             "\nStrike damage: {}% abilities · {} white · {} yellow",
-            pct,
-            summary.party_strike_damage_white,
-            summary.party_strike_damage_yellow
+            pct, summary.party_strike_damage_white, summary.party_strike_damage_yellow
         );
     }
     out

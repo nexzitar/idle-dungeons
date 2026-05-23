@@ -2,6 +2,40 @@
 
 All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **Patch** bumps (0.N.x) are used for small UI and iteration tweaks; **minor** (0.N.0) for larger feature slices; **major** (N.0.0) for big structural releases.
 
+## Unreleased
+
+### Party buildcraft sheet (Phase 1)
+
+- **Party-first skill workspace:** Replaces the list-style skill book with a full **Party Buildcraft** sheet — party loadout column (P1/P2, six slots each), icon library grid, and fixed inspect panel.
+- **Edit session:** Pending loadout changes live in `BuildcraftEditSession`; **Apply** commits all heroes and saves, **Cancel** discards. Same skill forbidden within one hero, allowed across heroes.
+- **Primitives:** `skill_icon`, `skill_bar`, and `inspect_panel` under `ui/primitives/`; cooldown overlay hooks reserved for future playback VFX.
+- **Spec:** `docs/superpowers/specs/2026-05-20-skillbook-buildcraft-ux-design.md` (rev. 2).
+
+### UI foundation extraction (Phases 1–6, complete)
+
+- **Phase 1:** Extracted `ui/primitives` (button, scroll, bar, panel, modal, text) — behavior-neutral moves from `widgets` / shell layout / `gear_hub`.
+- **Phase 2:** Renamed `placeholder_graphics` → `assets`; split legacy shell layout into `ui/shell/` (`layout`, `theater`, `playback_bars`, `footer`); retired `widgets` (`spawn_atmosphere` lives in `primitives/panel`).
+- **Phase 3:** `ui/interaction` centralizes click capture and `UiClickAction` dispatch (modals, stash sort, gear/skill flows, playback chrome, presentation editor in debug). Legacy per-button `handle_*` click systems removed from `ui/mod.rs`.
+- **Phase 4:** `UiPanelStyle` / `UiModalStyle` layout presets in `theme`; `spawn_item_card` / `spawn_item_card_preview` moved to `primitives/card` (gear hub + summary footer call sites updated).
+- **Phase 5:** Build / running / summary screen spawn moved to `ui/screens/`; `UiPlugin` registration stays in `mod.rs`.
+- **Phase 6:** Presentation editor overlay uses `spawn_button` / `spawn_framed_column` primitives; `+` tune step buttons now dispatch `EditorTuneDelta`.
+- **Cleanup:** Playback sync and lifecycle systems moved to `ui/playback_sync.rs` and `ui/systems.rs`; `ui/mod.rs` is plugin registration only (~260 lines). No `mockup_layout` / `placeholder_graphics` references remain under `src/`.
+
+### Presentation Wave 2 — atmosphere-first (title camp)
+
+- **Softer campfire glow:** dual radial layers (wide halo + core), stack `overflow: visible`, no always-on layer borders (editor outlines only when layout mode is on).
+- **Breathing / flicker:** default compositional `glow_alpha` / `ground_alpha` tracks; flame vertical breathe; three ember sparks; gentler crossfade.
+- **Editor UX:** smoother mouse drag (1 px threshold, committed nudge), hover on sub-layers, **Fire atmosphere** inspector block (glow/ground track bases, breath Hz, crossfade, α floor) when fireplace is selected.
+
+### Presentation editor (phases 0–4)
+
+- **Phase 0 — Types & adapter:** **`PresentationElementTune`**, **`TitleCampSceneLayout`**, and load/save for **`assets/tuning/title_scene.json`** centralized under **`src/presentation/`** with thin aliases in **`src/ui/scene_tune.rs`** (`PresentationScene`-style layering without renaming on-disk JSON in one shot).
+- **Phase 1 — Overlay & discoverability:** **`PresentationEditorSession`**, fullscreen Bevy UI overlay (hierarchy · inspector · save/reload), and **Settings → Debug → Presentation editor** toggle ( **`#[cfg(debug_assertions)]`**, same **`active`** flag as backtick layout mode).
+- **Phase 2 — Mouse editing:** **`presentation_editor_pick`** / **`presentation_editor_drag`** on **`PresentationElementHost`** (top-`GlobalZIndex` selection, **`Shift`** ×10 drag), plus light hover outline synced with keyboard selection gizmo.
+- **Phase 3 — Radial glow:** Campfire **`ImageNode`** soft bloom using **`assets/ui/fire_glow_radial.png`** instead of a flat glow rectangle (**`spawn_title_fire_layers`** / **`TitleFirePresentationTune`**).
+- **Phase 4 — Tracks:** **`PresentationTrack`**, **`CurveLayer`**, and **`CurveKind`** with deterministic **`(t_secs, seed)`** evaluation; optional compositional **`glow_alpha`** / **`ground_alpha`** JSON on **`fire_presentation`** (Examples in **`title_scene.example.json`**).
+- **Docs:** **`docs/presentation-editor-workflow.md`**, **`docs/presentation-scene-composition.md`** cross-links plus spec links for frequency bands / runtime budget. **Phase 5 gizmos** remain future work (**`presentation/editor/gizmo.rs`** stub only).
+
 ## 0.2.31 — 2026-05-09
 
 ### Presentation (Wave 7)

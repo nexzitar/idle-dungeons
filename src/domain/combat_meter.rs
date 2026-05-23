@@ -9,8 +9,7 @@ pub const WEAPON_METER_ONE_SWING: u64 = 1_000_000;
 
 #[inline]
 pub fn meter_add_attack_speed(m: &mut u64, attack_speed: f32) {
-    let inc =
-        (f64::from(attack_speed).clamp(0.0, 1.0e6) * WEAPON_METER_ONE_SWING as f64) as u64;
+    let inc = (f64::from(attack_speed).clamp(0.0, 1.0e6) * WEAPON_METER_ONE_SWING as f64) as u64;
     *m = m.saturating_add(inc);
 }
 

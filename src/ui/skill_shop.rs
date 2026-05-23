@@ -54,6 +54,7 @@ pub fn spawn_skill_shop_modal(
                 BackgroundColor(backdrop_pal.idle_bg.into()),
                 BorderColor::from(backdrop_pal.idle_border),
                 SkillShopBackdrop,
+                crate::ui::interaction::UiClickAction::CloseSkillShop,
                 backdrop_pal,
                 UiTooltip::txt("Click outside to close."),
             ));
@@ -161,6 +162,7 @@ pub fn spawn_skill_shop_modal(
                             BackgroundColor(close_pal.idle_bg.into()),
                             BorderColor::from(close_pal.idle_border),
                             SkillShopCloseButton,
+                            crate::ui::interaction::UiClickAction::CloseSkillShop,
                             close_pal,
                             UiTooltip::txt("Close"),
                         ))
@@ -250,6 +252,7 @@ fn spawn_buy_row(inner: &mut ChildSpawnerCommands<'_>, id: SkillId, price: u32, 
             BackgroundColor(p.idle_bg.into()),
             BorderColor::from(p.idle_border),
             SkillShopBuyButton { skill: id },
+            crate::ui::interaction::UiClickAction::BuySkillUnlock,
             p,
             UiTooltip::txt(tip),
         ))

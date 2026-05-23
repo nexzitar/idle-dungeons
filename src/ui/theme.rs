@@ -120,6 +120,117 @@ impl UiTheme {
     }
 }
 
+/// Shared panel chrome (background, border, inset) for cards and shell columns.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UiPanelStyle {
+    pub background: Color,
+    pub border: Color,
+    pub padding_px: f32,
+    pub row_gap_px: f32,
+    pub border_px: f32,
+}
+
+impl UiPanelStyle {
+    pub fn framed() -> Self {
+        Self {
+            background: UiTheme::panel_bg(),
+            border: UiTheme::panel_border(),
+            padding_px: UiTheme::PANEL_INSET_LG,
+            row_gap_px: 10.0,
+            border_px: 1.0,
+        }
+    }
+
+    pub fn bottom_strip() -> Self {
+        Self {
+            background: UiTheme::panel_bg(),
+            border: UiTheme::panel_border(),
+            padding_px: UiTheme::PANEL_INSET_LG,
+            row_gap_px: 12.0,
+            border_px: 1.0,
+        }
+    }
+
+    /// Stash / loot item rows (gear hub, summary rewards).
+    pub fn deep_card() -> Self {
+        Self {
+            background: UiTheme::panel_bg_deep(),
+            border: UiTheme::panel_border(),
+            padding_px: UiTheme::PANEL_INSET,
+            row_gap_px: 8.0,
+            border_px: 1.0,
+        }
+    }
+
+    /// Presentation editor hierarchy / inspector columns.
+    pub fn editor_sidebar() -> Self {
+        Self {
+            background: UiTheme::panel_bg(),
+            border: UiTheme::ornate_gold(),
+            padding_px: UiTheme::PANEL_INSET_SM,
+            row_gap_px: 8.0,
+            border_px: 1.0,
+        }
+    }
+
+    /// Centered modal dialog surface (settings, skill book).
+    pub fn dialog() -> Self {
+        Self {
+            background: UiTheme::panel_bg_deep(),
+            border: UiTheme::ornate_gold(),
+            padding_px: UiTheme::PAD_ROOT,
+            row_gap_px: UiTheme::PANEL_INSET,
+            border_px: 2.0,
+        }
+    }
+
+    pub fn with_border(self, border: Color) -> Self {
+        Self { border, ..self }
+    }
+
+    pub fn inset_column_node(self) -> Node {
+        Node {
+            box_sizing: BoxSizing::BorderBox,
+            width: Val::Percent(100.0),
+            padding: UiRect::all(Val::Px(self.padding_px)),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::FlexStart,
+            row_gap: Val::Px(self.row_gap_px),
+            border: UiRect::all(Val::Px(self.border_px)),
+            ..default()
+        }
+    }
+}
+
+/// Modal backdrop dimming colors (maps to [`crate::ui::components::UiButtonPalette`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UiModalStyle {
+    pub backdrop_idle_bg: Color,
+    pub backdrop_hover_bg: Color,
+    pub backdrop_pressed_bg: Color,
+}
+
+impl UiModalStyle {
+    pub fn standard() -> Self {
+        Self {
+            backdrop_idle_bg: Color::srgba(0.02, 0.02, 0.04, 0.58),
+            backdrop_hover_bg: Color::srgba(0.04, 0.04, 0.06, 0.65),
+            backdrop_pressed_bg: Color::srgba(0.06, 0.06, 0.08, 0.72),
+        }
+    }
+
+    pub fn backdrop_palette(self) -> crate::ui::components::UiButtonPalette {
+        crate::ui::components::UiButtonPalette {
+            idle_bg: self.backdrop_idle_bg,
+            hover_bg: self.backdrop_hover_bg,
+            pressed_bg: self.backdrop_pressed_bg,
+            idle_border: Color::NONE,
+            hover_border: Color::NONE,
+            pressed_border: Color::NONE,
+        }
+    }
+}
+
 pub fn rarity_color(rarity: crate::domain::items::ItemRarity) -> Color {
     use crate::domain::items::ItemRarity;
     match rarity {
@@ -164,7 +275,10 @@ fn debuff_plain_line(line: &str) -> String {
         .map(|part| {
             let part = part.trim_start();
             if part.starts_with("Poison") {
-                format!("[Poison] {}", part.strip_prefix("Poison").unwrap_or("").trim())
+                format!(
+                    "[Poison] {}",
+                    part.strip_prefix("Poison").unwrap_or("").trim()
+                )
             } else {
                 part.to_string()
             }
@@ -264,9 +378,7 @@ pub fn format_item_affix_lines(item: &crate::domain::items::ItemInstance) -> Str
         .join("\n")
 }
 
-pub fn skill_category_chip_colors(
-    cat: crate::domain::skills::SkillCategory,
-) -> (Color, Color) {
+pub fn skill_category_chip_colors(cat: crate::domain::skills::SkillCategory) -> (Color, Color) {
     use crate::domain::skills::SkillCategory;
     match cat {
         SkillCategory::BasicAttack => (UiTheme::stone_mid(), UiTheme::muted_cream()),
@@ -325,7 +437,8 @@ pub fn playback_float_text_color(
             }
             UiTheme::muted_cream()
         }
-        crate::domain::combat::CombatSfxAnchor::Lead | crate::domain::combat::CombatSfxAnchor::Ally => {
+        crate::domain::combat::CombatSfxAnchor::Player0
+        | crate::domain::combat::CombatSfxAnchor::Player1 => {
             if lower.contains("the foe hits")
                 || lower.contains("collapse")
                 || lower.contains(" is down")
@@ -355,13 +468,26 @@ pub fn playback_float_text_color(
 }
 
 #[cfg(test)]
+mod panel_style_tests {
+    use super::*;
+
+    #[test]
+    fn deep_card_uses_deep_panel_background() {
+        let style = UiPanelStyle::deep_card();
+        assert_eq!(style.background, UiTheme::panel_bg_deep());
+        assert_eq!(style.padding_px, UiTheme::PANEL_INSET);
+    }
+}
+
+#[cfg(test)]
 mod playback_float_tests {
     use super::*;
     use crate::domain::combat::CombatSfxAnchor;
 
     #[test]
     fn float_poison_tick_uses_venom_green_on_foe_anchor() {
-        let c = playback_float_text_color("Poison deals 3 damage (2 stacks).", CombatSfxAnchor::Enemy);
+        let c =
+            playback_float_text_color("Poison deals 3 damage (2 stacks).", CombatSfxAnchor::Enemy);
         assert_eq!(c, UiTheme::status_poison());
     }
 

@@ -4,12 +4,39 @@ use crate::domain::hero::HeroProfile;
 use crate::domain::skills::SkillId;
 use crate::domain::stats::Stats;
 
-/// Which persisted hero sheet skills / rename controls apply to.
+/// Which persisted hero sheet skills / rename controls apply to (0-based roster index).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum PartyHeroKind {
     #[default]
-    Lead,
-    Partner,
+    Player1,
+    Player2,
+}
+
+impl PartyHeroKind {
+    #[must_use]
+    pub fn roster_index(self) -> usize {
+        match self {
+            Self::Player1 => 0,
+            Self::Player2 => 1,
+        }
+    }
+
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Player1 => "Player 1",
+            Self::Player2 => "Player 2",
+        }
+    }
+
+    #[must_use]
+    pub fn from_roster_index(i: usize) -> Option<Self> {
+        match i {
+            0 => Some(Self::Player1),
+            1 => Some(Self::Player2),
+            _ => None,
+        }
+    }
 }
 
 /// Extra starting threat for a hero in a **tank stance** (baseline “sticky” aggro like WoW tanks).

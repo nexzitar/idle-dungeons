@@ -2,9 +2,9 @@
 
 use bevy::input::touch::Touches;
 use bevy::prelude::*;
-use bevy::ui::FocusPolicy;
 use bevy::text::{TextColor, TextFont};
 use bevy::ui::ComputedNode;
+use bevy::ui::FocusPolicy;
 use bevy::window::PrimaryWindow;
 
 use crate::ui::components::UiTooltip;
@@ -43,13 +43,13 @@ pub fn spawn_tooltip_layer(parent: &mut ChildSpawnerCommands<'_>) {
             Node {
                 box_sizing: BoxSizing::BorderBox,
                 position_type: PositionType::Absolute,
-                    left: Val::Px(0.0),
-                    top: Val::Px(0.0),
-                    width: Val::Auto,
-                    max_width: Val::Px(280.0),
-                    padding: UiRect::all(Val::Px(UiTheme::PAD_TOOLTIP)),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
+                left: Val::Px(0.0),
+                top: Val::Px(0.0),
+                width: Val::Auto,
+                max_width: Val::Px(280.0),
+                padding: UiRect::all(Val::Px(UiTheme::PAD_TOOLTIP)),
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
             },
             BackgroundColor(UiTheme::panel_bg_deep().into()),
             BorderColor::from(UiTheme::ornate_gold()),

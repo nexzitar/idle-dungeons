@@ -51,12 +51,8 @@ impl MetaProgression {
             return false;
         }
         self.unlocked_skill_ids.push(id);
-        self.unlocked_skill_ids.sort_by_key(|s| {
-            SkillId::ALL
-                .iter()
-                .position(|x| x == s)
-                .unwrap_or(999)
-        });
+        self.unlocked_skill_ids
+            .sort_by_key(|s| SkillId::ALL.iter().position(|x| x == s).unwrap_or(999));
         true
     }
 

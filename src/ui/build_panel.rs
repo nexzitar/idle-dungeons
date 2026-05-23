@@ -85,9 +85,6 @@ mod tests {
         hero.equip_skill(1, crate::domain::skills::SkillId::Cleave)
             .unwrap();
         let text = build_panel_text(&hero);
-        assert!(
-            text.contains("Cleave") && text.contains("Heavy"),
-            "{text}"
-        );
+        assert!(text.contains("Cleave") && text.contains("Heavy"), "{text}");
     }
 }

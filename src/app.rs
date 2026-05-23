@@ -1,7 +1,7 @@
 use crate::domain::hero::HeroProfile;
-use crate::domain::party::PartyHeroKind;
 use crate::domain::items::ItemInstance;
 use crate::domain::loot::salvage_value;
+use crate::domain::party::PartyHeroKind;
 use crate::domain::run::{
     simulate_run_with_playback, RunConfig, RunSimulation, RunSummary, DEFAULT_RUN_MAX_DEPTH,
 };
@@ -214,7 +214,10 @@ fn start_run(
                 seed: event.seed,
                 max_depth: DEFAULT_RUN_MAX_DEPTH,
                 gold_gain_multiplier: 1.0,
-                guided_early_combat_claims_already: profile.profile.meta.guided_early_combat_drop_count,
+                guided_early_combat_claims_already: profile
+                    .profile
+                    .meta
+                    .guided_early_combat_drop_count,
             },
         );
         commands.insert_resource(LatestRunSummary {
@@ -302,7 +305,7 @@ fn accept_run_rewards(
         apply_run_rewards(&mut profile.profile, &latest_summary.summary);
         latest_summary.rewards_accepted = true;
         save_current_profile(&save_path, &profile);
-        next_state.set(GameState::Build);
+        next_state.set(GameState::Title);
     }
 }
 
@@ -342,8 +345,10 @@ fn apply_run_rewards(profile: &mut SaveProfile, summary: &RunSummary) {
         .deepest_floor_reached
         .max(summary.deepest_depth);
     if summary.guided_early_combat_drop_granted {
-        profile.meta.guided_early_combat_drop_count =
-            profile.meta.guided_early_combat_drop_count.saturating_add(1);
+        profile.meta.guided_early_combat_drop_count = profile
+            .meta
+            .guided_early_combat_drop_count
+            .saturating_add(1);
     }
     if profile.meta.party_slots_unlocked() >= 2 && profile.party_partner.is_none() {
         profile.party_partner = Some(crate::domain::party::default_party_partner_hero());
@@ -368,12 +373,12 @@ fn assign_hero_skill_from_event(
             }
         }
         let ok = match ev.kind {
-            PartyHeroKind::Lead => profile
+            PartyHeroKind::Player1 => profile
                 .profile
                 .hero
                 .assign_skill_to_slot(ev.slot, ev.skill)
                 .is_ok(),
-            PartyHeroKind::Partner => {
+            PartyHeroKind::Player2 => {
                 let Some(partner) = profile.profile.party_partner.as_mut() else {
                     continue;
                 };
@@ -578,7 +583,7 @@ mod tests {
         app.world_mut().write_message(AssignHeroSkill {
             slot: 0,
             skill: Some(crate::domain::skills::SkillId::Guard),
-            kind: PartyHeroKind::Lead,
+            kind: PartyHeroKind::Player1,
         });
         app.update();
 

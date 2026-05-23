@@ -10,6 +10,49 @@
 
 **Spec:** [`docs/superpowers/specs/2026-05-20-presentation-editor-design.md`](../specs/2026-05-20-presentation-editor-design.md)
 
+**Author workflow (refined):** [`docs/presentation-editor-workflow.md`](../../presentation-editor-workflow.md)
+
+---
+
+## Wave 2 — Atmosphere-first iteration (approved; not started)
+
+**Design-only refinement 2026-05-20.** No code in this section until execution is explicitly scheduled. Supersedes *depth* priority for follow-on PRs; Phases 0–4 below remain the **delivery history**.
+
+**Direction:** Editor evolves from debug transform tooling → **lightweight atmospheric scene composition**. Largest ROI is **atmosphere and responsiveness**, not more gizmo chrome.
+
+### Approved execution order
+
+| # | Task theme | Spec / workflow reference |
+|---|------------|---------------------------|
+| 1 | Softer radial glow pass | Spec § Fire & atmosphere; workflow § Next-wave priority |
+| 2 | Fire breathing / flicker polish | Tracks + frequency bands; stagger phases |
+| 3 | Smooth drag interaction | Mouse threshold, hover, optional damped delta |
+| 4 | Layered atmosphere (embers, props, washes) | Composable layers only — no monolith entities |
+| 5 | Curve tuning UX in overlay | Author `PresentationTrack` without raw JSON-only |
+| 6 | Advanced gizmos (`gizmo.rs`) | Phase 5 — **after** 1–4 read well at normal zoom |
+
+### Wave 2 constraints (carry forward)
+
+- **Runtime budget unchanged:** no per-frame allocs, no spawn/despawn per tick, mutate in place, breathing-not-noise.
+- **Readability-first:** combat/UI beats atmosphere when they conflict.
+- **Layered standard:** new visuals = registry row + `PresentationLayerHost` + JSON tune path.
+
+### Future awareness (no Wave 2 tasks)
+
+| Concept | Spec section | Implementation |
+|---------|--------------|----------------|
+| Undo / redo / snapshots | § Iteration safety (future) | None |
+| Solo-layer preview | § Solo-layer preview (future) | None |
+| Presentation states | § Presentation States (future) | None |
+| Scene presets | § Presentation scene presets (future) | None |
+
+### Wave 2 documentation checklist (done in refinement pass)
+
+- [x] Workflow philosophy + atmosphere pipeline framing
+- [x] Spec: editor direction, Wave 2 priority, layered effects standard
+- [x] Spec: future undo + solo-layer sections (clearly separated)
+- [x] Plan: this addendum; initial phases unchanged as history
+
 ---
 
 ## File map (created / modified)
@@ -17,7 +60,8 @@
 | File | Responsibility |
 |------|----------------|
 | `src/presentation/element.rs` | `PresentationElementId`, `PresentationElementTune`, serde |
-| `src/presentation/scene.rs` | `PresentationScene`, load/save, legacy title JSON mapping |
+| `src/presentation/layer.rs` | `element:layer` ids, `TITLE_CAMP_LAYER_REGISTRY`, figure/extra layer tunes |
+| `src/presentation/scene.rs` | `PresentationScene`, load/save, `layer_tune_mut` routing |
 | `src/presentation/track.rs` | `PresentationTrack`, `CurveLayer`, `CurveKind`, `evaluate` |
 | `src/presentation/editor/mod.rs` | Plugin registration, resources |
 | `src/presentation/editor/overlay.rs` | Hierarchy + inspector + banner UI |
@@ -404,22 +448,23 @@ git commit -am "feat: compositional presentation tracks for fire ambient"
 
 ---
 
-## Phase 5 — Advanced gizmos & sub-layer hierarchy (deferred)
+## Phase 5 — Advanced gizmos (deferred → Wave 2 #6)
 
-### Task 8: Gizmo flags + sub-layer tree (optional follow-up PR)
+### Task 8: Gizmo flags + precision handles (optional follow-up PR)
+
+**Sub-layer hierarchy selection:** largely **delivered** via `TITLE_CAMP_LAYER_REGISTRY`, `PresentationLayerHost`, and `layer_tune_mut` (see `src/presentation/layer.rs`). Remaining Phase 5 work is **precision gizmos only**.
 
 **Files:**
 - Modify: `src/presentation/editor/gizmo.rs`
 - Modify: `src/presentation/editor/overlay.rs`
-- Modify: `src/presentation/fire.rs` (layer ids)
 
 - [ ] **Step 1: Implement pivot/anchor markers when flags enabled**
 
-- [ ] **Step 2: Hierarchy entries: `fireplace/glow`, `fireplace/ground_wash`, `fireplace/flame`**
+- [ ] **Step 2: Glow-radius preview ring tied to fireplace glow layer**
 
-- [ ] **Step 3: Select sub-layer targets (updates fire tune paths, not element tune)**
+- [ ] **Step 3: Corner scale / rotation handles (if scoped)**
 
-Only after phases 1–4 stable.
+**Gate:** Wave 2 items **1–4** (atmosphere + drag) stable at normal viewing distance. Do not start Task 8 before that gate.
 
 ---
 
@@ -449,6 +494,8 @@ git commit -m "docs: presentation editor workflow and composition updates"
 
 ## Plan self-review (spec coverage)
 
+### Initial wave (Phases 0–4 + registry)
+
 | Spec section | Task(s) |
 |--------------|---------|
 | Runtime budget | Tasks 5–7 (in-place tick, no spawn/frame, tracks) |
@@ -456,14 +503,27 @@ git commit -m "docs: presentation editor workflow and composition updates"
 | Frequency bands | Task 6–7 tests + example JSON |
 | Editor overlay | Task 2 |
 | Mouse editing | Task 3 |
-| Fire atmosphere | Tasks 4–5 |
+| Fire atmosphere (baseline) | Tasks 4–5 |
 | PresentationTrack | Tasks 6–7 |
-| Presentation States (future) | Not in plan (spec only) |
-| Scene presets (future) | Not in plan (spec only) |
-| CurveKind rename note | No task (acknowledged in spec) |
-| Phase order 1→5 | Preserved |
-| No real-time lighting | No lighting tasks |
-| Generalized naming | Tasks 0–1 |
+| Sub-layer selection | Registry + hosts (post-plan; not Task 8) |
+| Presentation States (future) | Spec only |
+| Scene presets (future) | Spec only |
+| Phase order 0→4 | Delivered per plan |
+| Phase 5 gizmos | Deferred → **Wave 2 #6** |
+
+### Wave 2 refinement (2026-05-20)
+
+| Spec section | Plan location |
+|--------------|---------------|
+| Editor direction / philosophy | Workflow doc + spec § Editor direction |
+| Next execution priority 1→6 | § Wave 2 above |
+| Living atmosphere pipeline | Workflow + spec § Living atmosphere pipeline |
+| Layered effects standard | Spec § Layered effects standard |
+| Undo / redo (future) | Spec only — no tasks |
+| Solo-layer preview (future) | Spec only — no tasks |
+| Runtime budget preserved | Wave 2 constraints |
+
+**Overlap control:** Sub-layer **tree** is not Phase 5 anymore; Phase 5 = gizmo precision only. Atmosphere polish is **not** a duplicate of Tasks 4–5 — Wave 2 is a **quality pass** on top of delivered baseline.
 
 **Placeholder scan:** None.
 
@@ -471,11 +531,8 @@ git commit -m "docs: presentation editor workflow and composition updates"
 
 ## Execution handoff
 
-Plan complete and saved to `docs/superpowers/plans/2026-05-20-presentation-editor.md`.
+**Initial plan:** Phases 0–4 executed per task list above; Phase 5 gizmos remain open.
 
-**Two execution options:**
+**Approved next work:** **Wave 2** (atmosphere-first, spec-aligned order 1→6). Use subagent-driven or inline execution when starting implementation — begin with **#1 softer radial glow**, not Task 8 gizmos.
 
-1. **Subagent-Driven (recommended)** — fresh subagent per task, review between tasks  
-2. **Inline Execution** — execute in this session via executing-plans with checkpoints  
-
-Which approach do you want?
+Refinement docs ready for execution; **no implementation** in the refinement pass itself.

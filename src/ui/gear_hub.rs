@@ -1,18 +1,19 @@
 //! Gear hub: loadout + stash side-by-side (shared backdrop + close).
 
 use bevy::prelude::*;
-use bevy::text::{TextColor, TextFont};
 use bevy::ui::{FocusPolicy, RelativeCursorPosition};
 
 use crate::save::StashSortOrder;
 use crate::ui::components::{
-    GearHubBackdrop, GearHubCloseButton, GearHubRoot, UiButtonPalette, UiScrollContent,
-    UiScrollRegion, UiScrollState, UiTooltip,
+    GearHubBackdrop, GearHubCloseButton, GearHubRoot, UiScrollContent, UiScrollRegion,
+    UiScrollState, UiTooltip,
 };
-use crate::ui::mockup_layout::spawn_stash_filters_and_sort_row;
-use crate::ui::placeholder_graphics::UiPlaceholderImages;
+use crate::ui::shell::spawn_stash_filters_and_sort_row;
+use crate::ui::assets::UiPlaceholderImages;
+use crate::ui::primitives::modal::{spawn_modal_shell_with_handles, ModalShellConfig};
+use crate::ui::primitives::scroll::spawn_scrollable_flex_column;
+use crate::ui::primitives::{spawn_button, UiButtonConfig, UiButtonVariant};
 use crate::ui::theme::{caption_text, headline_text, section_title, UiTheme};
-use crate::ui::widgets::spawn_scrollable_flex_column;
 
 /// Equipped-gear column.
 const GEAR_LOADOUT_PANEL_W: f32 = 292.0;
@@ -66,116 +67,94 @@ pub fn spawn_gear_hub_modal(
         ))
         .insert(FocusPolicy::Block)
         .with_children(|layer| {
-            let backdrop_pal = UiButtonPalette {
-                idle_bg: Color::srgba(0.02, 0.02, 0.04, 0.58),
-                hover_bg: Color::srgba(0.04, 0.04, 0.06, 0.65),
-                pressed_bg: Color::srgba(0.06, 0.06, 0.08, 0.72),
-                idle_border: Color::NONE,
-                hover_border: Color::NONE,
-                pressed_border: Color::NONE,
-            };
-            layer.spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(100.0),
-                    left: Val::Px(0.0),
-                    top: Val::Px(0.0),
-                    ..default()
+            let shell = spawn_modal_shell_with_handles(
+                layer,
+                ModalShellConfig {
+                    backdrop_clicks_close: true,
                 },
-                Button,
-                BackgroundColor(backdrop_pal.idle_bg),
-                BorderColor::from(backdrop_pal.idle_border),
-                GearHubBackdrop,
-                backdrop_pal,
-                UiTooltip::txt("Click outside empty space to close the gear hub."),
-            ));
-
-            layer
-                .spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        width: Val::Percent(100.0),
-                        height: Val::Percent(100.0),
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(0.0),
-                        top: Val::Px(0.0),
-                        flex_direction: FlexDirection::Row,
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Stretch,
-                        column_gap: Val::Px(GEAR_HUB_COLUMN_GAP),
-                        padding: UiRect::axes(
-                            Val::Px(GEAR_HUB_MARGIN_X),
-                            Val::Px(GEAR_HUB_MARGIN_Y),
-                        ),
-                        ..default()
-                    },
-                    FocusPolicy::Pass,
-                ))
-                .with_children(|columns| {
+                |columns| {
                     columns
                         .spawn((
-                            gear_side_panel_node(GEAR_LOADOUT_PANEL_W),
-                            BackgroundColor(UiTheme::panel_bg_deep()),
-                            BorderColor::from(UiTheme::ornate_gold()),
+                            Node {
+                                box_sizing: BoxSizing::BorderBox,
+                                max_width: Val::Percent(100.0),
+                                height: Val::Percent(100.0),
+                                flex_direction: FlexDirection::Row,
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Stretch,
+                                column_gap: Val::Px(GEAR_HUB_COLUMN_GAP),
+                                padding: UiRect::axes(
+                                    Val::Px(GEAR_HUB_MARGIN_X),
+                                    Val::Px(GEAR_HUB_MARGIN_Y),
+                                ),
+                                ..default()
+                            },
+                            FocusPolicy::Pass,
                         ))
-                        .with_children(|loadout_panel| {
-                            loadout_panel.spawn(headline_text("Equipped"));
-                            loadout_panel.spawn(section_title("LOADOUT"));
-                            spawn_scrollable_flex_column(loadout_panel, None, |loadout| {
-                                crate::ui::mockup_layout::mockup_gear_cards(loadout, profile, ph);
-                            });
-                        });
-
-                    columns
-                        .spawn((
-                            gear_side_panel_node(GEAR_STASH_PANEL_W),
-                            BackgroundColor(UiTheme::panel_bg_deep()),
-                            BorderColor::from(UiTheme::ornate_gold()),
-                        ))
-                        .with_children(|stash_panel| {
-                            stash_panel.spawn(headline_text("Stash"));
-                            stash_panel.spawn(section_title(if summary_loot.is_some() {
-                                "RUN LOOT (preview)"
-                            } else {
-                                "INVENTORY"
-                            }));
-                            spawn_stash_filters_and_sort_row(stash_panel, stash_sort);
-                            gear_hub_scroll_list(
-                                stash_panel,
-                                use_rows,
-                                interactive_inventory,
-                                stash_sort,
-                                ph,
-                            );
-                            let close_pal = UiButtonPalette::panel_outlined();
-                            stash_panel
+                        .with_children(|panels| {
+                            panels
                                 .spawn((
-                                    Node {
-                                        width: Val::Percent(100.0),
-                                        min_height: Val::Px(40.0),
-                                        flex_shrink: 0.0,
-                                        justify_content: JustifyContent::Center,
-                                        align_items: AlignItems::Center,
-                                        border: UiRect::all(Val::Px(1.0)),
-                                        ..default()
-                                    },
-                                    Button,
-                                    BackgroundColor(close_pal.idle_bg),
-                                    BorderColor::from(close_pal.idle_border),
-                                    GearHubCloseButton,
-                                    close_pal,
-                                    UiTooltip::txt("Close both gear panels."),
+                                    gear_side_panel_node(GEAR_LOADOUT_PANEL_W),
+                                    BackgroundColor(UiTheme::panel_bg_deep()),
+                                    BorderColor::from(UiTheme::ornate_gold()),
                                 ))
-                                .with_children(|b| {
-                                    b.spawn((
-                                        Text::new("Close"),
-                                        TextFont::from_font_size(UiTheme::FONT_BODY),
-                                        TextColor(UiTheme::muted_cream()),
+                                .with_children(|loadout_panel| {
+                                    loadout_panel.spawn(headline_text("Equipped"));
+                                    loadout_panel.spawn(section_title("LOADOUT"));
+                                    spawn_scrollable_flex_column(loadout_panel, None, |loadout| {
+                                        crate::ui::shell::mockup_gear_cards(
+                                            loadout, profile, ph,
+                                        );
+                                    });
+                                });
+
+                            panels
+                                .spawn((
+                                    gear_side_panel_node(GEAR_STASH_PANEL_W),
+                                    BackgroundColor(UiTheme::panel_bg_deep()),
+                                    BorderColor::from(UiTheme::ornate_gold()),
+                                ))
+                                .with_children(|stash_panel| {
+                                    stash_panel.spawn(headline_text("Stash"));
+                                    stash_panel.spawn(section_title(if summary_loot.is_some() {
+                                        "RUN LOOT (preview)"
+                                    } else {
+                                        "INVENTORY"
+                                    }));
+                                    spawn_stash_filters_and_sort_row(stash_panel, stash_sort);
+                                    gear_hub_scroll_list(
+                                        stash_panel,
+                                        use_rows,
+                                        interactive_inventory,
+                                        stash_sort,
+                                        ph,
+                                    );
+                                    let close_ent = spawn_button(
+                                        stash_panel,
+                                        UiButtonConfig {
+                                            label: "Close",
+                                            variant: UiButtonVariant::PanelOutlined,
+                                            width: Val::Percent(100.0),
+                                            height: Val::Px(40.0),
+                                            font_size: UiTheme::FONT_BODY,
+                                            text_color: UiTheme::muted_cream(),
+                                            flex_shrink: 0.0,
+                                        },
+                                    );
+                                    stash_panel.commands_mut().entity(close_ent).insert((
+                                        GearHubCloseButton,
+                                        crate::ui::interaction::UiClickAction::CloseGearHub,
+                                        UiTooltip::txt("Close both gear panels."),
                                     ));
                                 });
                         });
-                });
+                },
+            );
+            layer.commands_mut().entity(shell.backdrop).insert((
+                GearHubBackdrop,
+                crate::ui::interaction::UiClickAction::CloseGearHub,
+                UiTooltip::txt("Click outside empty space to close the gear hub."),
+            ));
         });
 }
 
@@ -208,7 +187,7 @@ fn spawn_stash_column(
             for &i in col_ix {
                 let item = &rows[i];
                 if interactive_inventory {
-                    crate::ui::spawn_item_card(col, item, ph);
+                    crate::ui::primitives::spawn_item_card(col, item, ph);
                 } else {
                     col.spawn(caption_text(format!(
                         "\u{2022} {} ({:?})",

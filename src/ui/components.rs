@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 use crate::domain::party::PartyHeroKind;
 use crate::domain::skills::SkillId;
+use crate::presentation::element::PresentationElementId;
 use crate::ui::theme::UiTheme;
 
 #[derive(Component)]
@@ -41,10 +42,10 @@ pub struct PlaybackRoomKindText;
 pub struct PlaybackEnemyNameText;
 
 #[derive(Component)]
-pub struct PlaybackHeroBarFill;
+pub struct PlaybackPlayer0BarFill;
 
 #[derive(Component)]
-pub struct PlaybackAllyBarFill;
+pub struct PlaybackPlayer1BarFill;
 
 #[derive(Component)]
 pub struct PlaybackEnemyBarFill;
@@ -57,10 +58,10 @@ pub struct PlaybackAggroArrowText;
 pub struct PlaybackAggroArrowLine;
 
 #[derive(Component)]
-pub struct PlaybackLeadPortraitBlock;
+pub struct PlaybackPlayer0PortraitBlock;
 
 #[derive(Component)]
-pub struct PlaybackAllyPortraitBlock;
+pub struct PlaybackPlayer1PortraitBlock;
 
 #[derive(Component)]
 pub struct PlaybackEnemyPortraitBlock;
@@ -101,28 +102,28 @@ pub struct GearHubCloseButton;
 pub struct SummaryRewardsModalRoot;
 
 #[derive(Component)]
-pub struct PlaybackDmgMeterPartnerRow;
+pub struct PlaybackDmgMeterPlayer1Row;
 
 #[derive(Component)]
-pub struct PlaybackDmgMeterLeadFill;
+pub struct PlaybackDmgMeterPlayer0Fill;
 
 #[derive(Component)]
-pub struct PlaybackDmgMeterPartnerFill;
+pub struct PlaybackDmgMeterPlayer1Fill;
 
 #[derive(Component)]
 pub struct PlaybackDmgMeterEnemyFill;
 
 #[derive(Component)]
-pub struct PlaybackDmgMeterLeadValue;
+pub struct PlaybackDmgMeterPlayer0Value;
 
 #[derive(Component)]
-pub struct PlaybackDmgMeterPartnerValue;
+pub struct PlaybackDmgMeterPlayer1Value;
 
 #[derive(Component)]
 pub struct PlaybackDmgMeterEnemyValue;
 
 #[derive(Component)]
-pub struct PlaybackHeroDebuffLine;
+pub struct PlaybackPlayer0DebuffLine;
 
 #[derive(Component)]
 pub struct PlaybackEnemyDebuffLine;
@@ -207,28 +208,28 @@ pub struct SkillShopBuyButton {
 }
 
 #[derive(Component)]
-pub struct PlaybackLeadCastFill;
+pub struct PlaybackPlayer0CastFill;
 
 #[derive(Component)]
-pub struct PlaybackLeadCdFill;
+pub struct PlaybackPlayer0CdFill;
 
 #[derive(Component)]
-pub struct PlaybackLeadSkillGcdFill;
+pub struct PlaybackPlayer0SkillGcdFill;
 
 #[derive(Component)]
-pub struct PlaybackLeadInstantRechargeFill;
+pub struct PlaybackPlayer0InstantRechargeFill;
 
 #[derive(Component)]
-pub struct PlaybackAllyCastFill;
+pub struct PlaybackPlayer1CastFill;
 
 #[derive(Component)]
-pub struct PlaybackAllyCdFill;
+pub struct PlaybackPlayer1CdFill;
 
 #[derive(Component)]
-pub struct PlaybackAllySkillGcdFill;
+pub struct PlaybackPlayer1SkillGcdFill;
 
 #[derive(Component)]
-pub struct PlaybackAllyInstantRechargeFill;
+pub struct PlaybackPlayer1InstantRechargeFill;
 
 #[derive(Component)]
 pub struct PlaybackFoeCastFill;
@@ -437,16 +438,31 @@ pub struct TitleQuitButton;
 #[derive(Component)]
 pub struct TitleCampFigureSlot(pub u8);
 
+/// Debug tuning: figure column root for physical campfire seat `0..5` (`player1` … `player6`).
+#[derive(Component)]
+pub struct TitleCampFigureTuneMarker(pub u8);
+
+/// Emoji row in a figure column (physical seat index, same as [`TitleCampFigureTuneMarker`]).
+#[derive(Component)]
+pub struct TitleCampFigureEmoji(pub u8);
+
 #[derive(Component)]
 pub struct TitleCampMilestoneExtras;
 
 #[derive(Component)]
 pub struct TitleCampSceneRoot;
 
+/// Marker for the tunable title campfire presentation root (alias for [`crate::presentation::markers::CampfirePresentationRoot`]).
+pub use crate::presentation::markers::CampfirePresentationRoot as TitleCampfireTuneMarker;
+
+/// Lower-third layout root over [`UiPlaceholderImages::campfire_scene`]: tent, figure slots, fire layer.
+/// Reparent hero portraits/sprites here when art lands; align `Fireplace.png` with the stone ring in the painting.
 #[derive(Component)]
-pub struct CampfireFlame {
-    pub base: Color,
-    pub peak: Color,
-    pub speed: f32,
-    pub phase_offset: f32,
-}
+pub struct TitleCampStageRoot;
+
+/// UI hit target for tuning a logical presentation element (title camp fireplace / figure slots).
+#[derive(Component)]
+pub struct PresentationElementHost(pub PresentationElementId);
+
+/// Re-export — defined in [`crate::presentation::markers`].
+pub use crate::presentation::markers::{PresentationFireLayerHost, PresentationLayerHost};

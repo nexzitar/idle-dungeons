@@ -49,15 +49,15 @@ pub fn mix64(seed: u64, tag: u64) -> u64 {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InitiativeActor {
-    Lead,
-    Partner,
+    Player0,
+    Player1,
     Foe,
 }
 
 /// Returns **unique** ranks `0..N-1` for actors in this encounter: **lower = earlier** when `ready_at_tick` ties.
-/// Index: `0` = lead, `1` = partner, `2` = first foe, `3` = second foe (when `foe_count == 2`).
+/// Index: `0` = player 1, `1` = player 2, `2` = first foe, `3` = second foe (when `foe_count == 2`).
 /// Unused slots stay `255`.
-/// `party_slots`: `1` = solo (lead + foe(s) only), `2` = lead + partner + foe(s).
+/// `party_slots`: `1` = solo (player 1 + foe(s) only), `2` = two players + foe(s).
 /// `foe_count`: `1` or `2`.
 pub fn initiative_ranks_four(encounter_seed: u64, party_slots: u8, foe_count: u8) -> [u8; 4] {
     debug_assert!(foe_count >= 1 && foe_count <= 2);
@@ -86,11 +86,17 @@ pub fn initiative_ranks_pack(encounter_seed: u64, party_count: u8, foe_count: u8
     let n = pc + fc;
     let mut entries: Vec<(usize, u64)> = Vec::with_capacity(n);
     for i in 0..pc {
-        entries.push((i, mix64(encounter_seed, 0x4C450000u64.wrapping_add(i as u64))));
+        entries.push((
+            i,
+            mix64(encounter_seed, 0x4C450000u64.wrapping_add(i as u64)),
+        ));
     }
     for j in 0..fc {
         let idx = pc + j;
-        entries.push((idx, mix64(encounter_seed, 0x464F4500u64.wrapping_add(j as u64))));
+        entries.push((
+            idx,
+            mix64(encounter_seed, 0x464F4500u64.wrapping_add(j as u64)),
+        ));
     }
     entries.sort_by_key(|&(_, k)| k);
     let mut out = vec![255u8; n];
@@ -109,8 +115,8 @@ pub fn initiative_ranks(encounter_seed: u64, party_slots: u8) -> [u8; 3] {
 #[inline]
 pub fn initiative_rank_for(actor: InitiativeActor, encounter_seed: u64, party_slots: u8) -> u8 {
     let idx = match actor {
-        InitiativeActor::Lead => 0usize,
-        InitiativeActor::Partner => 1usize,
+        InitiativeActor::Player0 => 0usize,
+        InitiativeActor::Player1 => 1usize,
         InitiativeActor::Foe => 2usize,
     };
     initiative_ranks_four(encounter_seed, party_slots, 1)[idx]
@@ -154,8 +160,8 @@ mod tests {
 
     #[test]
     fn initiative_deterministic_for_seed() {
-        let a = initiative_rank_for(InitiativeActor::Lead, 42, 2);
-        let b = initiative_rank_for(InitiativeActor::Lead, 42, 2);
+        let a = initiative_rank_for(InitiativeActor::Player0, 42, 2);
+        let b = initiative_rank_for(InitiativeActor::Player0, 42, 2);
         let c = initiative_rank_for(InitiativeActor::Foe, 42, 2);
         assert_eq!(a, b);
         assert_ne!(a, c, "lead and foe should not always tie on mixed keys");

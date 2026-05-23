@@ -71,7 +71,7 @@ pub enum CombatOutcome {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CombatEvent {
-    /// `attacker` 0 = lead hero ("you" in UI), 1 = party partner.
+    /// `attacker` 0 = player 1, 1 = player 2 (party roster index).
     HeroAttacked {
         attacker: u8,
         strike: HeroStrikeDamage,
@@ -87,7 +87,7 @@ pub enum CombatEvent {
         /// Which enemy HP pool the DoT tick consumes.
         foe_index: u8,
     },
-    /// `target` 0 = lead hero, 1 = party partner ([`HeroProfile`]).
+    /// `target` 0 = player 1, 1 = player 2 ([`HeroProfile`]).
     EnemyAttacked {
         target: u8,
         damage: i32,
@@ -97,7 +97,7 @@ pub enum CombatEvent {
         /// Foe that took thorns damage (the one that struck).
         foe_index: u8,
     },
-    /// `target` 0 = lead, 1 = partner.
+    /// `target` 0 = player 1, 1 = player 2.
     HeroHealed {
         target: u8,
         amount: i32,
@@ -109,31 +109,31 @@ pub enum CombatEvent {
     },
     /// Cast/cooldown meter snapshot for playback bars (`0..=1` each).
     TimingPulse {
-        lead_cast: f32,
-        lead_cd: f32,
-        ally_cast: f32,
-        ally_cd: f32,
+        player0_cast: f32,
+        player0_cd: f32,
+        player1_cast: f32,
+        player1_cd: f32,
         foe_cast: f32,
         foe_cd: f32,
         /// When **≥2** living foes, cast/CD for a **non-primary** pack member (off-focus timeline).
         foe_alt_cast: f32,
         foe_alt_cd: f32,
         /// Shared ability GCD (Victory Rush, Empowered Blow queue): fill **during** lockout (`0` when ready).
-        lead_skill_gcd: f32,
+        player0_skill_gcd: f32,
         /// Per-charge Victory Rush recharge progress (`0` when idle at max charges or skill absent).
-        lead_instant_recharge: f32,
-        lead_instant_charges: u8,
-        lead_instant_max_charges: u8,
-        ally_skill_gcd: f32,
-        ally_instant_recharge: f32,
-        ally_instant_charges: u8,
-        ally_instant_max_charges: u8,
+        player0_instant_recharge: f32,
+        player0_instant_charges: u8,
+        player0_instant_max_charges: u8,
+        player1_skill_gcd: f32,
+        player1_instant_recharge: f32,
+        player1_instant_charges: u8,
+        player1_instant_max_charges: u8,
     },
     EnemyDefeated {
         /// `0` = first foe, `1` = second foe when applicable.
         foe_index: u8,
     },
-    /// Party member defeated (currently slot `1` = partner). Lead uses [`HeroDefeated`].
+    /// Party member defeated (roster index `1+`). Player 1 defeat uses [`HeroDefeated`].
     PartyMemberDown {
         party_index: u8,
     },
@@ -162,6 +162,16 @@ pub enum CombatEvent {
     },
 }
 
+fn party_player_label(slot: u8, custom_name: Option<&str>) -> String {
+    match slot {
+        0 => "Player 1".to_string(),
+        1 => custom_name
+            .map(str::to_string)
+            .unwrap_or_else(|| "Player 2".to_string()),
+        n => format!("Player {}", n as usize + 1),
+    }
+}
+
 fn combat_event_caption(event: &CombatEvent, partner_name: Option<&str>) -> String {
     match event {
         CombatEvent::HeroAttacked {
@@ -171,35 +181,14 @@ fn combat_event_caption(event: &CombatEvent, partner_name: Option<&str>) -> Stri
             ..
         } => {
             let total = strike.total();
+            let who = party_player_label(*attacker, partner_name);
             let mut base = if strike.yellow == 0 {
-                if *attacker == 0 {
-                    format!("You strike for {total} damage.")
-                } else if let Some(n) = partner_name {
-                    format!("{n} strikes for {total} damage.")
-                } else {
-                    format!("Partner strikes for {total} damage.")
-                }
+                format!("{who} strikes for {total} damage.")
             } else if strike.white == 0 {
-                if *attacker == 0 {
-                    format!("You hit for {total} ability damage.")
-                } else if let Some(n) = partner_name {
-                    format!("{n} hits for {total} ability damage.")
-                } else {
-                    format!("Partner hits for {total} ability damage.")
-                }
-            } else if *attacker == 0 {
-                format!(
-                    "You strike for {} white and {} ability ({} total).",
-                    strike.white, strike.yellow, total
-                )
-            } else if let Some(n) = partner_name {
-                format!(
-                    "{n} strikes for {} white and {} ability ({} total).",
-                    strike.white, strike.yellow, total
-                )
+                format!("{who} hits for {total} ability damage.")
             } else {
                 format!(
-                    "Partner strikes for {} white and {} ability ({} total).",
+                    "{who} strikes for {} white and {} ability ({} total).",
                     strike.white, strike.yellow, total
                 )
             };
@@ -209,34 +198,27 @@ fn combat_event_caption(event: &CombatEvent, partner_name: Option<&str>) -> Stri
             }
             base
         }
-        CombatEvent::PoisonTick { damage, stacks, foe_index } => {
+        CombatEvent::PoisonTick {
+            damage,
+            stacks,
+            foe_index,
+        } => {
             let tag = if *foe_index == 1 { " (flank)" } else { "" };
             format!("Poison deals {} damage ({} stacks){tag}.", damage, stacks)
         }
         CombatEvent::EnemyAttacked { target, damage } => {
-            if *target == 0 {
-                format!("The foe hits you for {damage} damage.")
-            } else if let Some(n) = partner_name {
-                format!("The foe hits {n} for {damage} damage.")
-            } else {
-                format!("The foe hits your partner for {damage} damage.")
-            }
+            let who = party_player_label(*target, partner_name);
+            format!("The foe hits {who} for {damage} damage.")
         }
         CombatEvent::ThornsReflect { damage, .. } => {
             format!("Thorns bite back for {} damage.", damage)
         }
         CombatEvent::HeroHealed { target, amount } => {
-            if *target == 0 {
-                format!("You recover {amount} health.")
-            } else if let Some(n) = partner_name {
-                format!("{n} recovers {amount} health.")
-            } else {
-                format!("Partner recovers {amount} health.")
-            }
+            let who = party_player_label(*target, partner_name);
+            format!("{who} recovers {amount} health.")
         }
         CombatEvent::ThreatSnapshot { slot0, slot1 } => {
-            let p1 = partner_name.unwrap_or("Partner");
-            format!("Threat · You {slot0} · {p1} {slot1}")
+            format!("Threat · Player 1 {slot0} · Player 2 {slot1}")
         }
         CombatEvent::TimingPulse { .. } => String::new(),
         CombatEvent::EnemyDefeated { foe_index } => {
@@ -247,17 +229,12 @@ fn combat_event_caption(event: &CombatEvent, partner_name: Option<&str>) -> Stri
             }
         }
         CombatEvent::PartyMemberDown { party_index } => {
-            if *party_index == 1 {
-                if let Some(n) = partner_name {
-                    format!("{n} is down.")
-                } else {
-                    "A party member is down.".to_string()
-                }
-            } else {
-                "A party member is down.".to_string()
-            }
+            format!(
+                "{} is down.",
+                party_player_label(*party_index, partner_name)
+            )
         }
-        CombatEvent::HeroDefeated => "You collapse...".to_string(),
+        CombatEvent::HeroDefeated => "Player 1 is down.".to_string(),
         CombatEvent::BuffApplied {
             target,
             buff_id,
@@ -269,23 +246,13 @@ fn combat_event_caption(event: &CombatEvent, partner_name: Option<&str>) -> Stri
                 None => " (no expiry)".to_string(),
                 Some(t) => format!(" ({t} ticks)"),
             };
-            if *target == 0 {
-                format!("You gain {name} ×{stacks}{dur}.")
-            } else if let Some(n) = partner_name {
-                format!("{n} gains {name} ×{stacks}{dur}.")
-            } else {
-                format!("Ally gains {name} ×{stacks}{dur}.")
-            }
+            let who = party_player_label(*target, partner_name);
+            format!("{who} gains {name} ×{stacks}{dur}.")
         }
         CombatEvent::BuffExpired { target, buff_id } => {
             let name = buff_display_name(*buff_id);
-            if *target == 0 {
-                format!("{name} fades from you.")
-            } else if let Some(n) = partner_name {
-                format!("{name} fades from {n}.")
-            } else {
-                format!("{name} fades from your ally.")
-            }
+            let who = party_player_label(*target, partner_name);
+            format!("{name} fades from {who}.")
         }
         CombatEvent::BuffTick {
             target,
@@ -296,13 +263,8 @@ fn combat_event_caption(event: &CombatEvent, partner_name: Option<&str>) -> Stri
                 return format!("Poison corrodes the foe (potency ×{stacks}).");
             }
             let name = buff_display_name(*buff_id);
-            if *target == 0 {
-                format!("{name} ticks on you (×{stacks}).")
-            } else if let Some(n) = partner_name {
-                format!("{name} ticks on {n} (×{stacks}).")
-            } else {
-                format!("{name} ticks (×{stacks}).")
-            }
+            let who = party_player_label(*target, partner_name);
+            format!("{name} ticks on {who} (×{stacks}).")
         }
         CombatEvent::BuffChargeConsumed {
             target,
@@ -310,13 +272,8 @@ fn combat_event_caption(event: &CombatEvent, partner_name: Option<&str>) -> Stri
             charges_remaining,
         } => {
             let name = buff_display_name(*buff_id);
-            if *target == 0 {
-                format!("{name} consumes a charge ({charges_remaining} left).")
-            } else if let Some(n) = partner_name {
-                format!("{name}: {n} consumes a charge ({charges_remaining} left).")
-            } else {
-                format!("{name}: ally consumes a charge ({charges_remaining} left).")
-            }
+            let who = party_player_label(*target, partner_name);
+            format!("{name}: {who} consumes a charge ({charges_remaining} left).")
         }
     }
 }
@@ -327,8 +284,8 @@ pub enum CombatSfxAnchor {
     /// Narration / engage / threat telemetry — skip floating spam.
     #[default]
     Neutral,
-    Lead,
-    Ally,
+    Player0,
+    Player1,
     Enemy,
 }
 
@@ -336,30 +293,30 @@ fn sfx_anchor_for_event(event: &CombatEvent) -> CombatSfxAnchor {
     match event {
         CombatEvent::HeroAttacked { .. } => CombatSfxAnchor::Enemy,
         CombatEvent::PoisonTick { .. } => CombatSfxAnchor::Enemy,
-        CombatEvent::EnemyAttacked { target: 0, .. } => CombatSfxAnchor::Lead,
-        CombatEvent::EnemyAttacked { target: 1, .. } => CombatSfxAnchor::Ally,
-        CombatEvent::EnemyAttacked { .. } => CombatSfxAnchor::Lead,
+        CombatEvent::EnemyAttacked { target: 0, .. } => CombatSfxAnchor::Player0,
+        CombatEvent::EnemyAttacked { target: 1, .. } => CombatSfxAnchor::Player1,
+        CombatEvent::EnemyAttacked { .. } => CombatSfxAnchor::Player0,
         CombatEvent::ThornsReflect { .. } => CombatSfxAnchor::Enemy,
-        CombatEvent::HeroHealed { target: 0, .. } => CombatSfxAnchor::Lead,
-        CombatEvent::HeroHealed { target: 1, .. } => CombatSfxAnchor::Ally,
-        CombatEvent::HeroHealed { .. } => CombatSfxAnchor::Lead,
+        CombatEvent::HeroHealed { target: 0, .. } => CombatSfxAnchor::Player0,
+        CombatEvent::HeroHealed { target: 1, .. } => CombatSfxAnchor::Player1,
+        CombatEvent::HeroHealed { .. } => CombatSfxAnchor::Player0,
         CombatEvent::ThreatSnapshot { .. } => CombatSfxAnchor::Neutral,
         CombatEvent::TimingPulse { .. } => CombatSfxAnchor::Neutral,
         CombatEvent::EnemyDefeated { .. } => CombatSfxAnchor::Enemy,
-        CombatEvent::PartyMemberDown { .. } => CombatSfxAnchor::Ally,
-        CombatEvent::HeroDefeated => CombatSfxAnchor::Lead,
-        CombatEvent::BuffApplied { target: 0, .. } => CombatSfxAnchor::Lead,
-        CombatEvent::BuffApplied { .. } => CombatSfxAnchor::Ally,
-        CombatEvent::BuffExpired { target: 0, .. } => CombatSfxAnchor::Lead,
-        CombatEvent::BuffExpired { .. } => CombatSfxAnchor::Ally,
+        CombatEvent::PartyMemberDown { .. } => CombatSfxAnchor::Player1,
+        CombatEvent::HeroDefeated => CombatSfxAnchor::Player0,
+        CombatEvent::BuffApplied { target: 0, .. } => CombatSfxAnchor::Player0,
+        CombatEvent::BuffApplied { .. } => CombatSfxAnchor::Player1,
+        CombatEvent::BuffExpired { target: 0, .. } => CombatSfxAnchor::Player0,
+        CombatEvent::BuffExpired { .. } => CombatSfxAnchor::Player1,
         CombatEvent::BuffTick {
             buff_id: BuffId::PoisonVenom,
             ..
         } => CombatSfxAnchor::Enemy,
-        CombatEvent::BuffTick { target: 0, .. } => CombatSfxAnchor::Lead,
-        CombatEvent::BuffTick { .. } => CombatSfxAnchor::Ally,
-        CombatEvent::BuffChargeConsumed { target: 0, .. } => CombatSfxAnchor::Lead,
-        CombatEvent::BuffChargeConsumed { .. } => CombatSfxAnchor::Ally,
+        CombatEvent::BuffTick { target: 0, .. } => CombatSfxAnchor::Player0,
+        CombatEvent::BuffTick { .. } => CombatSfxAnchor::Player1,
+        CombatEvent::BuffChargeConsumed { target: 0, .. } => CombatSfxAnchor::Player0,
+        CombatEvent::BuffChargeConsumed { .. } => CombatSfxAnchor::Player1,
     }
 }
 
@@ -373,9 +330,9 @@ pub fn aggro_arrow_target_label(
 ) -> &'static str {
     let slot = pick_party_enemy_target(0, threat, h0, h1, has_partner, last_foe_target);
     if slot == 0 {
-        "You"
+        "Player 1"
     } else {
-        "Ally"
+        "Player 2"
     }
 }
 
@@ -406,12 +363,7 @@ fn ability_gcd_bar_frac(left: u32, denom: u32) -> f32 {
     }
 }
 
-fn instant_recharge_bar_frac(
-    recharge_left: u32,
-    period: u8,
-    charges: u8,
-    max_charges: u8,
-) -> f32 {
+fn instant_recharge_bar_frac(recharge_left: u32, period: u8, charges: u8, max_charges: u8) -> f32 {
     if max_charges == 0 || charges >= max_charges || period == 0 || recharge_left == 0 {
         0.0
     } else {
@@ -440,8 +392,8 @@ fn playback_apply_opening_event(
     partner_max_hp: Option<i32>,
     hero_hp: &mut i32,
     partner_hp: &mut Option<i32>,
-    lead_buffs: &mut HashMap<BuffId, u32>,
-    ally_buffs: &mut HashMap<BuffId, u32>,
+    player0_buffs: &mut HashMap<BuffId, u32>,
+    player1_buffs: &mut HashMap<BuffId, u32>,
 ) {
     match event {
         CombatEvent::HeroHealed { target, amount } => {
@@ -458,17 +410,17 @@ fn playback_apply_opening_event(
             ..
         } => {
             let map = if *target == 0 {
-                lead_buffs
+                player0_buffs
             } else {
-                ally_buffs
+                player1_buffs
             };
             map.insert(*buff_id, (*stacks).max(1));
         }
         CombatEvent::BuffExpired { target, buff_id } => {
             let map = if *target == 0 {
-                lead_buffs
+                player0_buffs
             } else {
-                ally_buffs
+                player1_buffs
             };
             map.remove(buff_id);
         }
@@ -541,7 +493,7 @@ pub struct CombatPlaybackFrame {
     /// Up to four debuff / status chips per side (e.g. `Poison ×4`, or `—` for empty).
     pub hero_debuff_slots: [String; 4],
     pub enemy_debuff_slots: [String; 4],
-    /// Last party slot the foe attacked (`0` lead, `1` ally), when known.
+    /// Last party slot the foe attacked (`0` = player 1, `1` = player 2), when known.
     pub foe_last_target: Option<u8>,
     /// Latest threat totals from combat telemetry (`None` until a snapshot exists).
     pub threat_slot0: Option<i32>,
@@ -555,25 +507,25 @@ pub struct CombatPlaybackFrame {
     /// Sim-progress through the delve for DPS (~ combat clock ticks accumulated through this frame).
     pub run_sim_ticks: u32,
     pub sfx_anchor: CombatSfxAnchor,
-    /// 0–1 cast bar fill for the lead hero (weapon swing wind-up).
-    pub lead_cast: f32,
-    pub lead_cd: f32,
-    pub ally_cast: f32,
-    pub ally_cd: f32,
+    /// 0–1 cast bar fill for player 1 (weapon swing wind-up).
+    pub player0_cast: f32,
+    pub player0_cd: f32,
+    pub player1_cast: f32,
+    pub player1_cd: f32,
     pub foe_cast: f32,
     pub foe_cd: f32,
     /// Pack off-target foe cast/CD fills (zeros in solo or when only one foe lives).
     pub foe_alt_cast: f32,
     pub foe_alt_cd: f32,
-    /// Ability GCD bar (`0` = ready), same semantics as [`CombatEvent::TimingPulse::lead_skill_gcd`].
-    pub lead_skill_gcd: f32,
-    pub lead_instant_recharge: f32,
-    pub lead_instant_charges: u8,
-    pub lead_instant_max_charges: u8,
-    pub ally_skill_gcd: f32,
-    pub ally_instant_recharge: f32,
-    pub ally_instant_charges: u8,
-    pub ally_instant_max_charges: u8,
+    /// Ability GCD bar (`0` = ready), same semantics as [`CombatEvent::TimingPulse::player0_skill_gcd`].
+    pub player0_skill_gcd: f32,
+    pub player0_instant_recharge: f32,
+    pub player0_instant_charges: u8,
+    pub player0_instant_max_charges: u8,
+    pub player1_skill_gcd: f32,
+    pub player1_instant_recharge: f32,
+    pub player1_instant_charges: u8,
+    pub player1_instant_max_charges: u8,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -786,8 +738,7 @@ fn hero_strike_damage(
         raw_total.max(1)
     };
     let (white, yellow) = if raw_total > 0 {
-        let w =
-            ((scaled_total as i64 * white_sub as i64) / raw_total as i64).max(1) as i32;
+        let w = ((scaled_total as i64 * white_sub as i64) / raw_total as i64).max(1) as i32;
         let y = scaled_total.saturating_sub(w);
         (w, y)
     } else {
@@ -842,11 +793,7 @@ fn apply_lifesteal(
     });
 }
 
-fn push_empowered_blow_buff_expired(
-    events: &mut Vec<CombatEvent>,
-    max_events: usize,
-    target: u8,
-) {
+fn push_empowered_blow_buff_expired(events: &mut Vec<CombatEvent>, max_events: usize, target: u8) {
     if events.len() < max_events {
         events.push(CombatEvent::BuffExpired {
             target,
@@ -2296,7 +2243,10 @@ fn foe_weapon_pass(
             meter_add_attack_speed(enemy_meter, enemy_as);
             as_applied[2] = true;
         }
-        if *enemy_health > 0 && *h0 > 0 && (!has_partner || *h1 > 0) && meter_try_consume_swing(enemy_meter)
+        if *enemy_health > 0
+            && *h0 > 0
+            && (!has_partner || *h1 > 0)
+            && meter_try_consume_swing(enemy_meter)
         {
             if events.len() >= max_events {
                 return (None, true);
@@ -2380,7 +2330,10 @@ fn foe_weapon_pass(
             meter_add_attack_speed(enemy_meter, enemy_as);
             as_applied[2] = true;
         }
-        if *enemy_health > 0 && *h0 > 0 && (!has_partner || *h1 > 0) && meter_try_consume_swing(enemy_meter)
+        if *enemy_health > 0
+            && *h0 > 0
+            && (!has_partner || *h1 > 0)
+            && meter_try_consume_swing(enemy_meter)
         {
             if foe_ct > 0 {
                 *foe_cast_left = foe_ct;
@@ -2506,12 +2459,7 @@ impl PartyBuffState {
         });
     }
 
-    fn tick_end(
-        &mut self,
-        combat_clock: u32,
-        events: &mut Vec<CombatEvent>,
-        max_events: usize,
-    ) {
+    fn tick_end(&mut self, combat_clock: u32, events: &mut Vec<CombatEvent>, max_events: usize) {
         Self::expire_slot(&mut self.slot0, 0, combat_clock, events, max_events);
         Self::expire_slot(&mut self.slot1, 1, combat_clock, events, max_events);
     }
@@ -2525,9 +2473,7 @@ impl PartyBuffState {
     ) {
         let mut i = 0usize;
         while i < slot.len() {
-            let drop = slot[i]
-                .expires_at
-                .is_some_and(|ex| combat_clock >= ex);
+            let drop = slot[i].expires_at.is_some_and(|ex| combat_clock >= ex);
             if drop {
                 let id = slot[i].id;
                 slot.remove(i);
@@ -2580,12 +2526,12 @@ pub fn simulate_combat_party(
 /// Optional knobs for [`simulate_combat_party_with_options`]. Prefer [`Default`] for gameplay paths.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CombatSimOptions {
-    /// If set and the lead has [`SkillId::VictoryRush`], overrides [`SkillDefinition::max_charges`] for
+    /// If set and player 1 has [`SkillId::VictoryRush`], overrides [`SkillDefinition::max_charges`] for
     /// this run (tests / tooling). Long-term gear should adjust [`PreparedHero::vr_max_charges`] in
     /// [`prepare_hero_combat`] instead.
-    pub lead_instant_strike_max_charges: Option<u8>,
-    /// Same as [`Self::lead_instant_strike_max_charges`] for party slot 1 when present.
-    pub partner_instant_strike_max_charges: Option<u8>,
+    pub player0_instant_strike_max_charges: Option<u8>,
+    /// Same as [`Self::player0_instant_strike_max_charges`] for party slot 1 when present.
+    pub player1_instant_strike_max_charges: Option<u8>,
 }
 
 /// Like [`simulate_combat_party_with_initial_buffs`], with optional simulation overrides.
@@ -2600,13 +2546,13 @@ pub fn simulate_combat_party_with_options(
     options: CombatSimOptions,
 ) -> CombatResult {
     let mut p0 = prepare_hero_combat(lead);
-    if let Some(n) = options.lead_instant_strike_max_charges {
+    if let Some(n) = options.player0_instant_strike_max_charges {
         if p0.has_victory_rush {
             p0.vr_max_charges = n.max(1);
         }
     }
     let mut p1 = partner.map(|(h, hp)| (prepare_hero_combat(h), h, hp));
-    if let Some(n) = options.partner_instant_strike_max_charges {
+    if let Some(n) = options.player1_instant_strike_max_charges {
         if let Some((ref mut prep, _, _)) = p1 {
             if prep.has_victory_rush {
                 prep.vr_max_charges = n.max(1);
@@ -2754,10 +2700,7 @@ pub fn simulate_combat_party_with_options(
     let mut h1_skill_gcd_left = 0u32;
     let mut h1_skill_gcd_denom = 0u32;
     let mut h1_vr_recharge_left = 0u32;
-    let mut h1_vr_charges = p1
-        .as_ref()
-        .map(|(p, _, _)| p.vr_max_charges)
-        .unwrap_or(0);
+    let mut h1_vr_charges = p1.as_ref().map(|(p, _, _)| p.vr_max_charges).unwrap_or(0);
     let mut h1_empower_queued = false;
     let mut h1_empower_icd_left = 0u32;
     let mut foe_cast_left = 0u32;
@@ -2837,8 +2780,7 @@ pub fn simulate_combat_party_with_options(
                 }
             }
         }
-        let vr_ready =
-            p0.has_victory_rush && h0_skill_gcd_left == 0 && h0_vr_charges > 0;
+        let vr_ready = p0.has_victory_rush && h0_skill_gcd_left == 0 && h0_vr_charges > 0;
         let vr1_ready = has_partner && {
             let p1p = &p1.as_ref().unwrap().0;
             p1p.has_victory_rush && h1_skill_gcd_left == 0 && h1_vr_charges > 0
@@ -3002,21 +2944,21 @@ pub fn simulate_combat_party_with_options(
             }
         }
 
-        let lead_cast = if p0.attack_cast_total == 0 {
+        let player0_cast = if p0.attack_cast_total == 0 {
             0.0
         } else if h0_cast_left > 0 {
             1.0 - (h0_cast_left as f32 / p0.attack_cast_total as f32)
         } else {
             0.0
         };
-        let lead_cd = if p0.attack_cd_total == 0 {
+        let player0_cd = if p0.attack_cd_total == 0 {
             0.0
         } else if h0_cd_left > 0 {
             1.0 - (h0_cd_left as f32 / p0.attack_cd_total as f32)
         } else {
             0.0
         };
-        let ally_cast = if has_partner {
+        let player1_cast = if has_partner {
             if p1.as_ref().unwrap().0.attack_cast_total == 0 {
                 0.0
             } else if h1_cast_left > 0 {
@@ -3027,7 +2969,7 @@ pub fn simulate_combat_party_with_options(
         } else {
             0.0
         };
-        let ally_cd = if has_partner {
+        let player1_cd = if has_partner {
             if p1.as_ref().unwrap().0.attack_cd_total == 0 {
                 0.0
             } else if h1_cd_left > 0 {
@@ -3052,8 +2994,8 @@ pub fn simulate_combat_party_with_options(
         } else {
             0.0
         };
-        let lead_skill_gcd = ability_gcd_bar_frac(h0_skill_gcd_left, h0_skill_gcd_denom);
-        let lead_instant_recharge = if p0.has_victory_rush {
+        let player0_skill_gcd = ability_gcd_bar_frac(h0_skill_gcd_left, h0_skill_gcd_denom);
+        let player0_instant_recharge = if p0.has_victory_rush {
             instant_recharge_bar_frac(
                 h0_vr_recharge_left,
                 p0.vr_icd_ticks,
@@ -3063,52 +3005,56 @@ pub fn simulate_combat_party_with_options(
         } else {
             0.0
         };
-        let (lead_instant_charges, lead_instant_max_charges) = if p0.has_victory_rush {
+        let (player0_instant_charges, player0_instant_max_charges) = if p0.has_victory_rush {
             (h0_vr_charges, p0.vr_max_charges)
         } else {
             (0, 0)
         };
-        let (ally_skill_gcd, ally_instant_recharge, ally_instant_charges, ally_instant_max_charges) =
-            if has_partner {
-                let p1p = &p1.as_ref().unwrap().0;
-                let g = ability_gcd_bar_frac(h1_skill_gcd_left, h1_skill_gcd_denom);
-                let ir = if p1p.has_victory_rush {
-                    instant_recharge_bar_frac(
-                        h1_vr_recharge_left,
-                        p1p.vr_icd_ticks,
-                        h1_vr_charges,
-                        p1p.vr_max_charges,
-                    )
-                } else {
-                    0.0
-                };
-                let (c, m) = if p1p.has_victory_rush {
-                    (h1_vr_charges, p1p.vr_max_charges)
-                } else {
-                    (0, 0)
-                };
-                (g, ir, c, m)
+        let (
+            player1_skill_gcd,
+            player1_instant_recharge,
+            player1_instant_charges,
+            player1_instant_max_charges,
+        ) = if has_partner {
+            let p1p = &p1.as_ref().unwrap().0;
+            let g = ability_gcd_bar_frac(h1_skill_gcd_left, h1_skill_gcd_denom);
+            let ir = if p1p.has_victory_rush {
+                instant_recharge_bar_frac(
+                    h1_vr_recharge_left,
+                    p1p.vr_icd_ticks,
+                    h1_vr_charges,
+                    p1p.vr_max_charges,
+                )
             } else {
-                (0.0, 0.0, 0, 0)
+                0.0
             };
+            let (c, m) = if p1p.has_victory_rush {
+                (h1_vr_charges, p1p.vr_max_charges)
+            } else {
+                (0, 0)
+            };
+            (g, ir, c, m)
+        } else {
+            (0.0, 0.0, 0, 0)
+        };
         if events.len() < MAX_EVENTS {
             events.push(CombatEvent::TimingPulse {
-                lead_cast,
-                lead_cd,
-                ally_cast,
-                ally_cd,
+                player0_cast,
+                player0_cd,
+                player1_cast,
+                player1_cd,
                 foe_cast,
                 foe_cd: foe_cd_b,
                 foe_alt_cast: 0.0,
                 foe_alt_cd: 0.0,
-                lead_skill_gcd,
-                lead_instant_recharge,
-                lead_instant_charges,
-                lead_instant_max_charges,
-                ally_skill_gcd,
-                ally_instant_recharge,
-                ally_instant_charges,
-                ally_instant_max_charges,
+                player0_skill_gcd,
+                player0_instant_recharge,
+                player0_instant_charges,
+                player0_instant_max_charges,
+                player1_skill_gcd,
+                player1_instant_recharge,
+                player1_instant_charges,
+                player1_instant_max_charges,
             });
         }
 
@@ -3189,13 +3135,13 @@ fn simulate_combat_party_foes(
     let foe_hp_start: Vec<i32> = foes.iter().map(|e| e.max_health).collect();
 
     let mut p0 = prepare_hero_combat(lead);
-    if let Some(n) = options.lead_instant_strike_max_charges {
+    if let Some(n) = options.player0_instant_strike_max_charges {
         if p0.has_victory_rush {
             p0.vr_max_charges = n.max(1);
         }
     }
     let mut p1 = partner.map(|(h, hp)| (prepare_hero_combat(h), h, hp));
-    if let Some(n) = options.partner_instant_strike_max_charges {
+    if let Some(n) = options.player1_instant_strike_max_charges {
         if let Some((ref mut prep, _, _)) = p1 {
             if prep.has_victory_rush {
                 prep.vr_max_charges = n.max(1);
@@ -3349,10 +3295,7 @@ fn simulate_combat_party_foes(
     let mut h1_skill_gcd_left = 0u32;
     let mut h1_skill_gcd_denom = 0u32;
     let mut h1_vr_recharge_left = 0u32;
-    let mut h1_vr_charges = p1
-        .as_ref()
-        .map(|(p, _, _)| p.vr_max_charges)
-        .unwrap_or(0);
+    let mut h1_vr_charges = p1.as_ref().map(|(p, _, _)| p.vr_max_charges).unwrap_or(0);
     let mut h1_empower_queued = false;
     let mut h1_empower_icd_left = 0u32;
     let mut foe_cast_left: Vec<u32> = vec![0u32; foes.len()];
@@ -3435,8 +3378,7 @@ fn simulate_combat_party_foes(
                 }
             }
         }
-        let vr_ready =
-            p0.has_victory_rush && h0_skill_gcd_left == 0 && h0_vr_charges > 0;
+        let vr_ready = p0.has_victory_rush && h0_skill_gcd_left == 0 && h0_vr_charges > 0;
         let vr1_ready = has_partner && {
             let p1p = &p1.as_ref().unwrap().0;
             p1p.has_victory_rush && h1_skill_gcd_left == 0 && h1_vr_charges > 0
@@ -3611,21 +3553,21 @@ fn simulate_combat_party_foes(
             }
         }
 
-        let lead_cast = if p0.attack_cast_total == 0 {
+        let player0_cast = if p0.attack_cast_total == 0 {
             0.0
         } else if h0_cast_left > 0 {
             1.0 - (h0_cast_left as f32 / p0.attack_cast_total as f32)
         } else {
             0.0
         };
-        let lead_cd = if p0.attack_cd_total == 0 {
+        let player0_cd = if p0.attack_cd_total == 0 {
             0.0
         } else if h0_cd_left > 0 {
             1.0 - (h0_cd_left as f32 / p0.attack_cd_total as f32)
         } else {
             0.0
         };
-        let ally_cast = if has_partner {
+        let player1_cast = if has_partner {
             if p1.as_ref().unwrap().0.attack_cast_total == 0 {
                 0.0
             } else if h1_cast_left > 0 {
@@ -3636,7 +3578,7 @@ fn simulate_combat_party_foes(
         } else {
             0.0
         };
-        let ally_cd = if has_partner {
+        let player1_cd = if has_partner {
             if p1.as_ref().unwrap().0.attack_cd_total == 0 {
                 0.0
             } else if h1_cd_left > 0 {
@@ -3666,8 +3608,8 @@ fn simulate_combat_party_foes(
         } else {
             0.0
         };
-        let lead_skill_gcd = ability_gcd_bar_frac(h0_skill_gcd_left, h0_skill_gcd_denom);
-        let lead_instant_recharge = if p0.has_victory_rush {
+        let player0_skill_gcd = ability_gcd_bar_frac(h0_skill_gcd_left, h0_skill_gcd_denom);
+        let player0_instant_recharge = if p0.has_victory_rush {
             instant_recharge_bar_frac(
                 h0_vr_recharge_left,
                 p0.vr_icd_ticks,
@@ -3677,34 +3619,38 @@ fn simulate_combat_party_foes(
         } else {
             0.0
         };
-        let (lead_instant_charges, lead_instant_max_charges) = if p0.has_victory_rush {
+        let (player0_instant_charges, player0_instant_max_charges) = if p0.has_victory_rush {
             (h0_vr_charges, p0.vr_max_charges)
         } else {
             (0, 0)
         };
-        let (ally_skill_gcd, ally_instant_recharge, ally_instant_charges, ally_instant_max_charges) =
-            if has_partner {
-                let p1p = &p1.as_ref().unwrap().0;
-                let g = ability_gcd_bar_frac(h1_skill_gcd_left, h1_skill_gcd_denom);
-                let ir = if p1p.has_victory_rush {
-                    instant_recharge_bar_frac(
-                        h1_vr_recharge_left,
-                        p1p.vr_icd_ticks,
-                        h1_vr_charges,
-                        p1p.vr_max_charges,
-                    )
-                } else {
-                    0.0
-                };
-                let (c, m) = if p1p.has_victory_rush {
-                    (h1_vr_charges, p1p.vr_max_charges)
-                } else {
-                    (0, 0)
-                };
-                (g, ir, c, m)
+        let (
+            player1_skill_gcd,
+            player1_instant_recharge,
+            player1_instant_charges,
+            player1_instant_max_charges,
+        ) = if has_partner {
+            let p1p = &p1.as_ref().unwrap().0;
+            let g = ability_gcd_bar_frac(h1_skill_gcd_left, h1_skill_gcd_denom);
+            let ir = if p1p.has_victory_rush {
+                instant_recharge_bar_frac(
+                    h1_vr_recharge_left,
+                    p1p.vr_icd_ticks,
+                    h1_vr_charges,
+                    p1p.vr_max_charges,
+                )
             } else {
-                (0.0, 0.0, 0, 0)
+                0.0
             };
+            let (c, m) = if p1p.has_victory_rush {
+                (h1_vr_charges, p1p.vr_max_charges)
+            } else {
+                (0, 0)
+            };
+            (g, ir, c, m)
+        } else {
+            (0.0, 0.0, 0, 0)
+        };
         let mut foe_alt_idx = None;
         for ai in 0..foes.len() {
             if ai != fd && enemy_health[ai] > 0 {
@@ -3735,22 +3681,22 @@ fn simulate_combat_party_foes(
         };
         if events.len() < MAX_EVENTS {
             events.push(CombatEvent::TimingPulse {
-                lead_cast,
-                lead_cd,
-                ally_cast,
-                ally_cd,
+                player0_cast,
+                player0_cd,
+                player1_cast,
+                player1_cd,
                 foe_cast,
                 foe_cd: foe_cd_b,
                 foe_alt_cast,
                 foe_alt_cd,
-                lead_skill_gcd,
-                lead_instant_recharge,
-                lead_instant_charges,
-                lead_instant_max_charges,
-                ally_skill_gcd,
-                ally_instant_recharge,
-                ally_instant_charges,
-                ally_instant_max_charges,
+                player0_skill_gcd,
+                player0_instant_recharge,
+                player0_instant_charges,
+                player0_instant_max_charges,
+                player1_skill_gcd,
+                player1_instant_recharge,
+                player1_instant_charges,
+                player1_instant_max_charges,
             });
         }
 
@@ -3943,11 +3889,11 @@ fn buff_chip_label(buff_id: BuffId, stacks: u32) -> String {
     }
 }
 
-/// Party strip: self-poison (unused today in replay) plus lead buffs, then ally-prefixed buffs (max 4 cells).
+/// Party strip: self-poison (unused today in replay) plus player 1 buffs, then player 2 (max 4 cells).
 fn hero_party_status_slots_from_buff_maps(
     hero_self_poison: u32,
-    lead: &HashMap<BuffId, u32>,
-    ally: &HashMap<BuffId, u32>,
+    player0: &HashMap<BuffId, u32>,
+    player1: &HashMap<BuffId, u32>,
 ) -> [String; 4] {
     let mut slots = empty_debuff_slots();
     let mut i = 0usize;
@@ -3955,28 +3901,22 @@ fn hero_party_status_slots_from_buff_maps(
         slots[i] = format!("Poison ×{}", hero_self_poison);
         i += 1;
     }
-    let mut lead_entries: Vec<(BuffId, u32)> = lead
-        .iter()
-        .map(|(&k, &v)| (k, v.max(1)))
-        .collect();
-    lead_entries.sort_by_key(|(k, _)| buff_id_playback_order(*k));
-    for (bid, st) in lead_entries {
+    let mut p0_entries: Vec<(BuffId, u32)> = player0.iter().map(|(&k, &v)| (k, v.max(1))).collect();
+    p0_entries.sort_by_key(|(k, _)| buff_id_playback_order(*k));
+    for (bid, st) in p0_entries {
         if i >= 4 {
             break;
         }
         slots[i] = buff_chip_label(bid, st);
         i += 1;
     }
-    let mut ally_entries: Vec<(BuffId, u32)> = ally
-        .iter()
-        .map(|(&k, &v)| (k, v.max(1)))
-        .collect();
-    ally_entries.sort_by_key(|(k, _)| buff_id_playback_order(*k));
-    for (bid, st) in ally_entries {
+    let mut p1_entries: Vec<(BuffId, u32)> = player1.iter().map(|(&k, &v)| (k, v.max(1))).collect();
+    p1_entries.sort_by_key(|(k, _)| buff_id_playback_order(*k));
+    for (bid, st) in p1_entries {
         if i >= 4 {
             break;
         }
-        slots[i] = format!("Ally {}", buff_chip_label(bid, st));
+        slots[i] = format!("P2 {}", buff_chip_label(bid, st));
         i += 1;
     }
     slots
@@ -4014,8 +3954,8 @@ pub fn combat_playback_frames_from_result(
     let mut threat_slot0: Option<i32> = None;
     let mut threat_slot1: Option<i32> = None;
 
-    let mut lead_buff_chips: HashMap<BuffId, u32> = HashMap::new();
-    let mut ally_buff_chips: HashMap<BuffId, u32> = HashMap::new();
+    let mut player0_buff_chips: HashMap<BuffId, u32> = HashMap::new();
+    let mut player1_buff_chips: HashMap<BuffId, u32> = HashMap::new();
 
     let open_pre = opening_playback_prefix_len(&result.events);
     for ev in result.events.iter().take(open_pre) {
@@ -4025,15 +3965,15 @@ pub fn combat_playback_frames_from_result(
             partner_max_hp,
             &mut hero_hp,
             &mut partner_hp,
-            &mut lead_buff_chips,
-            &mut ally_buff_chips,
+            &mut player0_buff_chips,
+            &mut player1_buff_chips,
         );
     }
 
     let h0 = hero_party_status_slots_from_buff_maps(
         hero_poison_stacks,
-        &lead_buff_chips,
-        &ally_buff_chips,
+        &player0_buff_chips,
+        &player1_buff_chips,
     );
     let e0 = enemy_status_slots_from_poison(enemy_poison_stacks);
 
@@ -4074,50 +4014,52 @@ pub fn combat_playback_frames_from_result(
         damage_meter_foe: run_meter_foe,
         run_sim_ticks: run_sim_tick_for(0),
         sfx_anchor: CombatSfxAnchor::Neutral,
-        lead_cast: 0.0,
-        lead_cd: 0.0,
-        ally_cast: 0.0,
-        ally_cd: 0.0,
+        player0_cast: 0.0,
+        player0_cd: 0.0,
+        player1_cast: 0.0,
+        player1_cd: 0.0,
         foe_cast: 0.0,
         foe_cd: 0.0,
         foe_alt_cast: 0.0,
         foe_alt_cd: 0.0,
-        lead_skill_gcd: 0.0,
-        lead_instant_recharge: 0.0,
-        lead_instant_charges: 0,
-        lead_instant_max_charges: 0,
-        ally_skill_gcd: 0.0,
-        ally_instant_recharge: 0.0,
-        ally_instant_charges: 0,
-        ally_instant_max_charges: 0,
+        player0_skill_gcd: 0.0,
+        player0_instant_recharge: 0.0,
+        player0_instant_charges: 0,
+        player0_instant_max_charges: 0,
+        player1_skill_gcd: 0.0,
+        player1_instant_recharge: 0.0,
+        player1_instant_charges: 0,
+        player1_instant_max_charges: 0,
     }];
 
-    let mut lead_cast = 0.0f32;
-    let mut lead_cd = 0.0f32;
-    let mut ally_cast = 0.0f32;
-    let mut ally_cd = 0.0f32;
+    let mut player0_cast = 0.0f32;
+    let mut player0_cd = 0.0f32;
+    let mut player1_cast = 0.0f32;
+    let mut player1_cd = 0.0f32;
     let mut foe_cast_b = 0.0f32;
     let mut foe_cd_bar = 0.0f32;
     let mut foe_alt_cast_b = 0.0f32;
     let mut foe_alt_cd_bar = 0.0f32;
-    let mut lead_skill_gcd = 0.0f32;
-    let mut lead_instant_recharge = 0.0f32;
-    let mut lead_instant_charges = 0u8;
-    let mut lead_instant_max_charges = 0u8;
-    let mut ally_skill_gcd = 0.0f32;
-    let mut ally_instant_recharge = 0.0f32;
-    let mut ally_instant_charges = 0u8;
-    let mut ally_instant_max_charges = 0u8;
+    let mut player0_skill_gcd = 0.0f32;
+    let mut player0_instant_recharge = 0.0f32;
+    let mut player0_instant_charges = 0u8;
+    let mut player0_instant_max_charges = 0u8;
+    let mut player1_skill_gcd = 0.0f32;
+    let mut player1_instant_recharge = 0.0f32;
+    let mut player1_instant_charges = 0u8;
+    let mut player1_instant_max_charges = 0u8;
 
     for step in steps {
         match &step {
             PlaybackStep::Event(event) => match event {
-                CombatEvent::HeroAttacked { attacker, strike, cleave_strikes, .. } => {
-                    let total = strike.total()
-                        + cleave_strikes
-                            .iter()
-                            .map(|(_, c)| c.total())
-                            .sum::<i32>();
+                CombatEvent::HeroAttacked {
+                    attacker,
+                    strike,
+                    cleave_strikes,
+                    ..
+                } => {
+                    let total =
+                        strike.total() + cleave_strikes.iter().map(|(_, c)| c.total()).sum::<i32>();
                     if *attacker == 0 {
                         d0 = d0.saturating_add(total as u32);
                     } else {
@@ -4158,39 +4100,39 @@ pub fn combat_playback_frames_from_result(
                     threat_slot1 = Some(*slot1);
                 }
                 CombatEvent::TimingPulse {
-                    lead_cast: lc,
-                    lead_cd: lcdn,
-                    ally_cast: ac,
-                    ally_cd: acdn,
+                    player0_cast: lc,
+                    player0_cd: lcdn,
+                    player1_cast: ac,
+                    player1_cd: acdn,
                     foe_cast: fc,
                     foe_cd: fcdn,
                     foe_alt_cast: fac,
                     foe_alt_cd: facd,
-                    lead_skill_gcd: lsg,
-                    lead_instant_recharge: lir,
-                    lead_instant_charges: lic,
-                    lead_instant_max_charges: lim,
-                    ally_skill_gcd: asg,
-                    ally_instant_recharge: air,
-                    ally_instant_charges: aic,
-                    ally_instant_max_charges: aim,
+                    player0_skill_gcd: lsg,
+                    player0_instant_recharge: lir,
+                    player0_instant_charges: lic,
+                    player0_instant_max_charges: lim,
+                    player1_skill_gcd: asg,
+                    player1_instant_recharge: air,
+                    player1_instant_charges: aic,
+                    player1_instant_max_charges: aim,
                 } => {
-                    lead_cast = *lc;
-                    lead_cd = *lcdn;
-                    ally_cast = *ac;
-                    ally_cd = *acdn;
+                    player0_cast = *lc;
+                    player0_cd = *lcdn;
+                    player1_cast = *ac;
+                    player1_cd = *acdn;
                     foe_cast_b = *fc;
                     foe_cd_bar = *fcdn;
                     foe_alt_cast_b = *fac;
                     foe_alt_cd_bar = *facd;
-                    lead_skill_gcd = *lsg;
-                    lead_instant_recharge = *lir;
-                    lead_instant_charges = *lic;
-                    lead_instant_max_charges = *lim;
-                    ally_skill_gcd = *asg;
-                    ally_instant_recharge = *air;
-                    ally_instant_charges = *aic;
-                    ally_instant_max_charges = *aim;
+                    player0_skill_gcd = *lsg;
+                    player0_instant_recharge = *lir;
+                    player0_instant_charges = *lic;
+                    player0_instant_max_charges = *lim;
+                    player1_skill_gcd = *asg;
+                    player1_instant_recharge = *air;
+                    player1_instant_charges = *aic;
+                    player1_instant_max_charges = *aim;
                 }
                 CombatEvent::BuffApplied {
                     target,
@@ -4199,17 +4141,17 @@ pub fn combat_playback_frames_from_result(
                     ..
                 } => {
                     let map = if *target == 0 {
-                        &mut lead_buff_chips
+                        &mut player0_buff_chips
                     } else {
-                        &mut ally_buff_chips
+                        &mut player1_buff_chips
                     };
                     map.insert(*buff_id, (*stacks).max(1));
                 }
                 CombatEvent::BuffExpired { target, buff_id } => {
                     let map = if *target == 0 {
-                        &mut lead_buff_chips
+                        &mut player0_buff_chips
                     } else {
-                        &mut ally_buff_chips
+                        &mut player1_buff_chips
                     };
                     map.remove(buff_id);
                 }
@@ -4236,8 +4178,8 @@ pub fn combat_playback_frames_from_result(
         };
         let hd = hero_party_status_slots_from_buff_maps(
             hero_poison_stacks,
-            &lead_buff_chips,
-            &ally_buff_chips,
+            &player0_buff_chips,
+            &player1_buff_chips,
         );
         let ed = enemy_status_slots_from_poison(enemy_poison_stacks);
 
@@ -4281,22 +4223,22 @@ pub fn combat_playback_frames_from_result(
             damage_meter_foe: run_meter_foe.saturating_add(foe_meter),
             run_sim_ticks: run_sim_tick_for(frame_ix),
             sfx_anchor,
-            lead_cast,
-            lead_cd,
-            ally_cast,
-            ally_cd,
+            player0_cast,
+            player0_cd,
+            player1_cast,
+            player1_cd,
             foe_cast: foe_cast_b,
             foe_cd: foe_cd_bar,
             foe_alt_cast: foe_alt_cast_b,
             foe_alt_cd: foe_alt_cd_bar,
-            lead_skill_gcd,
-            lead_instant_recharge,
-            lead_instant_charges,
-            lead_instant_max_charges,
-            ally_skill_gcd,
-            ally_instant_recharge,
-            ally_instant_charges,
-            ally_instant_max_charges,
+            player0_skill_gcd,
+            player0_instant_recharge,
+            player0_instant_charges,
+            player0_instant_max_charges,
+            player1_skill_gcd,
+            player1_instant_recharge,
+            player1_instant_charges,
+            player1_instant_max_charges,
         });
         partner_hp = partner_clamped;
     }
@@ -4361,7 +4303,7 @@ mod tests {
     }
 
     #[test]
-    fn pick_party_enemy_no_partner_is_always_lead() {
+    fn pick_party_enemy_solo_always_targets_player0() {
         assert_eq!(
             pick_party_enemy_target(0, [99, 1], 100, 100, false, Some(1)),
             0
@@ -4369,7 +4311,7 @@ mod tests {
     }
 
     #[test]
-    fn pick_party_enemy_partner_down_targets_lead() {
+    fn pick_party_enemy_player1_down_targets_player0() {
         assert_eq!(
             pick_party_enemy_target(0, [1, 99], 100, 0, true, Some(1)),
             0
@@ -4377,7 +4319,7 @@ mod tests {
     }
 
     #[test]
-    fn pick_party_enemy_higher_threat_on_lead_targets_lead() {
+    fn pick_party_enemy_higher_threat_on_player0_targets_player0() {
         assert_eq!(
             pick_party_enemy_target(0, [30, 10], 100, 100, true, Some(1)),
             0
@@ -4385,7 +4327,7 @@ mod tests {
     }
 
     #[test]
-    fn pick_party_enemy_higher_threat_on_ally_targets_ally() {
+    fn pick_party_enemy_higher_threat_on_player1_targets_player1() {
         assert_eq!(
             pick_party_enemy_target(0, [10, 40], 100, 100, true, Some(0)),
             1
@@ -4393,7 +4335,7 @@ mod tests {
     }
 
     #[test]
-    fn pick_party_enemy_threat_tie_keeps_last_target_on_ally() {
+    fn pick_party_enemy_threat_tie_keeps_last_target_on_player1() {
         assert_eq!(
             pick_party_enemy_target(7, [20, 20], 100, 100, true, Some(1)),
             1
@@ -4401,7 +4343,7 @@ mod tests {
     }
 
     #[test]
-    fn pick_party_enemy_threat_tie_keeps_last_target_on_lead() {
+    fn pick_party_enemy_threat_tie_keeps_last_target_on_player0() {
         assert_eq!(
             pick_party_enemy_target(7, [20, 20], 100, 100, true, Some(0)),
             0
@@ -4417,7 +4359,7 @@ mod tests {
     }
 
     #[test]
-    fn pick_party_enemy_invalid_sticky_falls_back_when_only_ally_alive() {
+    fn pick_party_enemy_invalid_sticky_falls_back_when_only_player1_alive() {
         assert_eq!(pick_party_enemy_target(3, [5, 5], 0, 100, true, Some(0)), 1);
     }
 
@@ -4906,12 +4848,7 @@ mod tests {
                     ..
                 } = e
                 {
-                    Some((
-                        *foe_cast,
-                        *foe_cd,
-                        *foe_alt_cast,
-                        *foe_alt_cd,
-                    ))
+                    Some((*foe_cast, *foe_cd, *foe_alt_cast, *foe_alt_cd))
                 } else {
                     None
                 }
@@ -4956,11 +4893,7 @@ mod tests {
             CombatSimOptions::default(),
         );
         let hit = r.events.iter().find_map(|e| {
-            if let CombatEvent::HeroAttacked {
-                cleave_strikes,
-                ..
-            } = e
-            {
+            if let CombatEvent::HeroAttacked { cleave_strikes, .. } = e {
                 if cleave_strikes.len() >= 2 {
                     Some(cleave_strikes.len())
                 } else {
@@ -5098,7 +5031,7 @@ mod tests {
             0,
             &[],
             CombatSimOptions {
-                lead_instant_strike_max_charges: Some(2),
+                player0_instant_strike_max_charges: Some(2),
                 ..Default::default()
             },
         );
@@ -5152,7 +5085,7 @@ mod tests {
             0,
             &[],
             CombatSimOptions {
-                lead_instant_strike_max_charges: Some(2),
+                player0_instant_strike_max_charges: Some(2),
                 ..Default::default()
             },
         );
@@ -5194,15 +5127,16 @@ mod tests {
             0,
             0,
         );
-        let has_empower_chip = frames.iter().any(|f| {
-            f.hero_debuff_slots
-                .iter()
-                .any(|s| s.contains("Empowered"))
-        });
+        let has_empower_chip = frames
+            .iter()
+            .any(|f| f.hero_debuff_slots.iter().any(|s| s.contains("Empowered")));
         assert!(
             has_empower_chip,
             "expected Empowered Blow chip in hero status row: {:?}",
-            frames.iter().map(|f| &f.hero_debuff_slots).collect::<Vec<_>>()
+            frames
+                .iter()
+                .map(|f| &f.hero_debuff_slots)
+                .collect::<Vec<_>>()
         );
     }
 
@@ -5281,15 +5215,7 @@ mod tests {
                 charges: None,
             },
         )];
-        let r = simulate_combat_party_with_initial_buffs(
-            &hero,
-            &enemy,
-            8,
-            100,
-            None,
-            0,
-            &initial,
-        );
+        let r = simulate_combat_party_with_initial_buffs(&hero, &enemy, 8, 100, None, 0, &initial);
         assert!(r.events.iter().any(|e| matches!(
             e,
             CombatEvent::BuffApplied { buff_id, .. } if *buff_id == BuffId::InnerStrength
@@ -5323,15 +5249,7 @@ mod tests {
                 charges: None,
             },
         )];
-        let r = simulate_combat_party_with_initial_buffs(
-            &hero,
-            &enemy,
-            6,
-            100,
-            None,
-            0,
-            &initial,
-        );
+        let r = simulate_combat_party_with_initial_buffs(&hero, &enemy, 6, 100, None, 0, &initial);
         let max_h = hero.derived_stats().max_health;
         let frames = combat_playback_frames_from_result(
             &hero,
@@ -5349,7 +5267,10 @@ mod tests {
             0,
         );
         assert!(
-            frames[0].hero_debuff_slots.iter().any(|s| s.contains("Inner Strength")),
+            frames[0]
+                .hero_debuff_slots
+                .iter()
+                .any(|s| s.contains("Inner Strength")),
             "opening frame should show encounter-seeded buff chips: {:?}",
             frames[0].hero_debuff_slots
         );
@@ -5374,7 +5295,7 @@ mod tests {
         let pulse_skill_any = r.events.iter().any(|e| {
             matches!(
                 e,
-                CombatEvent::TimingPulse { lead_skill_gcd, .. } if *lead_skill_gcd > 0.01
+                CombatEvent::TimingPulse { player0_skill_gcd, .. } if *player0_skill_gcd > 0.01
             )
         });
         assert!(
@@ -5417,15 +5338,7 @@ mod tests {
                 },
             ),
         ];
-        let r = simulate_combat_party_with_initial_buffs(
-            &hero,
-            &enemy,
-            2,
-            100,
-            None,
-            0,
-            &initial,
-        );
+        let r = simulate_combat_party_with_initial_buffs(&hero, &enemy, 2, 100, None, 0, &initial);
         let applied: Vec<u32> = r
             .events
             .iter()
