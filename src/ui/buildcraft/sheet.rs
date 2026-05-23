@@ -89,11 +89,11 @@ pub fn spawn_buildcraft_sheet(
         },
     );
 
+    parent.commands_mut().entity(shell.shell_root).insert(SkillBookRoot);
     parent.commands_mut().entity(shell.backdrop).insert((
         SkillBookBackdrop,
         UiClickAction::BuildcraftCancel,
     ));
-    parent.commands_mut().entity(shell.content_root).insert(SkillBookRoot);
 }
 
 fn spawn_header(parent: &mut ChildSpawnerCommands<'_>, session: &BuildcraftEditSession) {

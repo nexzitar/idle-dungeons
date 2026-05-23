@@ -22,10 +22,10 @@ pub(crate) struct UiPressedButtonEntitiesOnClick(pub Option<Vec<Entity>>);
 /// Modal roots currently present — used to filter pointer press targets away from briefing UI below.
 #[derive(SystemParam)]
 pub(crate) struct UiBlockingOverlayPresence<'w, 's> {
-    settings: Query<'w, 's, (), With<crate::ui::components::SettingsModalRoot>>,
-    skill_book: Query<'w, 's, (), With<crate::ui::components::SkillBookRoot>>,
-    skill_shop: Query<'w, 's, (), With<crate::ui::components::SkillShopRoot>>,
-    gear_hub: Query<'w, 's, (), With<crate::ui::components::GearHubRoot>>,
+    settings: Query<'w, 's, Entity, With<crate::ui::components::SettingsModalRoot>>,
+    skill_book: Query<'w, 's, Entity, With<crate::ui::components::SkillBookRoot>>,
+    skill_shop: Query<'w, 's, Entity, With<crate::ui::components::SkillShopRoot>>,
+    gear_hub: Query<'w, 's, Entity, With<crate::ui::components::GearHubRoot>>,
 }
 
 #[derive(SystemParam)]
@@ -38,7 +38,6 @@ pub(crate) struct UiClickResolveMarkers<'w, 's> {
     #[cfg(debug_assertions)]
     presentation_settings_toggle: Query<'w, 's, (), With<PresentationEditorSettingsToggleButton>>,
     sbook_back: Query<'w, 's, (), With<SkillBookBackdrop>>,
-    click_action: Query<'w, 's, (), With<UiClickAction>>,
     shop_buy: Query<'w, 's, (), With<SkillShopBuyButton>>,
     shop_close: Query<'w, 's, (), With<SkillShopCloseButton>>,
     shop_back: Query<'w, 's, (), With<SkillShopBackdrop>>,
@@ -47,6 +46,34 @@ pub(crate) struct UiClickResolveMarkers<'w, 's> {
     equip: Query<'w, 's, (), With<EquipItemButton>>,
     salvage: Query<'w, 's, (), With<SalvageItemButton>>,
     stash_sort: Query<'w, 's, (), With<StashSortCycleButton>>,
+}
+
+/// Returns true when `entity` is `root` or a descendant of `root` in the UI hierarchy.
+pub(crate) fn entity_in_ui_subtree(
+    entity: Entity,
+    root: Entity,
+    mut parent_of: impl FnMut(Entity) -> Option<Entity>,
+) -> bool {
+    let mut current = entity;
+    loop {
+        if current == root {
+            return true;
+        }
+        let Some(parent) = parent_of(current) else {
+            return false;
+        };
+        current = parent;
+    }
+}
+
+fn retain_pressed_in_modal(
+    pressed: &mut Vec<Entity>,
+    modal_root: Entity,
+    child_of: &Query<&ChildOf>,
+) {
+    pressed.retain(|&e| {
+        entity_in_ui_subtree(e, modal_root, |ent| child_of.get(ent).ok().map(|c| c.parent()))
+    });
 }
 
 pub(crate) fn capture_ui_pressed_button_entities(
@@ -69,6 +96,7 @@ pub(crate) fn capture_ui_click_start(
     mut press: ResMut<UiClickPress>,
     mut buf: ResMut<UiPressedButtonEntitiesOnClick>,
     overlay: UiBlockingOverlayPresence,
+    child_of: Query<&ChildOf>,
     m: UiClickResolveMarkers,
 ) {
     let Some(mut pressed) = buf.0.take() else {
@@ -80,13 +108,8 @@ pub(crate) fn capture_ui_click_start(
         return;
     }
 
-    if !overlay.settings.is_empty() {
-        pressed.retain(|&e| {
-            m.reset.get(e).is_ok()
-                || m.presentation_settings_toggle.get(e).is_ok()
-                || m.settings_close.get(e).is_ok()
-                || m.settings_back.get(e).is_ok()
-        });
+    if let Ok(modal) = overlay.settings.single() {
+        retain_pressed_in_modal(&mut pressed, modal, &child_of);
         press.0 = pressed.iter().copied().min_by_key(|&e| {
             let tier = if m.presentation_settings_toggle.get(e).is_ok() {
                 0u8
@@ -104,8 +127,8 @@ pub(crate) fn capture_ui_click_start(
         return;
     }
 
-    if !overlay.skill_book.is_empty() {
-        pressed.retain(|&e| m.click_action.get(e).is_ok());
+    if let Ok(modal) = overlay.skill_book.single() {
+        retain_pressed_in_modal(&mut pressed, modal, &child_of);
         press.0 = pressed.iter().copied().min_by_key(|&e| {
             let tier = if m.sbook_back.get(e).is_ok() { 2u8 } else { 0 };
             (tier, e.to_bits())
@@ -113,10 +136,8 @@ pub(crate) fn capture_ui_click_start(
         return;
     }
 
-    if !overlay.skill_shop.is_empty() {
-        pressed.retain(|&e| {
-            m.shop_buy.get(e).is_ok() || m.shop_close.get(e).is_ok() || m.shop_back.get(e).is_ok()
-        });
+    if let Ok(modal) = overlay.skill_shop.single() {
+        retain_pressed_in_modal(&mut pressed, modal, &child_of);
         press.0 = pressed.iter().copied().min_by_key(|&e| {
             let tier = if m.shop_buy.get(e).is_ok() {
                 0u8
@@ -132,14 +153,8 @@ pub(crate) fn capture_ui_click_start(
         return;
     }
 
-    if !overlay.gear_hub.is_empty() {
-        pressed.retain(|&e| {
-            m.equip.get(e).is_ok()
-                || m.salvage.get(e).is_ok()
-                || m.stash_sort.get(e).is_ok()
-                || m.gear_close.get(e).is_ok()
-                || m.gear_back.get(e).is_ok()
-        });
+    if let Ok(modal) = overlay.gear_hub.single() {
+        retain_pressed_in_modal(&mut pressed, modal, &child_of);
         press.0 = pressed.iter().copied().min_by_key(|&e| {
             let tier = if m.equip.get(e).is_ok() {
                 0u8
@@ -201,5 +216,26 @@ pub(crate) fn clear_ui_click_after_release(
 ) {
     if mouse.just_released(MouseButton::Left) {
         press.0 = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn entity_in_ui_subtree_walks_parent_chain() {
+        let root = Entity::from_bits(1);
+        let mid = Entity::from_bits(2);
+        let leaf = Entity::from_bits(3);
+        let parents = |e: Entity| match e {
+            e if e == leaf => Some(mid),
+            e if e == mid => Some(root),
+            _ => None,
+        };
+        assert!(entity_in_ui_subtree(leaf, root, parents));
+        assert!(entity_in_ui_subtree(mid, root, parents));
+        assert!(entity_in_ui_subtree(root, root, parents));
+        assert!(!entity_in_ui_subtree(Entity::from_bits(99), root, parents));
     }
 }
