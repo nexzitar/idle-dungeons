@@ -3,7 +3,7 @@ pub mod components;
 pub mod gear_hub;
 pub mod inventory_panel;
 pub mod log_panel;
-pub mod mockup_layout;
+pub mod shell;
 pub mod assets;
 pub mod primitives;
 pub mod run_panel;
@@ -634,7 +634,7 @@ fn spawn_running_screen_root(
         .with_children(|root| {
             spawn_atmosphere(root);
             root.spawn(content_column_bundle()).with_children(|col| {
-                crate::ui::mockup_layout::spawn_mockup_header(
+                crate::ui::shell::spawn_mockup_header(
                     col,
                     ph,
                     meta.gold,
@@ -644,9 +644,9 @@ fn spawn_running_screen_root(
                     "—",
                     speed_mult,
                 );
-                crate::ui::mockup_layout::spawn_three_column_row(col, |row| {
-                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
-                        crate::ui::mockup_layout::spawn_hero_column_mockup(
+                crate::ui::shell::spawn_three_column_row(col, |row| {
+                    crate::ui::shell::spawn_ornate_column(row, 1.0, |panel| {
+                        crate::ui::shell::spawn_hero_column_mockup(
                             panel,
                             ph,
                             &lead,
@@ -657,13 +657,13 @@ fn spawn_running_screen_root(
                             false,
                         );
                     });
-                    crate::ui::mockup_layout::spawn_ornate_column(row, 1.25, |panel| {
-                        crate::ui::mockup_layout::spawn_run_playback_middle_column(panel, ph);
+                    crate::ui::shell::spawn_ornate_column(row, 1.25, |panel| {
+                        crate::ui::shell::spawn_run_playback_middle_column(panel, ph);
                     });
                 });
-                crate::ui::mockup_layout::spawn_mockup_footer(
+                crate::ui::shell::spawn_mockup_footer(
                     col,
-                    crate::ui::mockup_layout::FooterMode::DelvePlayback,
+                    crate::ui::shell::FooterMode::DelvePlayback,
                 );
             });
             crate::ui::tooltip::spawn_tooltip_layer(root);
@@ -699,7 +699,7 @@ fn spawn_build_screen_root(
     commands.entity(root_entity).with_children(|root| {
         spawn_atmosphere(root);
         root.spawn(content_column_bundle()).with_children(|col| {
-            crate::ui::mockup_layout::spawn_mockup_header(
+            crate::ui::shell::spawn_mockup_header(
                 col,
                 ph,
                 meta.gold,
@@ -709,9 +709,9 @@ fn spawn_build_screen_root(
                 "—",
                 speed_mult,
             );
-            crate::ui::mockup_layout::spawn_three_column_row(col, |row| {
-                crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
-                    crate::ui::mockup_layout::spawn_hero_column_mockup(
+            crate::ui::shell::spawn_three_column_row(col, |row| {
+                crate::ui::shell::spawn_ornate_column(row, 1.0, |panel| {
+                    crate::ui::shell::spawn_hero_column_mockup(
                         panel,
                         ph,
                         &lead,
@@ -722,13 +722,13 @@ fn spawn_build_screen_root(
                         true,
                     );
                 });
-                crate::ui::mockup_layout::spawn_ornate_column(row, 1.25, |panel| {
-                    crate::ui::mockup_layout::spawn_dungeon_briefing_column(panel, stash, meta);
+                crate::ui::shell::spawn_ornate_column(row, 1.25, |panel| {
+                    crate::ui::shell::spawn_dungeon_briefing_column(panel, stash, meta);
                 });
             });
-            crate::ui::mockup_layout::spawn_mockup_footer(
+            crate::ui::shell::spawn_mockup_footer(
                 col,
-                crate::ui::mockup_layout::FooterMode::Briefing,
+                crate::ui::shell::FooterMode::Briefing,
             );
         });
         crate::ui::tooltip::spawn_tooltip_layer(root);
@@ -770,7 +770,7 @@ fn spawn_summary_screen_root(
     commands.entity(root_entity).with_children(|root| {
         spawn_atmosphere(root);
         root.spawn(content_column_bundle()).with_children(|col| {
-            crate::ui::mockup_layout::spawn_mockup_header(
+            crate::ui::shell::spawn_mockup_header(
                 col,
                 ph,
                 meta.gold,
@@ -780,9 +780,9 @@ fn spawn_summary_screen_root(
                 &summary.deepest_depth.to_string(),
                 speed_mult,
             );
-            crate::ui::mockup_layout::spawn_three_column_row(col, |row| {
-                crate::ui::mockup_layout::spawn_ornate_column(row, 1.0, |panel| {
-                    crate::ui::mockup_layout::spawn_hero_column_mockup(
+            crate::ui::shell::spawn_three_column_row(col, |row| {
+                crate::ui::shell::spawn_ornate_column(row, 1.0, |panel| {
+                    crate::ui::shell::spawn_hero_column_mockup(
                         panel,
                         ph,
                         &lead,
@@ -793,16 +793,16 @@ fn spawn_summary_screen_root(
                         false,
                     );
                 });
-                crate::ui::mockup_layout::spawn_ornate_column(row, 1.25, |panel| {
-                    crate::ui::mockup_layout::spawn_dungeon_summary_column(panel, summary);
+                crate::ui::shell::spawn_ornate_column(row, 1.25, |panel| {
+                    crate::ui::shell::spawn_dungeon_summary_column(panel, summary);
                 });
             });
-            crate::ui::mockup_layout::spawn_mockup_footer(
+            crate::ui::shell::spawn_mockup_footer(
                 col,
-                crate::ui::mockup_layout::FooterMode::Summary,
+                crate::ui::shell::FooterMode::Summary,
             );
         });
-        crate::ui::mockup_layout::spawn_summary_rewards_modal(
+        crate::ui::shell::spawn_summary_rewards_modal(
             root,
             summary,
             profile.profile.stash_sort,
@@ -1240,7 +1240,7 @@ fn sync_playback_speed_label(
     if !speed.is_changed() {
         return;
     }
-    let label = crate::ui::mockup_layout::fmt_speed_label(speed.multiplier());
+    let label = crate::ui::shell::fmt_speed_label(speed.multiplier());
     for mut text in &mut q {
         if text.0 != label {
             text.0 = label.clone();
@@ -1398,7 +1398,7 @@ fn open_settings_modal(
             return;
         };
         commands.entity(root).with_children(|parent| {
-            crate::ui::mockup_layout::spawn_settings_modal(parent);
+            crate::ui::shell::spawn_settings_modal(parent);
         });
         break;
     }
@@ -1912,7 +1912,7 @@ fn sync_run_playback_ui(
     let depth_s = format!("Depth: {}", frame.depth);
     let kind_s = format!(
         "Type: {} · Risk: {}",
-        crate::ui::mockup_layout::room_kind_label(frame.room_kind),
+        crate::ui::shell::room_kind_label(frame.room_kind),
         frame.risk_hint
     );
 

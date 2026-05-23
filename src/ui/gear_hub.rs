@@ -8,7 +8,7 @@ use crate::ui::components::{
     GearHubBackdrop, GearHubCloseButton, GearHubRoot, UiScrollContent, UiScrollRegion,
     UiScrollState, UiTooltip,
 };
-use crate::ui::mockup_layout::spawn_stash_filters_and_sort_row;
+use crate::ui::shell::spawn_stash_filters_and_sort_row;
 use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::primitives::modal::{spawn_modal_shell_with_handles, ModalShellConfig};
 use crate::ui::primitives::scroll::spawn_scrollable_flex_column;
@@ -102,7 +102,7 @@ pub fn spawn_gear_hub_modal(
                                     loadout_panel.spawn(headline_text("Equipped"));
                                     loadout_panel.spawn(section_title("LOADOUT"));
                                     spawn_scrollable_flex_column(loadout_panel, None, |loadout| {
-                                        crate::ui::mockup_layout::mockup_gear_cards(
+                                        crate::ui::shell::mockup_gear_cards(
                                             loadout, profile, ph,
                                         );
                                     });

@@ -21,7 +21,7 @@ use crate::ui::components::{
     TitleCampMilestoneExtras, TitleCampSceneRoot, TitleCampStageRoot, TitleCampfireTuneMarker,
     TitleEnterCampButton, TitleQuitButton, TitleScreen, UiRoot,
 };
-use crate::ui::mockup_layout::spawn_mockup_header;
+use crate::ui::shell::spawn_mockup_header;
 use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::scene_tune::{
     title_fireplace_base_px, tune_to_figure_emoji_color, TitleSceneLayout,
@@ -178,7 +178,7 @@ fn spawn_title_nav_column(parent: &mut ChildSpawnerCommands<'_>) {
             title_menu_button(col, "Party", TitleEnterCampButton, pal_idle, pal_border);
             title_menu_button(col, "Heroes", TitleEnterCampButton, pal_idle, pal_border);
             title_codex_placeholder(col);
-            crate::ui::mockup_layout::title_settings_menu_button(col);
+            crate::ui::shell::title_settings_menu_button(col);
             title_menu_button(col, "Quit", TitleQuitButton, pal_idle, pal_border);
         });
 }
