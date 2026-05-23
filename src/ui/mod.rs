@@ -4,7 +4,7 @@ pub mod gear_hub;
 pub mod inventory_panel;
 pub mod log_panel;
 pub mod mockup_layout;
-pub mod placeholder_graphics;
+pub mod assets;
 pub mod primitives;
 pub mod run_panel;
 pub mod scene_tune;
@@ -59,7 +59,7 @@ use crate::ui::components::{
     StartRunButton, StashSortCycleButton, SummaryScreen, TitleEnterCampButton, TitleQuitButton,
     TitleScreen, ToggleCombatLogButton, TopBarField, UiButtonPalette, UiRoot, UiTooltip,
 };
-use crate::ui::placeholder_graphics::UiPlaceholderImages;
+use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::scene_tune::TitleSceneLayout;
 use crate::ui::theme::{
     body_text, caption_text, format_item_affix_lines, format_item_stat_summary, rarity_color,
@@ -128,7 +128,7 @@ impl Plugin for UiPlugin {
         app.add_schedule(Schedule::new(RegisterUiPlaceholderImages));
         app.add_systems(
             RegisterUiPlaceholderImages,
-            crate::ui::placeholder_graphics::register_ui_placeholder_images,
+            crate::ui::assets::register_ui_placeholder_images,
         );
         app.world_mut()
             .resource_mut::<MainScheduleOrder>()

@@ -9,7 +9,7 @@ use crate::ui::components::{
     UiScrollState, UiTooltip,
 };
 use crate::ui::mockup_layout::spawn_stash_filters_and_sort_row;
-use crate::ui::placeholder_graphics::UiPlaceholderImages;
+use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::primitives::modal::{spawn_modal_shell_with_handles, ModalShellConfig};
 use crate::ui::primitives::scroll::spawn_scrollable_flex_column;
 use crate::ui::primitives::{spawn_button, UiButtonConfig, UiButtonVariant};

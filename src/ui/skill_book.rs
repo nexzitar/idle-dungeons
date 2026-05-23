@@ -12,7 +12,7 @@ use crate::ui::components::{
     SkillBookBackdrop, SkillBookCloseButton, SkillBookPickButton, SkillBookRoot, UiButtonPalette,
     UiScrollContent, UiScrollRegion, UiScrollState, UiTooltip,
 };
-use crate::ui::placeholder_graphics::UiPlaceholderImages;
+use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::theme::{
     caption_text, headline_text, section_title, skill_category_chip_colors, UiTheme,
 };

@@ -33,7 +33,7 @@ use crate::ui::components::{
     SkipPlaybackButton, StashSortCycleButton, ToggleCombatLogButton, TopBarField, UiButtonPalette,
     UiScrollContent, UiScrollRegion, UiScrollState, UiTooltip,
 };
-use crate::ui::placeholder_graphics::UiPlaceholderImages;
+use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::primitives::bar::{spawn_horizontal_bar, UiBarStyle};
 use crate::ui::primitives::scroll::{spawn_scrollable_flex_column, spawn_scrollable_log};
 use crate::ui::theme::{

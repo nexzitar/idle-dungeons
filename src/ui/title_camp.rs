@@ -22,7 +22,7 @@ use crate::ui::components::{
     TitleEnterCampButton, TitleQuitButton, TitleScreen, UiRoot,
 };
 use crate::ui::mockup_layout::spawn_mockup_header;
-use crate::ui::placeholder_graphics::UiPlaceholderImages;
+use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::scene_tune::{
     title_fireplace_base_px, tune_to_figure_emoji_color, TitleSceneLayout,
 };
