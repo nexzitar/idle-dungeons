@@ -19,7 +19,8 @@ use crate::ui::components::{
     PlaybackProgressLabel, PlaybackRoomKindText, PlaybackTheaterFloatLayer, ToggleCombatLogButton,
     UiButtonPalette, UiScrollContent, UiScrollRegion, UiScrollState,
 };
-use crate::ui::inspect::InspectHint;
+use crate::ui::inspect::{InspectHint, InspectRegion, InspectRegionScope};
+use crate::ui::primitives::inspect_panel::spawn_inspect_panel_compact;
 use crate::ui::primitives::loadout::slots_from_hero;
 use crate::ui::primitives::skill_bar::{spawn_skill_bar, SkillBarConfig, SkillBarInteraction};
 use crate::ui::theme::{body_text, caption_text, headline_text, section_title, UiDensity, UiTheme};
@@ -616,6 +617,12 @@ pub fn spawn_run_playback_middle_column(
         });
 
         spawn_playback_damage_meters_block(p);
+
+        let inspect = spawn_inspect_panel_compact(p, InspectRegionScope::PlaybackTheater);
+        p.commands_mut().entity(inspect).insert((
+            InspectRegion,
+            InspectRegionScope::PlaybackTheater,
+        ));
 
         p.spawn(section_title("PROGRESS"));
         spawn_playback_delve_progress_section(p);

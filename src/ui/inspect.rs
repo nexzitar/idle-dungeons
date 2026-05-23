@@ -21,7 +21,8 @@ use crate::ui::components::{
 };
 use crate::ui::primitives::inspect_panel::{
     inspect_content_camp_slot, inspect_content_gear_item, inspect_content_gear_slot,
-    inspect_content_hint, inspect_content_none_for_scope, inspect_content_skill_shop,
+    inspect_content_hint, inspect_content_none_for_scope, inspect_content_playback_slot,
+    inspect_content_skill_shop,
     CampInspectBody, CampInspectHint, CampInspectIcon, CampInspectMeta, CampInspectTags,
     CampInspectTitle, InspectStripScope,
 };
@@ -37,6 +38,7 @@ pub enum InspectRegionScope {
     Camp,
     GearHub,
     SkillShop,
+    PlaybackTheater,
 }
 
 /// Generic one-line control hint — footer buttons, header chips, modal chrome.
@@ -93,6 +95,7 @@ enum ActiveInspectScope {
     Camp,
     GearHub,
     SkillShop,
+    PlaybackTheater,
 }
 
 pub fn sync_ui_inspect_hover(
@@ -127,7 +130,7 @@ pub fn sync_ui_inspect_hover(
         }
     };
 
-    if matches!(scope, ActiveInspectScope::Camp) {
+    if matches!(scope, ActiveInspectScope::Camp | ActiveInspectScope::PlaybackTheater) {
         for (slot, interaction) in &slots {
             if *interaction == Interaction::Hovered {
                 consider(
@@ -268,6 +271,7 @@ pub fn sync_ui_inspect_panel(
         ActiveInspectScope::Camp => InspectRegionScope::Camp,
         ActiveInspectScope::GearHub => InspectRegionScope::GearHub,
         ActiveInspectScope::SkillShop => InspectRegionScope::SkillShop,
+        ActiveInspectScope::PlaybackTheater => InspectRegionScope::PlaybackTheater,
         ActiveInspectScope::None => return,
     };
     if regions.iter().all(|s| *s != region_scope) {
@@ -325,8 +329,11 @@ fn active_scope(
     if !shop.is_empty() {
         return ActiveInspectScope::SkillShop;
     }
-    if !build.is_empty() || !summary.is_empty() || !running.is_empty() {
+    if !build.is_empty() || !summary.is_empty() {
         return ActiveInspectScope::Camp;
+    }
+    if !running.is_empty() {
+        return ActiveInspectScope::PlaybackTheater;
     }
     ActiveInspectScope::None
 }
@@ -343,12 +350,19 @@ fn resolve_inspect_content(
         UiInspectTarget::None => inspect_content_none_for_scope(scope, ph),
         UiInspectTarget::SkillSlot { hero, index } => {
             let skill = skill_at_slot(profile, *hero, *index);
-            let mut content = inspect_content_camp_slot(*hero, *index, skill, ph);
-            if !interactive_skills {
-                content.hint = "Priority runs left to right when multiple skills are ready."
-                    .to_string();
+            match scope {
+                InspectRegionScope::PlaybackTheater => {
+                    inspect_content_playback_slot(*hero, *index, skill, ph)
+                }
+                _ => {
+                    let mut content = inspect_content_camp_slot(*hero, *index, skill, ph);
+                    if !interactive_skills {
+                        content.hint = "Priority runs left to right when multiple skills are ready."
+                            .to_string();
+                    }
+                    content
+                }
             }
-            content
         }
         UiInspectTarget::GearSlot(slot) => {
             let main_two_handed = profile

@@ -370,8 +370,12 @@ pub fn inspect_content_none_for_scope(
             "Equip or salvage using the buttons on each stash card.",
         ),
         InspectRegionScope::SkillShop => (
-            "Hover a catalogue row for full skill details.",
+            "Hover a catalogue skill for full details and price.",
             "Purchased skills are added to your library permanently.",
+        ),
+        InspectRegionScope::PlaybackTheater => (
+            "Hover a combat skill icon for loadout details.",
+            "Skills fire left to right when multiple are ready.",
         ),
     };
     InspectPanelContent {
@@ -479,6 +483,21 @@ pub fn inspect_content_skill_shop(
         );
     }
     content.meta = format!("{} · {} gold", content.meta, price);
+    content
+}
+
+pub fn inspect_content_playback_slot(
+    hero: PartyHeroKind,
+    index: usize,
+    skill: Option<SkillId>,
+    ph: &UiPlaceholderImages,
+) -> InspectPanelContent {
+    let mut content = inspect_content_slot(hero, index, skill, ph);
+    content.hint = format!(
+        "{} · slot {} — left-to-right priority during playback.",
+        hero.label(),
+        index + 1
+    );
     content
 }
 

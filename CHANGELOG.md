@@ -4,7 +4,7 @@ All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **
 
 ## Unreleased
 
-### UI design convergence (in progress)
+### UI design convergence — complete (Phases 0–10)
 
 - **Phase 0–1:** Design system doc, `UiDensity` / `MountedPanelStyle` / `SkillDisplayFamily`, `spawn_mounted_panel`, `spawn_framed_section_header`.
 - **Phase 2:** Shared `loadout_row` + `skill_bar` on build, summary, and running camp columns; text chip slots removed (~170 lines from `shell/layout.rs`).
@@ -16,6 +16,10 @@ All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **
 - **Phase 8:** Combat theater — `UiBarStyle` playback presets; enemy/timing bars unified on `spawn_horizontal_bar`; 40px combat `skill_bar` under theater portraits (overlays hidden, hooks reserved).
 - **Phase 9:** Motion hooks — focused slot gold glow; debounced inspect fade (150ms alpha); theater skill GCD overlay stub wired from playback frames.
 - **Phase 10:** Skill shop — `spawn_modal_shell` framing; icon catalogue grid (buildcraft library pattern); fixed inspect strip for purchase detail; `spawn_button` close footer.
+
+### Post-convergence (Wave 8 — combat UX)
+
+- **Playback theater inspect strip** — fixed skill detail panel in the live delve column; hover combat skill icons for loadout info and left-to-right priority hint.
 
 ### Party buildcraft sheet (Phase 1)
 

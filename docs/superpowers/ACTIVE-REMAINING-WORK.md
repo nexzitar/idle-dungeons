@@ -34,22 +34,26 @@ Use this as a **sequence**, not parallel pillars—later waves assume earlier on
 > **Wave 6 is complete** — shipped **`idle_dungeons` v0.2.30** ([`CHANGELOG.md`](../../CHANGELOG.md)); merged as [PR #41](https://github.com/nexzitar/idle-dungeons/pull/41). If you still see an unchecked box, refresh from **`master`** — look for the **`[x]`** on the Wave 6 line above.
 
 - [x] **Wave 7 — Presentation slice (§G, first tranche)** — **Readability-first combat UI:** stronger floating-text hierarchy (white vs ability vs crit) and less spam where [`playback_float_text_color`](../../src/ui/theme.rs) / theater captions allow; **multi-foe:** surface cast/CD or telegraph for **non-primary** foes where pack fights need it (extends §E deferral); **skill category** affordance in book/build (reuse `SkillCategory` colors or chips). *Out of Wave 7 scope:* new art assets, full animation pass, audio bank.
-- [ ] **Wave 8+ — Audio, motion, and art** — Impact/crit/buff SFX, cadence-driven audio, pixel-art swap, anticipation/impact timing (remaining §G).
+- [x] **UI design convergence (Phases 0–10)** — Canonical design system, shared primitives (`mounted_panel`, `loadout_row`, `hero_identity_card`, `reward_card`, modal shell), inspect strips on camp modals, gear hub / summary / theater / skill shop alignment. Plan: [`2026-05-21-ui-design-convergence.md`](plans/2026-05-21-ui-design-convergence.md).
+- [ ] **Wave 8+ — Audio, motion, and art** — Impact/crit/buff SFX, cadence-driven audio, pixel-art swap, anticipation/impact timing (remaining §G). *First tranche:* combat UX backlog above.
 
 > **Wave 7 is complete** — shipped **`idle_dungeons` v0.2.31** ([`CHANGELOG.md`](../../CHANGELOG.md)).
 
-### Combat UX backlog (UI design convergence — Phase 8 scaffold)
+### Combat UX backlog (post–UI design convergence)
 
-Sequencing visuals and playback polish tracked against [`docs/ui-design-system.md`](../ui-design-system.md) §12. **Shipped scaffold:** shared playback bar presets, 40px theater skill rows (static). **Not yet implemented** (future combat UX phase):
+Sequencing visuals and playback polish tracked against [`docs/ui-design-system.md`](../ui-design-system.md) §12. **Convergence scaffold shipped:** shared playback bar presets, 40px theater skill rows, hero-level GCD overlay sync, buildcraft focus glow, inspect fade.
 
-- Slot sequencing cues during playback (highlight ready slot under GCD)
-- Left-to-right tactical flow animation / GCD pulse sweep
-- Combo / chain indicators and timing-chain readability
-- Reactive linkage visuals (e.g. guard → riposte lines)
-- Cooldown/GCD overlays on theater skill icons (hooks exist; sync in Phase 9+)
-- Skill inspect side panel during combat playback
+**Wave 8 — Combat UX (first post-convergence tranche):**
 
-**Design sections §A–§H** below remain intent-only; scope above is what ships first.
+- [x] **Playback theater inspect strip** — fixed skill detail panel in the live delve column; hover combat skill icons (left-to-right priority hint).
+- [ ] Slot sequencing cues during playback (highlight ready slot under GCD)
+- [ ] Left-to-right tactical flow animation / GCD pulse sweep
+- [ ] Combo / chain indicators and timing-chain readability
+- [ ] Reactive linkage visuals (e.g. guard → riposte lines)
+- [ ] Per-skill cooldown overlays on theater icons (domain timing per slot not yet in playback frames)
+- [ ] Combat inspect side panel extensions (foe telegraphs, buff strips)
+
+**Wave 8+ — Audio, motion, and art** — Impact/crit/buff SFX, cadence-driven audio, pixel-art swap, anticipation/impact timing (remaining §G).
 
 Sections **A–G** below stay as **design intent**; track delivery with the waves above.
 
