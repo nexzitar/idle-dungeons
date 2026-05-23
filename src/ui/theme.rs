@@ -35,6 +35,20 @@ impl UiTheme {
     pub const PANEL_INSET_SM: f32 = 8.0;
     pub const PANEL_INSET_LG: f32 = 14.0;
     pub const PAD_TOOLTIP: f32 = 10.0;
+
+    // Icon size tiers — see docs/ui-design-system.md §7
+    pub const ICON_LIBRARY: f32 = 72.0;
+    pub const ICON_BAR: f32 = 52.0;
+    pub const ICON_COMPACT: f32 = 40.0;
+    pub const ICON_CHIP: f32 = 28.0;
+
+    // Gutter presets — see docs/ui-design-system.md §6
+    pub const GUTTER_SECTION: f32 = 14.0;
+    pub const GUTTER_ROW: f32 = 10.0;
+    pub const GUTTER_SLOT: f32 = 8.0;
+    pub const GUTTER_GRID: f32 = 14.0;
+    pub const GUTTER_COMBAT: f32 = 6.0;
+
     pub fn void_black() -> Color {
         Color::srgb(0.04, 0.035, 0.042)
     }
@@ -117,6 +131,122 @@ impl UiTheme {
 
     pub fn elite() -> Color {
         Color::srgb(0.8, 0.38, 0.32)
+    }
+
+    /// Ember / orange accent for Attack display family.
+    pub fn category_attack() -> Color {
+        Color::srgb(0.82, 0.42, 0.22)
+    }
+
+    /// Steel / blue accent for Reaction display family.
+    pub fn category_reaction() -> Color {
+        Color::srgb(0.55, 0.62, 0.78)
+    }
+
+    /// Violet accent for Passive display family.
+    pub fn category_passive() -> Color {
+        Color::srgb(0.58, 0.48, 0.72)
+    }
+
+    /// Green / gold accent for Sustain display family.
+    pub fn category_sustain() -> Color {
+        Color::srgb(0.48, 0.62, 0.44)
+    }
+
+    /// Pale cyan accent for Utility display family (reserved).
+    pub fn category_utility() -> Color {
+        Color::srgb(0.58, 0.72, 0.76)
+    }
+}
+
+/// Screen density zone — shared DNA, different cadence. See `docs/ui-design-system.md` §8.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UiDensity {
+    Buildcraft,
+    Camp,
+    Combat,
+    Gear,
+    Summary,
+}
+
+impl UiDensity {
+    pub fn gutter_section(self) -> f32 {
+        match self {
+            Self::Buildcraft | Self::Camp | Self::Summary => UiTheme::GUTTER_SECTION,
+            Self::Gear => UiTheme::GUTTER_ROW,
+            Self::Combat => UiTheme::GUTTER_COMBAT,
+        }
+    }
+
+    pub fn gutter_row(self) -> f32 {
+        match self {
+            Self::Buildcraft | Self::Camp => UiTheme::GUTTER_ROW,
+            Self::Gear | Self::Summary => UiTheme::GUTTER_ROW,
+            Self::Combat => UiTheme::GUTTER_COMBAT,
+        }
+    }
+
+    pub fn gutter_slot(self) -> f32 {
+        match self {
+            Self::Combat => UiTheme::GUTTER_COMBAT,
+            _ => UiTheme::GUTTER_SLOT,
+        }
+    }
+
+    pub fn gutter_grid(self) -> f32 {
+        match self {
+            Self::Buildcraft | Self::Summary => UiTheme::GUTTER_GRID,
+            Self::Gear => UiTheme::GUTTER_ROW,
+            Self::Camp => UiTheme::GUTTER_GRID,
+            Self::Combat => UiTheme::GUTTER_SLOT,
+        }
+    }
+
+    pub fn icon_bar_px(self) -> f32 {
+        match self {
+            Self::Combat => UiTheme::ICON_COMPACT,
+            _ => UiTheme::ICON_BAR,
+        }
+    }
+
+    pub fn icon_library_px(self) -> f32 {
+        UiTheme::ICON_LIBRARY
+    }
+}
+
+/// Canonical mounted panel recipes — see `docs/ui-design-system.md` §9.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MountedPanelStyle {
+    Recessed,
+    Deep,
+    OrnatePrimary,
+}
+
+impl MountedPanelStyle {
+    pub fn panel_style(self) -> UiPanelStyle {
+        match self {
+            Self::Recessed => UiPanelStyle {
+                background: UiTheme::panel_bg(),
+                border: UiTheme::panel_border_inner(),
+                padding_px: UiTheme::PANEL_INSET,
+                row_gap_px: UiTheme::GUTTER_ROW,
+                border_px: 1.0,
+            },
+            Self::Deep => UiPanelStyle {
+                background: UiTheme::panel_bg_deep(),
+                border: UiTheme::panel_border_inner(),
+                padding_px: UiTheme::PANEL_INSET,
+                row_gap_px: UiTheme::GUTTER_ROW,
+                border_px: 1.0,
+            },
+            Self::OrnatePrimary => UiPanelStyle {
+                background: UiTheme::panel_bg(),
+                border: UiTheme::ornate_gold(),
+                padding_px: UiTheme::PANEL_INSET,
+                row_gap_px: UiTheme::GUTTER_SECTION,
+                border_px: 1.0,
+            },
+        }
     }
 }
 
@@ -464,6 +594,30 @@ pub fn playback_float_text_color(
             UiTheme::muted_cream()
         }
         crate::domain::combat::CombatSfxAnchor::Neutral => UiTheme::muted_cream(),
+    }
+}
+
+#[cfg(test)]
+mod density_tests {
+    use super::*;
+
+    #[test]
+    fn buildcraft_zone_uses_spacious_gutters() {
+        assert_eq!(UiDensity::Buildcraft.gutter_section(), UiTheme::GUTTER_SECTION);
+        assert_eq!(UiDensity::Buildcraft.icon_bar_px(), UiTheme::ICON_BAR);
+    }
+
+    #[test]
+    fn combat_zone_uses_compact_tiers() {
+        assert_eq!(UiDensity::Combat.icon_bar_px(), UiTheme::ICON_COMPACT);
+        assert_eq!(UiDensity::Combat.gutter_slot(), UiTheme::GUTTER_COMBAT);
+    }
+
+    #[test]
+    fn ornate_primary_matches_buildcraft_party_column() {
+        let style = MountedPanelStyle::OrnatePrimary.panel_style();
+        assert_eq!(style.border, UiTheme::ornate_gold());
+        assert_eq!(style.background, UiTheme::panel_bg());
     }
 }
 

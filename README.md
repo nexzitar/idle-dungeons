@@ -35,6 +35,7 @@ The run simulation (`simulate_run_with_playback` and friends) drives outcomes; t
 
 - **Design philosophy (readable overview):** `docs/design-philosophy.md`
 - **Visual bible (art direction, Foundation v1):** `docs/visual-bible-foundation-v1.md`
+- **UI design system (tokens, inspect policy, primitives):** `docs/ui-design-system.md`
 - **Remaining work (active backlog):** `docs/superpowers/ACTIVE-REMAINING-WORK.md`
 - Full design: `docs/superpowers/specs/2026-05-06-roguelike-incremental-bevy-design.md`
 - **Strategic roadmap (archived snapshot):** `docs/superpowers/specs/obsolete-2026-05-06-buildcraft-party-systems-roadmap.md`
