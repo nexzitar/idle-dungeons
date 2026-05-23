@@ -1,6 +1,6 @@
 //! Game shell scaffolding: ornate panels, header, dungeon columns, playback theater, footer dock.
 //!
-//! This module replaces the former monolithic `mockup_layout.rs`, preserving the same public spawn API via re-exports.
+//! Game shell layout (header, theater columns, footer). Spawn API re-exported from submodules.
 
 mod footer;
 mod layout;

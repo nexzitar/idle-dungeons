@@ -4,14 +4,15 @@ All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **
 
 ## Unreleased
 
-### UI foundation (Phase 1–2)
+### UI foundation extraction (Phases 1–6, complete)
 
-- **Phase 1:** Extracted `ui/primitives` (button, scroll, bar, panel, modal, text) — behavior-neutral moves from `widgets` / `mockup_layout` / `gear_hub`.
-- **Phase 2:** Renamed `placeholder_graphics` → `assets`; split `mockup_layout` into `ui/shell/` (`layout`, `theater`, `playback_bars`, `footer`); retired `widgets` (`spawn_atmosphere` lives in `primitives/panel`).
+- **Phase 1:** Extracted `ui/primitives` (button, scroll, bar, panel, modal, text) — behavior-neutral moves from `widgets` / shell layout / `gear_hub`.
+- **Phase 2:** Renamed `placeholder_graphics` → `assets`; split legacy shell layout into `ui/shell/` (`layout`, `theater`, `playback_bars`, `footer`); retired `widgets` (`spawn_atmosphere` lives in `primitives/panel`).
 - **Phase 3:** `ui/interaction` centralizes click capture and `UiClickAction` dispatch (modals, stash sort, gear/skill flows, playback chrome, presentation editor in debug). Legacy per-button `handle_*` click systems removed from `ui/mod.rs`.
 - **Phase 4:** `UiPanelStyle` / `UiModalStyle` layout presets in `theme`; `spawn_item_card` / `spawn_item_card_preview` moved to `primitives/card` (gear hub + summary footer call sites updated).
 - **Phase 5:** Build / running / summary screen spawn moved to `ui/screens/`; `UiPlugin` registration stays in `mod.rs`.
 - **Phase 6:** Presentation editor overlay uses `spawn_button` / `spawn_framed_column` primitives; `+` tune step buttons now dispatch `EditorTuneDelta`.
+- **Cleanup:** Playback sync and lifecycle systems moved to `ui/playback_sync.rs` and `ui/systems.rs`; `ui/mod.rs` is plugin registration only (~260 lines). No `mockup_layout` / `placeholder_graphics` references remain under `src/`.
 
 ### Presentation Wave 2 — atmosphere-first (title camp)
 

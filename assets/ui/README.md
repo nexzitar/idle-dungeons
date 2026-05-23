@@ -1,6 +1,6 @@
 # UI art (future)
 
-Placeholder icons are generated in code (`src/ui/placeholder_graphics.rs`) so the game runs without image assets.
+Placeholder icons are generated in code (`src/ui/assets.rs`) so the game runs without image assets.
 
 To swap in real graphics:
 
