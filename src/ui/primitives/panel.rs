@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy::ui::FocusPolicy;
 
 use crate::ui::primitives::scroll::spawn_scroll_viewport;
-use crate::ui::theme::{UiPanelStyle, UiTheme};
+use crate::ui::theme::{MountedPanelStyle, UiPanelStyle, UiTheme};
 
 /// Full-screen atmospheric backdrop (stone bands, torch glow, vignette).
 pub fn spawn_atmosphere(parent: &mut ChildSpawnerCommands<'_>) {
@@ -150,6 +150,66 @@ pub fn spawn_framed_panel(
         .with_children(|panel| {
             spawn_scroll_viewport(panel, content);
         });
+}
+
+/// Layout for [`spawn_mounted_panel`] — canonical recessed/ornate surfaces.
+#[derive(Clone, Copy, Debug)]
+pub struct MountedPanelConfig {
+    pub style: MountedPanelStyle,
+    pub width: Val,
+    pub flex_grow: f32,
+    pub flex_shrink: f32,
+    pub min_height: Val,
+}
+
+impl MountedPanelConfig {
+    pub fn ornate_column(width: Val) -> Self {
+        Self {
+            style: MountedPanelStyle::OrnatePrimary,
+            width,
+            flex_grow: 0.0,
+            flex_shrink: 0.0,
+            min_height: Val::Px(0.0),
+        }
+    }
+
+    pub fn recessed_flex() -> Self {
+        Self {
+            style: MountedPanelStyle::Recessed,
+            width: Val::Percent(100.0),
+            flex_grow: 1.0,
+            flex_shrink: 1.0,
+            min_height: Val::Px(0.0),
+        }
+    }
+}
+
+/// Spawns a mounted panel using a [`MountedPanelStyle`] recipe from the design system.
+pub fn spawn_mounted_panel(
+    parent: &mut ChildSpawnerCommands<'_>,
+    config: MountedPanelConfig,
+    content: impl FnOnce(&mut ChildSpawnerCommands<'_>),
+) -> Entity {
+    let style = config.style.panel_style();
+    parent
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                width: config.width,
+                flex_grow: config.flex_grow,
+                flex_shrink: config.flex_shrink,
+                min_height: config.min_height,
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(style.row_gap_px),
+                padding: UiRect::all(Val::Px(style.padding_px)),
+                border: UiRect::all(Val::Px(style.border_px)),
+                ..default()
+            },
+            BackgroundColor(style.background),
+            BorderColor::from(style.border),
+        ))
+        .with_children(content)
+        .id()
 }
 
 pub fn spawn_bottom_strip(
