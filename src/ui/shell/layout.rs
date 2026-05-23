@@ -12,13 +12,13 @@ use crate::domain::progression::PARTY_SLOT_2_UNLOCK_DEPTH;
 use crate::domain::run::{RunOutcome, RunSummary, DEFAULT_RUN_MAX_DEPTH, DEFAULT_RUN_SEED};
 use crate::domain::skills::skill_definition;
 use crate::ui::components::{
-    HeroNameDisplayText, HeroNameEditButton,
     PlaybackSpeedDecButton, PlaybackSpeedIncButton, PlaybackSpeedValueText,
     ResetProgressButton, SettingsButton, SettingsModalBackdrop,
     SettingsModalCloseButton, SettingsModalRoot,
     TopBarField, UiButtonPalette, UiTooltip,
 };
 use crate::ui::assets::UiPlaceholderImages;
+use crate::ui::primitives::hero_card::{spawn_hero_identity_card, HeroIdentityConfig};
 use crate::ui::primitives::loadout::{spawn_loadout_row, slots_from_hero, LoadoutRowConfig};
 use crate::ui::primitives::skill_bar::SkillBarInteraction;
 use crate::ui::primitives::scroll::{spawn_scrollable_flex_column, spawn_scrollable_log};
@@ -638,59 +638,6 @@ pub(super) fn panel_title_centered(text: impl Into<String>) -> impl Bundle {
     )
 }
 
-fn spawn_hero_name_row(parent: &mut ChildSpawnerCommands<'_>, slot: u8, allow_rename: bool) {
-    parent
-        .spawn(Node {
-            box_sizing: BoxSizing::BorderBox,
-            width: Val::Percent(100.0),
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::SpaceBetween,
-            column_gap: Val::Px(8.0),
-            padding: UiRect::vertical(Val::Px(2.0)),
-            ..default()
-        })
-        .with_children(|r| {
-            r.spawn((
-                Text::new(""),
-                TextFont::from_font_size(UiTheme::FONT_BODY),
-                TextColor(UiTheme::muted_cream()),
-                HeroNameDisplayText { slot },
-            ));
-            if allow_rename {
-                let p = UiButtonPalette::panel_outlined();
-                r.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        min_width: Val::Px(72.0),
-                        min_height: Val::Px(30.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        padding: UiRect::horizontal(Val::Px(6.0)),
-                        border: UiRect::all(Val::Px(1.0)),
-                        ..default()
-                    },
-                    Button,
-                    BackgroundColor(p.idle_bg.into()),
-                    BorderColor::from(p.idle_border),
-                    HeroNameEditButton { slot },
-                    crate::ui::interaction::UiClickAction::HeroNameEdit,
-                    p,
-                    UiTooltip::txt(
-                        "Rename this hero: type, Enter to save, Esc to cancel.".to_string(),
-                    ),
-                ))
-                .with_children(|b| {
-                    b.spawn((
-                        Text::new("Rename"),
-                        TextFont::from_font_size(UiTheme::FONT_LABEL),
-                        TextColor(UiTheme::body()),
-                    ));
-                });
-            }
-        });
-}
-
 pub fn spawn_hero_column_mockup(
     parent: &mut ChildSpawnerCommands<'_>,
     ph: &UiPlaceholderImages,
@@ -704,14 +651,18 @@ pub fn spawn_hero_column_mockup(
     let inner = move |p: &mut ChildSpawnerCommands<'_>| {
         p.spawn(panel_title_centered("PARTY"));
         spawn_column_flex_scroll(p, None, move |body| {
-            body.spawn(section_title("Player 1"));
-            spawn_hero_name_row(body, 0, allow_rename);
-            let stats = lead.derived_stats();
-            body.spawn(section_title("Vitals"));
-            stat_line_row(body, "Max Health", stats.max_health);
-            stat_line_row(body, "Damage", stats.damage);
-            stat_line_row(body, "Armor", stats.armor);
-            stat_line_row(body, "Healing", stats.healing_power);
+            spawn_hero_identity_card(
+                body,
+                HeroIdentityConfig {
+                    slot: 0,
+                    hero: lead,
+                    kind: PartyHeroKind::Player1,
+                    allow_rename,
+                    show_stat_strip: true,
+                    density,
+                },
+                ph,
+            );
             body.spawn(section_title("Skills"));
             if skill_slots_interactive {
                 body.spawn(caption_text("Click a slot to open Party Buildcraft."));
@@ -736,15 +687,19 @@ pub fn spawn_hero_column_mockup(
             );
 
             if party_slots_unlocked >= 2 {
-                body.spawn(section_title("Player 2"));
                 if let Some(phero) = partner {
-                    spawn_hero_name_row(body, 1, allow_rename);
-                    body.spawn(section_title("Vitals"));
-                    let pst = phero.derived_stats();
-                    stat_line_row(body, "Max Health", pst.max_health);
-                    stat_line_row(body, "Damage", pst.damage);
-                    stat_line_row(body, "Armor", pst.armor);
-                    stat_line_row(body, "Healing", pst.healing_power);
+                    spawn_hero_identity_card(
+                        body,
+                        HeroIdentityConfig {
+                            slot: 1,
+                            hero: phero,
+                            kind: PartyHeroKind::Player2,
+                            allow_rename,
+                            show_stat_strip: true,
+                            density,
+                        },
+                        ph,
+                    );
                     body.spawn(section_title("Skills"));
                     if skill_slots_interactive {
                         body.spawn(caption_text(
@@ -783,35 +738,6 @@ pub fn spawn_hero_column_mockup(
         });
     };
     inner(parent);
-}
-
-fn stat_line_row(
-    parent: &mut ChildSpawnerCommands<'_>,
-    label: &str,
-    value: impl std::fmt::Display,
-) {
-    parent
-        .spawn(Node {
-            box_sizing: BoxSizing::BorderBox,
-            width: Val::Percent(100.0),
-            flex_direction: FlexDirection::Row,
-            justify_content: JustifyContent::SpaceBetween,
-            align_items: AlignItems::Center,
-            padding: UiRect::vertical(Val::Px(2.0)),
-            ..default()
-        })
-        .with_children(|r| {
-            r.spawn((
-                Text::new(format!("\u{25C8} {label}")),
-                TextFont::from_font_size(UiTheme::FONT_COMPACT),
-                TextColor(UiTheme::body_dim()),
-            ));
-            r.spawn((
-                Text::new(format!("{value}")),
-                TextFont::from_font_size(UiTheme::FONT_BODY),
-                TextColor(UiTheme::muted_cream()),
-            ));
-        });
 }
 
 fn gear_slot_row_color(slot: GearSlot) -> Color {

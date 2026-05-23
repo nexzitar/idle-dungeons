@@ -28,6 +28,8 @@ pub struct UiPlaceholderImages {
     pub fireplace: Handle<Image>,
     /// Soft radial additive glow for campfire presentation (`assets/ui/fire_glow_radial.png`).
     pub fire_glow_radial: Handle<Image>,
+    /// Hero portrait silhouette (procedural until class art lands).
+    pub hero_portrait: Handle<Image>,
 }
 
 pub fn register_ui_placeholder_images(
@@ -49,6 +51,7 @@ pub fn register_ui_placeholder_images(
         campfire_scene: asset_server.load("ui/campfire_scene.png"),
         fireplace: asset_server.load("ui/Fireplace.png"),
         fire_glow_radial: asset_server.load("ui/fire_glow_radial.png"),
+        hero_portrait: add(gen_hero_portrait()),
     });
 }
 
@@ -190,5 +193,19 @@ fn gen_stat_chip() -> Image {
             return [0, 0, 0, 0];
         }
         [120, 112, 105, 255]
+    })
+}
+
+/// Shoulder-up silhouette for hero identity cards until portrait art lands.
+fn gen_hero_portrait() -> Image {
+    gen_rgba(48, |x, y| {
+        let xf = x as f32 / 48.0;
+        let yf = y as f32 / 48.0;
+        let head = (xf - 0.5).powi(2) + (yf - 0.28).powi(2) < 0.045;
+        let shoulders = yf > 0.52 && yf < 0.88 && xf > 0.12 && xf < 0.88;
+        if head || shoulders {
+            return [200, 185, 165, 255];
+        }
+        [0, 0, 0, 0]
     })
 }
