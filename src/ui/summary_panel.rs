@@ -1,4 +1,7 @@
+use bevy::prelude::*;
+
 use crate::domain::run::{RunSummary, DEFAULT_RUN_MAX_DEPTH};
+use crate::ui::theme::{caption_text, UiTheme};
 
 pub fn empty_run_summary() -> RunSummary {
     RunSummary {
@@ -58,6 +61,86 @@ pub fn outcome_headline(summary: &RunSummary) -> String {
             format!("Fallen - depth {}. {}", summary.deepest_depth, reason)
         }
     }
+}
+
+/// Horizontal treasure chips for summary column and rewards modal.
+pub fn spawn_treasure_stat_row(parent: &mut ChildSpawnerCommands<'_>, summary: &RunSummary) {
+    parent
+        .spawn(Node {
+            box_sizing: BoxSizing::BorderBox,
+            width: Val::Percent(100.0),
+            flex_direction: FlexDirection::Row,
+            flex_wrap: FlexWrap::Wrap,
+            column_gap: Val::Px(8.0),
+            row_gap: Val::Px(6.0),
+            ..default()
+        })
+        .with_children(|row| {
+            spawn_treasure_chip(
+                row,
+                "Gold",
+                &format!("+{}", summary.gold_earned),
+                UiTheme::treasure(),
+            );
+            spawn_treasure_chip(
+                row,
+                "Salvage",
+                &format!("+{}", summary.salvage_earned),
+                UiTheme::muted_gold(),
+            );
+            spawn_treasure_chip(
+                row,
+                "Score",
+                &summary.encounter_score.to_string(),
+                UiTheme::body(),
+            );
+            spawn_treasure_chip(
+                row,
+                "Depth",
+                &summary.deepest_depth.to_string(),
+                UiTheme::body_dim(),
+            );
+        });
+    if let Some(pct) = summary.strike_ability_share_percent() {
+        parent.spawn(caption_text(format!(
+            "Strikes: {}% ability · {} weapon / {} ability",
+            pct, summary.party_strike_damage_white, summary.party_strike_damage_yellow
+        )));
+    }
+}
+
+fn spawn_treasure_chip(
+    parent: &mut ChildSpawnerCommands<'_>,
+    label: &str,
+    value: &str,
+    accent: Color,
+) {
+    parent
+        .spawn((
+            Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::FlexStart,
+                row_gap: Val::Px(2.0),
+                padding: UiRect::axes(Val::Px(10.0), Val::Px(6.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            BackgroundColor(UiTheme::panel_bg()),
+            BorderColor::from(UiTheme::panel_border_inner()),
+        ))
+        .with_children(|chip| {
+            chip.spawn((
+                Text::new(label.to_uppercase()),
+                TextFont::from_font_size(UiTheme::FONT_MICRO),
+                TextColor(UiTheme::body_dim()),
+            ));
+            chip.spawn((
+                Text::new(value),
+                TextFont::from_font_size(UiTheme::FONT_SECTION),
+                TextColor(accent),
+            ));
+        });
 }
 
 pub fn reward_digest(summary: &RunSummary) -> String {

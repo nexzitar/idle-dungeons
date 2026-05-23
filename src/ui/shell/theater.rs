@@ -4,6 +4,8 @@ use bevy::prelude::*;
 use bevy::text::{TextColor, TextFont};
 use bevy::ui::{FocusPolicy, RelativeCursorPosition};
 
+use crate::domain::hero::HeroProfile;
+use crate::domain::party::PartyHeroKind;
 use crate::domain::run::DEFAULT_RUN_MAX_DEPTH;
 use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::components::{
@@ -18,7 +20,9 @@ use crate::ui::components::{
     UiButtonPalette, UiScrollContent, UiScrollRegion, UiScrollState,
 };
 use crate::ui::inspect::InspectHint;
-use crate::ui::theme::{body_text, caption_text, headline_text, section_title, UiTheme};
+use crate::ui::primitives::loadout::slots_from_hero;
+use crate::ui::primitives::skill_bar::{spawn_skill_bar, SkillBarConfig, SkillBarInteraction};
+use crate::ui::theme::{body_text, caption_text, headline_text, section_title, UiDensity, UiTheme};
 
 use super::layout::panel_title_centered;
 use super::playback_bars::{
@@ -67,7 +71,11 @@ fn spawn_playback_combat_log_scroll(
             .with_children(content);
         });
 }
-fn spawn_playback_player0_plate(parent: &mut ChildSpawnerCommands<'_>) {
+fn spawn_playback_player0_plate(
+    parent: &mut ChildSpawnerCommands<'_>,
+    lead: &HeroProfile,
+    ph: &UiPlaceholderImages,
+) {
     parent
         .spawn((
             Node {
@@ -103,6 +111,19 @@ fn spawn_playback_player0_plate(parent: &mut ChildSpawnerCommands<'_>) {
                 });
             plate.spawn(caption_text("You"));
             playback_player0_bar(plate, 1.0);
+            let slots = slots_from_hero(lead);
+            spawn_skill_bar(
+                plate,
+                SkillBarConfig {
+                    hero: PartyHeroKind::Player1,
+                    slots: &slots,
+                    unlocked: lead.unlocked_skill_slots,
+                    focused_index: None,
+                    interaction: SkillBarInteraction::None,
+                    density: UiDensity::Combat,
+                },
+                ph,
+            );
             playback_cast_cd_stack_lead(plate);
             plate.spawn((
                 crate::ui::theme::playback_debuff_line_bundle("—  ·  —  ·  —  ·  —"),
@@ -111,7 +132,12 @@ fn spawn_playback_player0_plate(parent: &mut ChildSpawnerCommands<'_>) {
         });
 }
 
-fn spawn_playback_player1_plate(parent: &mut ChildSpawnerCommands<'_>) {
+fn spawn_playback_player1_plate(
+    parent: &mut ChildSpawnerCommands<'_>,
+    partner: Option<&HeroProfile>,
+    party_slots_unlocked: usize,
+    ph: &UiPlaceholderImages,
+) {
     let tone = Color::srgb(0.38, 0.72, 0.92);
     parent
         .spawn((
@@ -148,6 +174,22 @@ fn spawn_playback_player1_plate(parent: &mut ChildSpawnerCommands<'_>) {
                 });
             plate.spawn(caption_text("Player 2"));
             playback_player1_bar(plate, 1.0);
+            if party_slots_unlocked >= 2 {
+                let slots = partner.map(slots_from_hero).unwrap_or([None; 6]);
+                let unlocked = partner.map(|h| h.unlocked_skill_slots).unwrap_or(0);
+                spawn_skill_bar(
+                    plate,
+                    SkillBarConfig {
+                        hero: PartyHeroKind::Player2,
+                        slots: &slots,
+                        unlocked,
+                        focused_index: None,
+                        interaction: SkillBarInteraction::None,
+                        density: UiDensity::Combat,
+                    },
+                    ph,
+                );
+            }
             playback_cast_cd_stack_ally(plate);
         });
 }
@@ -385,6 +427,9 @@ fn spawn_playback_damage_meters_block(parent: &mut ChildSpawnerCommands<'_>) {
 pub fn spawn_run_playback_middle_column(
     parent: &mut ChildSpawnerCommands<'_>,
     ph: &UiPlaceholderImages,
+    lead: &HeroProfile,
+    partner: Option<&HeroProfile>,
+    party_slots_unlocked: usize,
 ) {
     let ph = ph.clone();
     let inner = move |p: &mut ChildSpawnerCommands<'_>| {
@@ -429,7 +474,7 @@ pub fn spawn_run_playback_middle_column(
                 ToggleCombatLogButton,
                 crate::ui::interaction::UiClickAction::ToggleCombatLog,
                 log_pal,
-                UiTooltip::txt("Show or hide the text combat log."),
+                InspectHint("Show or hide the text combat log."),
             ))
             .with_children(|b| {
                 b.spawn((
@@ -495,8 +540,8 @@ pub fn spawn_run_playback_middle_column(
                         ..default()
                     })
                     .with_children(|left| {
-                        spawn_playback_player0_plate(left);
-                        spawn_playback_player1_plate(left);
+                        spawn_playback_player0_plate(left, lead, &ph);
+                        spawn_playback_player1_plate(left, partner, party_slots_unlocked, &ph);
                     });
                     row.spawn(Node {
                         box_sizing: BoxSizing::BorderBox,

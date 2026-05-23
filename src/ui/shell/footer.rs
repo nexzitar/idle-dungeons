@@ -8,15 +8,21 @@ use crate::domain::run::RunSummary;
 use crate::save::StashSortOrder;
 use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::components::{
-    GearHubOpenButton, SkillShopOpenButton, SkipPlaybackButton, StashSortCycleButton,
-    UiButtonPalette, AcceptRewardsButton,
+    AcceptRewardsButton, GearHubOpenButton, SkillShopOpenButton, SkipPlaybackButton,
+    StashSortCycleButton, SummaryRewardsModalRoot, UiButtonPalette,
 };
 use crate::ui::inspect::InspectHint;
 use crate::ui::interaction::UiClickAction;
 use crate::ui::primitives::button::{spawn_button, UiButtonConfig, UiButtonVariant};
-use crate::ui::theme::{body_text, caption_text, headline_text, section_title, UiTheme};
+use crate::ui::primitives::modal::{spawn_modal_shell_with_handles, ModalShellConfig};
+use crate::ui::primitives::reward_card::spawn_reward_loot_grid;
+use crate::ui::primitives::scroll::spawn_scrollable_flex_column;
+use crate::ui::primitives::section::spawn_framed_section_header;
+use crate::ui::summary_panel::spawn_treasure_stat_row;
+use crate::ui::theme::{body_text, caption_text, headline_text, UiTheme};
 
-use super::layout::spawn_column_flex_scroll;
+const REWARDS_MODAL_MARGIN_X: f32 = 28.0;
+const REWARDS_MODAL_MARGIN_Y: f32 = 44.0;
 
 pub fn spawn_stash_filters_and_sort_row(
     parent: &mut ChildSpawnerCommands<'_>,
@@ -65,148 +71,124 @@ pub fn spawn_stash_filters_and_sort_row(
         });
 }
 
-/// Post-run rewards modal: loot list + accept (non-dismissible dimmer).
+/// Post-run rewards modal: loot grid + accept (non-dismissible backdrop).
 pub fn spawn_summary_rewards_modal(
     parent: &mut ChildSpawnerCommands<'_>,
     summary: &RunSummary,
-    stash_sort: StashSortOrder,
+    _stash_sort: StashSortOrder,
     ph: &UiPlaceholderImages,
 ) {
-    use crate::ui::components::{AcceptRewardsButton, SummaryRewardsModalRoot};
     parent
         .spawn((
             Node {
                 box_sizing: BoxSizing::BorderBox,
                 width: Val::Percent(100.0),
-                    height: Val::Percent(100.0),
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(0.0),
-                    top: Val::Px(0.0),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    ..default()
+                height: Val::Percent(100.0),
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                top: Val::Px(0.0),
+                ..default()
             },
             SummaryRewardsModalRoot,
         ))
+        .insert(FocusPolicy::Block)
         .with_children(|layer| {
-            layer.spawn((
-            Node {
-                box_sizing: BoxSizing::BorderBox,
-                position_type: PositionType::Absolute,
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(100.0),
-                    left: Val::Px(0.0),
-                    top: Val::Px(0.0),
-                    ..default()
-            },
-            BackgroundColor(Color::srgba(0.02, 0.02, 0.04, 0.72).into()),
-            FocusPolicy::Pass
-        ));
-            layer
-                .spawn((
-            Node {
-                box_sizing: BoxSizing::BorderBox,
-                min_width: Val::Px(460.0),
-                max_width: Val::Px(620.0),
-                max_height: Val::Percent(85.0),
-                padding: UiRect {
-                    left: Val::Px(UiTheme::PAD_ROOT),
-                    right: Val::Px(UiTheme::PAD_ROOT),
-                    top: Val::Px(UiTheme::PAD_ROOT),
-                    bottom: Val::Px(UiTheme::PAD_ROOT + 22.0),
+            spawn_modal_shell_with_handles(
+                layer,
+                ModalShellConfig {
+                    backdrop_clicks_close: false,
                 },
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Stretch,
-                row_gap: Val::Px(10.0),
-                border: UiRect::all(Val::Px(2.0)),
-                ..default()
-            },
-            BackgroundColor(UiTheme::panel_bg_deep().into()),
-            BorderColor::from(UiTheme::ornate_gold())
-        ))
-                .with_children(|dialog| {
-                    dialog.spawn(headline_text("Run rewards"));
-                    dialog.spawn(caption_text(format!(
-                        "Gold +{} · Salvage +{} · Depth {}",
-                        summary.gold_earned, summary.salvage_earned, summary.deepest_depth
-                    )));
-                    if let Some(pct) = summary.strike_ability_share_percent() {
-                        dialog.spawn(caption_text(format!(
-                            "Strikes: {}% ability · {} weapon / {} ability",
-                            pct,
-                            summary.party_strike_damage_white,
-                            summary.party_strike_damage_yellow
-                        )));
-                    }
-                    if summary.loot.is_empty() {
-                        dialog.spawn(body_text(
-                            "No gear dropped this run—gold and salvage still apply.",
-                        ));
-                    } else {
-                        let n = summary.loot.len();
-                        dialog.spawn((
-                            Text::new(if n == 1 {
-                                "YOU FOUND NEW GEAR (1)".to_string()
-                            } else {
-                                format!("YOU FOUND NEW GEAR ({n})")
-                            }),
-                            TextFont::from_font_size(UiTheme::FONT_SKILL_ACTIVE),
-                            TextColor(UiTheme::muted_gold()),
-                        ));
-                        dialog.spawn(body_text(
-                            "It is not equipped until after you Accept. Then use Gear on the footer bar to stash and equip.",
-                        ));
-                    }
-                    dialog.spawn(section_title("LOOT"));
-                    spawn_stash_filters_and_sort_row(dialog, stash_sort);
-                    spawn_column_flex_scroll(dialog, Some(200.0), |scroll| {
-                        if summary.loot.is_empty() {
-                            scroll.spawn(caption_text("No items this run."));
-                        } else {
-                            let ix = crate::ui::stash_sort::stash_display_indices(
-                                &summary.loot,
-                                stash_sort,
-                            );
-                            for &i in ix.iter() {
-                                let item = &summary.loot[i];
-                                crate::ui::primitives::spawn_item_card_preview(scroll, item, ph);
-                            }
-                        }
-                    });
-                    let p = UiButtonPalette::primary_cta();
-                    dialog
+                |columns| {
+                    columns
                         .spawn((
                             Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Percent(100.0),
-                                    min_height: Val::Px(48.0),
-                                    justify_content: JustifyContent::Center,
-                                    align_items: AlignItems::Center,
-                                    border: UiRect::all(Val::Px(2.0)),
-                                    margin: UiRect {
-                                        left: Val::Px(0.0),
-                                        right: Val::Px(0.0),
-                                        top: Val::Px(12.0),
-                                        bottom: Val::Px(6.0),
-                                    },
-                                    ..default()
-            },
-            Button,
-            BackgroundColor(p.idle_bg.into()),
-            BorderColor::from(p.idle_border),
-                            AcceptRewardsButton,
-                            UiClickAction::AcceptRewards,
-                            p,
-                            InspectHint("Accept run rewards and return to camp."),
+                                box_sizing: BoxSizing::BorderBox,
+                                width: Val::Percent(100.0),
+                                height: Val::Percent(100.0),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                padding: UiRect::axes(
+                                    Val::Px(REWARDS_MODAL_MARGIN_X),
+                                    Val::Px(REWARDS_MODAL_MARGIN_Y),
+                                ),
+                                ..default()
+                            },
+                            FocusPolicy::Pass,
                         ))
-                        .with_children(|b| {
-                            b.spawn((
-                Text::new("\u{2713} Accept rewards"),
-                TextFont::from_font_size(UiTheme::FONT_SKILL_ACTIVE),
-                TextColor(Color::WHITE),
-            ));
+                        .with_children(|center| {
+                            center
+                                .spawn((
+                                    Node {
+                                        box_sizing: BoxSizing::BorderBox,
+                                        min_width: Val::Px(480.0),
+                                        max_width: Val::Px(640.0),
+                                        max_height: Val::Percent(88.0),
+                                        padding: UiRect::all(Val::Px(UiTheme::PAD_ROOT)),
+                                        flex_direction: FlexDirection::Column,
+                                        align_items: AlignItems::Stretch,
+                                        row_gap: Val::Px(UiTheme::PANEL_INSET),
+                                        border: UiRect::all(Val::Px(2.0)),
+                                        overflow: Overflow::clip_y(),
+                                        ..default()
+                                    },
+                                    BackgroundColor(UiTheme::panel_bg_deep()),
+                                    BorderColor::from(UiTheme::ornate_gold()),
+                                ))
+                                .with_children(|dialog| {
+                                    dialog.spawn(headline_text("Run rewards"));
+                                    spawn_framed_section_header(dialog, "TREASURE");
+                                    spawn_treasure_stat_row(dialog, summary);
+                                    if summary.loot.is_empty() {
+                                        dialog.spawn(body_text(
+                                            "No gear dropped this run — gold and salvage still apply.",
+                                        ));
+                                    } else {
+                                        let n = summary.loot.len();
+                                        dialog.spawn((
+                                            Text::new(if n == 1 {
+                                                "YOU FOUND NEW GEAR (1)".to_string()
+                                            } else {
+                                                format!("YOU FOUND NEW GEAR ({n})")
+                                            }),
+                                            TextFont::from_font_size(UiTheme::FONT_SKILL_ACTIVE),
+                                            TextColor(UiTheme::muted_gold()),
+                                        ));
+                                        dialog.spawn(caption_text(
+                                            "Items go to your stash when you Accept. Use Gear on the footer to equip.",
+                                        ));
+                                        spawn_framed_section_header(dialog, "LOOT");
+                                        spawn_scrollable_flex_column(dialog, Some(240.0), |scroll| {
+                                            spawn_reward_loot_grid(
+                                                scroll,
+                                                &summary.loot,
+                                                ph,
+                                                summary.loot.len(),
+                                            );
+                                        });
+                                    }
+                                    let accept = spawn_button(
+                                        dialog,
+                                        UiButtonConfig {
+                                            label: "\u{2713} Accept rewards",
+                                            variant: UiButtonVariant::Primary,
+                                            width: Val::Percent(100.0),
+                                            height: Val::Px(48.0),
+                                            font_size: UiTheme::FONT_SKILL_ACTIVE,
+                                            text_color: Color::WHITE,
+                                            flex_shrink: 0.0,
+                                        },
+                                    );
+                                    dialog.commands_mut().entity(accept).insert((
+                                        AcceptRewardsButton,
+                                        UiClickAction::AcceptRewards,
+                                        InspectHint(
+                                            "Accept run rewards and return to camp.",
+                                        ),
+                                    ));
+                                });
                         });
-                });
+                },
+            );
         });
 }
 

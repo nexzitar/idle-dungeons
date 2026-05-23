@@ -63,7 +63,7 @@ pub(crate) fn spawn_summary_screen_root(
                     );
                 });
                 shell::spawn_ornate_column(row, 1.25, |panel| {
-                    shell::spawn_dungeon_summary_column(panel, summary);
+                    shell::spawn_dungeon_summary_column(panel, summary, ph);
                 });
             });
             shell::spawn_mockup_footer(col, shell::FooterMode::Summary);

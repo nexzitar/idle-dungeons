@@ -38,6 +38,17 @@ Use this as a **sequence**, not parallel pillars—later waves assume earlier on
 
 > **Wave 7 is complete** — shipped **`idle_dungeons` v0.2.31** ([`CHANGELOG.md`](../../CHANGELOG.md)).
 
+### Combat UX backlog (UI design convergence — Phase 8 scaffold)
+
+Sequencing visuals and playback polish tracked against [`docs/ui-design-system.md`](../ui-design-system.md) §12. **Shipped scaffold:** shared playback bar presets, 40px theater skill rows (static). **Not yet implemented** (future combat UX phase):
+
+- Slot sequencing cues during playback (highlight ready slot under GCD)
+- Left-to-right tactical flow animation / GCD pulse sweep
+- Combo / chain indicators and timing-chain readability
+- Reactive linkage visuals (e.g. guard → riposte lines)
+- Cooldown/GCD overlays on theater skill icons (hooks exist; sync in Phase 9+)
+- Skill inspect side panel during combat playback
+
 **Design sections §A–§H** below remain intent-only; scope above is what ships first.
 
 Sections **A–G** below stay as **design intent**; track delivery with the waves above.

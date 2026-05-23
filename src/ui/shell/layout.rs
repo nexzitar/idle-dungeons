@@ -18,11 +18,12 @@ use crate::ui::components::{
 use crate::ui::inspect::{GearSlotInspect, InspectHint};
 use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::primitives::panel::{spawn_mounted_panel, MountedPanelConfig};
+use crate::ui::primitives::reward_card::spawn_reward_loot_grid;
 use crate::ui::primitives::section::spawn_framed_section_header;
-use crate::ui::primitives::scroll::{spawn_scrollable_flex_column, spawn_scrollable_log};
+use crate::ui::primitives::scroll::spawn_scrollable_flex_column;
 use crate::ui::theme::{
     body_text, caption_text, format_item_affix_lines, format_item_stat_summary, headline_text,
-    log_line_present, rarity_color, section_title, UiDensity, UiTheme,
+    log_line_present, rarity_color, section_title, MountedPanelStyle, UiDensity, UiTheme,
 };
 
 fn ornate_shell(
@@ -863,119 +864,80 @@ pub fn spawn_dungeon_camp_column(parent: &mut ChildSpawnerCommands<'_>) {
     inner(parent);
 }
 
-pub fn spawn_dungeon_summary_column(parent: &mut ChildSpawnerCommands<'_>, summary: &RunSummary) {
-    let inner = move |p: &mut ChildSpawnerCommands<'_>| {
-        p.spawn(panel_title_centered("DUNGEON RUN"));
-        let depth = summary.deepest_depth;
-        let is_death = summary.outcome == RunOutcome::HeroDied;
-        let type_color = if is_death {
-            UiTheme::danger()
-        } else {
-            UiTheme::muted_gold()
-        };
-        let type_label = if is_death { "Defeat" } else { "Boss" };
-        p.spawn(Node {
-            box_sizing: BoxSizing::BorderBox,
-            flex_direction: FlexDirection::Row,
-            justify_content: JustifyContent::SpaceBetween,
+pub fn spawn_dungeon_summary_column(
+    parent: &mut ChildSpawnerCommands<'_>,
+    summary: &RunSummary,
+    ph: &UiPlaceholderImages,
+) {
+    spawn_mounted_panel(
+        parent,
+        MountedPanelConfig {
+            style: MountedPanelStyle::Recessed,
             width: Val::Percent(100.0),
-            ..default()
-        })
-        .with_children(|r| {
-            r.spawn(caption_text(format!("Depth: {depth}")));
-            r.spawn((
-                Text::new(format!("Type: {type_label}")),
-                TextFont::from_font_size(UiTheme::FONT_COMPACT),
-                TextColor(type_color),
+            flex_grow: 1.0,
+            flex_shrink: 1.0,
+            min_height: Val::Px(0.0),
+        },
+        |panel| {
+            spawn_framed_section_header(panel, "RUN OUTCOME");
+            let is_death = summary.outcome == RunOutcome::HeroDied;
+            let headline_color = if is_death {
+                UiTheme::danger()
+            } else {
+                UiTheme::muted_gold()
+            };
+            panel.spawn((
+                Text::new(crate::ui::summary_panel::outcome_headline(summary)),
+                TextFont::from_font_size(UiTheme::FONT_STRONG),
+                TextColor(headline_color),
             ));
-        });
-        if !summary.peak_risk_note.is_empty() {
-            p.spawn(caption_text(summary.peak_risk_note.clone()));
-        }
-        let foe = summary
-            .death_reason
-            .clone()
-            .unwrap_or_else(|| "Victory".to_string());
-        p.spawn(Node {
-            box_sizing: BoxSizing::BorderBox,
-            flex_direction: FlexDirection::Row,
-            column_gap: Val::Px(12.0),
-            align_items: AlignItems::Center,
-            ..default()
-        })
-        .with_children(|row| {
-            row.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    width: Val::Px(96.0),
-                    height: Val::Px(96.0),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    border: UiRect::all(Val::Px(2.0)),
-                    ..default()
+            if !summary.peak_risk_note.is_empty() {
+                panel.spawn(caption_text(summary.peak_risk_note.clone()));
+            }
+            spawn_framed_section_header(panel, "TREASURE");
+            crate::ui::summary_panel::spawn_treasure_stat_row(panel, summary);
+            if !summary.loot.is_empty() {
+                spawn_framed_section_header(panel, "LOOT");
+                panel.spawn(caption_text(
+                    "Accept rewards below to add these to your stash.".to_string(),
+                ));
+                spawn_reward_loot_grid(panel, &summary.loot, ph, 6);
+            }
+            spawn_framed_section_header(panel, "CHRONICLE");
+            spawn_mounted_panel(
+                panel,
+                MountedPanelConfig {
+                    style: MountedPanelStyle::Recessed,
+                    width: Val::Percent(100.0),
+                    flex_grow: 0.0,
+                    flex_shrink: 0.0,
+                    min_height: Val::Px(0.0),
                 },
-                BackgroundColor(UiTheme::panel_bg_deep().into()),
-                BorderColor::from(UiTheme::ornate_gold()),
-            ))
-            .with_children(|port| {
-                port.spawn((
-                    Text::new(if is_death { "\u{2620}" } else { "\u{1F3F9}" }),
-                    TextFont::from_font_size(UiTheme::FONT_DISPLAY_SUB),
-                    TextColor(type_color),
-                ));
-            });
-            row.spawn(Node {
-                box_sizing: BoxSizing::BorderBox,
-                flex_direction: FlexDirection::Column,
-                flex_grow: 1.0,
-                row_gap: Val::Px(6.0),
-                ..default()
-            })
-            .with_children(|col| {
-                col.spawn((
-                    Text::new(foe.clone()),
-                    TextFont::from_font_size(UiTheme::FONT_SECTION),
-                    TextColor(type_color),
-                ));
-                let frac = if is_death { 0.35 } else { 1.0 };
-                health_bar(col, frac, type_color);
-            });
-        });
-        if !summary.loot.is_empty() {
-            let n = summary.loot.len();
-            p.spawn(section_title("GEAR FROM THIS RUN"));
-            p.spawn(body_text(format!(
-                "{n} piece(s) here go to your stash when you Accept rewards below. Open Gear after that to equip."
-            )));
-            for item in summary.loot.iter().take(4) {
-                p.spawn(caption_text(format!(
-                    "\u{2022} {} ({:?})",
-                    item.name, item.rarity
-                )));
-            }
-            if summary.loot.len() > 4 {
-                p.spawn(caption_text(format!(
-                    "\u{2026} and {} more in the rewards popup.",
-                    summary.loot.len() - 4
-                )));
-            }
-        }
-        p.spawn(section_title("COMBAT LOG"));
-        p.spawn(caption_text("Mouse wheel scrolls."));
-        let log_lines: Vec<_> = summary
-            .log
-            .iter()
-            .map(|line| {
-                let (color, size) = log_line_present(line);
-                (line.clone(), size, color)
-            })
-            .collect();
-        spawn_scrollable_log(p, 200.0, log_lines);
-        p.spawn(section_title("PROGRESS"));
-        let cap = summary.dungeon_depth_cap.max(1);
-        spawn_static_delve_progress_section(p, summary.floors_cleared, cap);
-    };
-    inner(parent);
+                |rec| {
+                    spawn_scrollable_flex_column(rec, Some(160.0), |scroll| {
+                        let beats = crate::ui::summary_panel::narrative_highlights(summary);
+                        if beats.is_empty() {
+                            scroll.spawn(caption_text(
+                                "Quiet run — no standout beats recorded.".to_string(),
+                            ));
+                        } else {
+                            for line in beats {
+                                let (color, size) = log_line_present(&line);
+                                scroll.spawn((
+                                    Text::new(line),
+                                    TextFont::from_font_size(size),
+                                    TextColor(color),
+                                ));
+                            }
+                        }
+                    });
+                },
+            );
+            spawn_framed_section_header(panel, "PROGRESS");
+            let cap = summary.dungeon_depth_cap.max(1);
+            spawn_static_delve_progress_section(panel, summary.floors_cleared, cap);
+        },
+    );
 }
 fn spawn_static_delve_progress_section(
     parent: &mut ChildSpawnerCommands<'_>,

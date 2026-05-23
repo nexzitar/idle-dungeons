@@ -14,8 +14,10 @@ use crate::ui::shell::spawn_stash_filters_and_sort_row;
 use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::primitives::modal::{spawn_modal_shell_with_handles, ModalShellConfig};
 use crate::ui::primitives::scroll::spawn_scrollable_flex_column;
+use crate::domain::party::PartyHeroKind;
+use crate::ui::primitives::hero_card::{spawn_hero_identity_card, HeroIdentityConfig};
 use crate::ui::primitives::{spawn_button, UiButtonConfig, UiButtonVariant};
-use crate::ui::theme::{caption_text, headline_text, section_title, UiTheme};
+use crate::ui::theme::{caption_text, headline_text, section_title, UiDensity, UiTheme};
 
 /// Equipped-gear column.
 const GEAR_LOADOUT_PANEL_W: f32 = 292.0;
@@ -102,6 +104,18 @@ pub fn spawn_gear_hub_modal(
                                 ))
                                 .with_children(|loadout_panel| {
                                     loadout_panel.spawn(headline_text("Equipped"));
+                                    spawn_hero_identity_card(
+                                        loadout_panel,
+                                        HeroIdentityConfig {
+                                            slot: 0,
+                                            hero: &profile.profile.hero,
+                                            kind: PartyHeroKind::Player1,
+                                            allow_rename: false,
+                                            show_stat_strip: true,
+                                            density: UiDensity::Gear,
+                                        },
+                                        ph,
+                                    );
                                     loadout_panel.spawn(section_title("LOADOUT"));
                                     spawn_scrollable_flex_column(loadout_panel, None, |loadout| {
                                         crate::ui::shell::mockup_gear_cards(

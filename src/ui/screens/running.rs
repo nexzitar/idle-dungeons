@@ -57,7 +57,13 @@ pub(crate) fn spawn_running_screen_root(
                     );
                     });
                     shell::spawn_ornate_column(row, 1.25, |panel| {
-                        shell::spawn_run_playback_middle_column(panel, ph);
+                        shell::spawn_run_playback_middle_column(
+                            panel,
+                            ph,
+                            &lead,
+                            partner.as_ref(),
+                            party_slots,
+                        );
                     });
                 });
                 shell::spawn_mockup_footer(col, shell::FooterMode::DelvePlayback);

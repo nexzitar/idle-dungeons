@@ -10,17 +10,19 @@ use crate::ui::components::{
     PlaybackPlayer1SkillGcdFill,
 };
 use crate::ui::primitives::bar::{spawn_horizontal_bar, UiBarStyle};
-use crate::ui::theme::UiTheme;
+
+fn spawn_playback_timing_bar<M: Component>(
+    parent: &mut ChildSpawnerCommands<'_>,
+    style: UiBarStyle,
+    fill_marker: M,
+) {
+    spawn_horizontal_bar(parent, style, fill_marker, 0.0);
+}
 
 pub(super) fn playback_player0_bar(parent: &mut ChildSpawnerCommands<'_>, fill_pct: f32) {
     spawn_horizontal_bar(
         parent,
-        UiBarStyle {
-            track: UiTheme::void_black(),
-            fill: UiTheme::healing(),
-            height_px: 14.0,
-            border: true,
-        },
+        UiBarStyle::playback_hp_lead(),
         PlaybackPlayer0BarFill,
         fill_pct,
     );
@@ -29,42 +31,19 @@ pub(super) fn playback_player0_bar(parent: &mut ChildSpawnerCommands<'_>, fill_p
 pub(super) fn playback_player1_bar(parent: &mut ChildSpawnerCommands<'_>, fill_pct: f32) {
     spawn_horizontal_bar(
         parent,
-        UiBarStyle {
-            track: UiTheme::void_black(),
-            fill: Color::srgb(0.38, 0.72, 0.92),
-            height_px: 14.0,
-            border: true,
-        },
+        UiBarStyle::playback_hp_ally(),
         PlaybackPlayer1BarFill,
         fill_pct,
     );
 }
 
 pub(super) fn playback_enemy_bar(parent: &mut ChildSpawnerCommands<'_>, fill_pct: f32) {
-    parent
-        .spawn((
-            Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Percent(100.0),
-                height: Val::Px(14.0),
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
-            BackgroundColor(UiTheme::void_black().into()),
-            BorderColor::from(UiTheme::panel_border()),
-        ))
-        .with_children(|bar| {
-            bar.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    width: Val::Percent((fill_pct * 100.0).clamp(0.0, 100.0)),
-                    height: Val::Percent(100.0),
-                    ..default()
-                },
-                BackgroundColor(UiTheme::danger().into()),
-                PlaybackEnemyBarFill,
-            ));
-        });
+    spawn_horizontal_bar(
+        parent,
+        UiBarStyle::playback_hp_enemy(),
+        PlaybackEnemyBarFill,
+        fill_pct,
+    );
 }
 
 pub(super) fn playback_cast_cd_stack_lead(parent: &mut ChildSpawnerCommands<'_>) {
@@ -77,103 +56,22 @@ pub(super) fn playback_cast_cd_stack_lead(parent: &mut ChildSpawnerCommands<'_>)
             ..default()
         })
         .with_children(|col| {
-            col.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    width: Val::Percent(100.0),
-                    height: Val::Px(5.0),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(UiTheme::void_black().into()),
-                BorderColor::from(UiTheme::panel_border()),
-            ))
-            .with_children(|track| {
-                track.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        width: Val::Percent(0.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(UiTheme::muted_gold().into()),
-                    PlaybackPlayer0CastFill,
-                ));
-            });
-            col.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    width: Val::Percent(100.0),
-                    height: Val::Px(5.0),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(UiTheme::void_black().into()),
-                BorderColor::from(UiTheme::panel_border()),
-            ))
-            .with_children(|track| {
-                track.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        width: Val::Percent(0.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.28, 0.32, 0.42).into()),
-                    PlaybackPlayer0CdFill,
-                ));
-            });
-            col.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    width: Val::Percent(100.0),
-                    height: Val::Px(4.0),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(UiTheme::void_black().into()),
-                BorderColor::from(UiTheme::panel_border()),
-            ))
-            .with_children(|track| {
-                track.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        width: Val::Percent(0.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.52, 0.38, 0.62).into()),
-                    PlaybackPlayer0SkillGcdFill,
-                ));
-            });
-            col.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    width: Val::Percent(100.0),
-                    height: Val::Px(4.0),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(UiTheme::void_black().into()),
-                BorderColor::from(UiTheme::panel_border()),
-            ))
-            .with_children(|track| {
-                track.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        width: Val::Percent(0.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.34, 0.52, 0.40).into()),
-                    PlaybackPlayer0InstantRechargeFill,
-                ));
-            });
+            spawn_playback_timing_bar(col, UiBarStyle::playback_cast_lead(), PlaybackPlayer0CastFill);
+            spawn_playback_timing_bar(col, UiBarStyle::playback_cd_lead(), PlaybackPlayer0CdFill);
+            spawn_playback_timing_bar(
+                col,
+                UiBarStyle::playback_skill_gcd_lead(),
+                PlaybackPlayer0SkillGcdFill,
+            );
+            spawn_playback_timing_bar(
+                col,
+                UiBarStyle::playback_instant_recharge_lead(),
+                PlaybackPlayer0InstantRechargeFill,
+            );
         });
 }
 
 pub(super) fn playback_cast_cd_stack_ally(parent: &mut ChildSpawnerCommands<'_>) {
-    let tone = Color::srgb(0.38, 0.72, 0.92);
     parent
         .spawn(Node {
             box_sizing: BoxSizing::BorderBox,
@@ -183,98 +81,18 @@ pub(super) fn playback_cast_cd_stack_ally(parent: &mut ChildSpawnerCommands<'_>)
             ..default()
         })
         .with_children(|col| {
-            col.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    width: Val::Percent(100.0),
-                    height: Val::Px(5.0),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(UiTheme::void_black().into()),
-                BorderColor::from(UiTheme::panel_border()),
-            ))
-            .with_children(|track| {
-                track.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        width: Val::Percent(0.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(tone.into()),
-                    PlaybackPlayer1CastFill,
-                ));
-            });
-            col.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    width: Val::Percent(100.0),
-                    height: Val::Px(5.0),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(UiTheme::void_black().into()),
-                BorderColor::from(UiTheme::panel_border()),
-            ))
-            .with_children(|track| {
-                track.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        width: Val::Percent(0.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.22, 0.36, 0.48).into()),
-                    PlaybackPlayer1CdFill,
-                ));
-            });
-            col.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    width: Val::Percent(100.0),
-                    height: Val::Px(4.0),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(UiTheme::void_black().into()),
-                BorderColor::from(UiTheme::panel_border()),
-            ))
-            .with_children(|track| {
-                track.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        width: Val::Percent(0.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.32, 0.48, 0.62).into()),
-                    PlaybackPlayer1SkillGcdFill,
-                ));
-            });
-            col.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    width: Val::Percent(100.0),
-                    height: Val::Px(4.0),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(UiTheme::void_black().into()),
-                BorderColor::from(UiTheme::panel_border()),
-            ))
-            .with_children(|track| {
-                track.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        width: Val::Percent(0.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.28, 0.55, 0.45).into()),
-                    PlaybackPlayer1InstantRechargeFill,
-                ));
-            });
+            spawn_playback_timing_bar(col, UiBarStyle::playback_cast_ally(), PlaybackPlayer1CastFill);
+            spawn_playback_timing_bar(col, UiBarStyle::playback_cd_ally(), PlaybackPlayer1CdFill);
+            spawn_playback_timing_bar(
+                col,
+                UiBarStyle::playback_skill_gcd_ally(),
+                PlaybackPlayer1SkillGcdFill,
+            );
+            spawn_playback_timing_bar(
+                col,
+                UiBarStyle::playback_instant_recharge_ally(),
+                PlaybackPlayer1InstantRechargeFill,
+            );
         });
 }
 
@@ -288,52 +106,12 @@ pub(super) fn playback_cast_cd_stack_foe_alt(parent: &mut ChildSpawnerCommands<'
             ..default()
         })
         .with_children(|col| {
-            col.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    width: Val::Percent(100.0),
-                    height: Val::Px(4.0),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(UiTheme::void_black().into()),
-                BorderColor::from(UiTheme::panel_border()),
-            ))
-            .with_children(|track| {
-                track.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        width: Val::Percent(0.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(UiTheme::body_dim().mix(&UiTheme::danger(), 0.35).into()),
-                    PlaybackFoeAltCastFill,
-                ));
-            });
-            col.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    width: Val::Percent(100.0),
-                    height: Val::Px(4.0),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(UiTheme::void_black().into()),
-                BorderColor::from(UiTheme::panel_border()),
-            ))
-            .with_children(|track| {
-                track.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        width: Val::Percent(0.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(UiTheme::stone_highlight().into()),
-                    PlaybackFoeAltCdFill,
-                ));
-            });
+            spawn_playback_timing_bar(
+                col,
+                UiBarStyle::playback_cast_foe_alt(),
+                PlaybackFoeAltCastFill,
+            );
+            spawn_playback_timing_bar(col, UiBarStyle::playback_cd_foe_alt(), PlaybackFoeAltCdFill);
         });
 }
 
@@ -347,51 +125,7 @@ pub(super) fn playback_cast_cd_stack_foe(parent: &mut ChildSpawnerCommands<'_>) 
             ..default()
         })
         .with_children(|col| {
-            col.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    width: Val::Percent(100.0),
-                    height: Val::Px(5.0),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(UiTheme::void_black().into()),
-                BorderColor::from(UiTheme::panel_border()),
-            ))
-            .with_children(|track| {
-                track.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        width: Val::Percent(0.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(UiTheme::danger().mix(&Color::WHITE, 0.25).into()),
-                    PlaybackFoeCastFill,
-                ));
-            });
-            col.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    width: Val::Percent(100.0),
-                    height: Val::Px(5.0),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(UiTheme::void_black().into()),
-                BorderColor::from(UiTheme::panel_border()),
-            ))
-            .with_children(|track| {
-                track.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        width: Val::Percent(0.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.35, 0.22, 0.22).into()),
-                    PlaybackFoeCdFill,
-                ));
-            });
+            spawn_playback_timing_bar(col, UiBarStyle::playback_cast_foe(), PlaybackFoeCastFill);
+            spawn_playback_timing_bar(col, UiBarStyle::playback_cd_foe(), PlaybackFoeCdFill);
         });
 }
