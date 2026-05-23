@@ -15,6 +15,7 @@ All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **
 - **Phase 7:** Summary rewards — `reward_card` (72px icon, rarity glow, NEW badge); dungeon summary column outcome → treasure row → loot grid + recessed chronicle; rewards modal uses `spawn_modal_shell` framing.
 - **Phase 8:** Combat theater — `UiBarStyle` playback presets; enemy/timing bars unified on `spawn_horizontal_bar`; 40px combat `skill_bar` under theater portraits (overlays hidden, hooks reserved).
 - **Phase 9:** Motion hooks — focused slot gold glow; debounced inspect fade (150ms alpha); theater skill GCD overlay stub wired from playback frames.
+- **Phase 10:** Skill shop — `spawn_modal_shell` framing; icon catalogue grid (buildcraft library pattern); fixed inspect strip for purchase detail; `spawn_button` close footer.
 
 ### Party buildcraft sheet (Phase 1)
 

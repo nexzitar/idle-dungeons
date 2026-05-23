@@ -4,21 +4,37 @@ use bevy::prelude::*;
 use bevy::text::{TextColor, TextFont};
 use bevy::ui::FocusPolicy;
 
-use crate::domain::skills::{skill_definition, skill_shop_price_gold, SkillId, SkillKind};
-use crate::ui::components::{
-    SkillShopBackdrop, SkillShopBuyButton, SkillShopCloseButton, SkillShopRoot, UiButtonPalette,
-    UiScrollContent, UiScrollRegion, UiScrollState,
-};
+use crate::domain::skills::{skill_shop_price_gold, SkillId};
+use crate::ui::assets::UiPlaceholderImages;
+use crate::ui::components::{SkillShopBackdrop, SkillShopBuyButton, SkillShopCloseButton, SkillShopRoot};
 use crate::ui::inspect::{InspectHint, InspectRegion, InspectRegionScope, SkillShopInspect};
+use crate::ui::interaction::UiClickAction;
 use crate::ui::primitives::inspect_panel::spawn_inspect_panel_compact;
-use crate::ui::theme::{caption_text, headline_text, section_title, UiTheme};
+use crate::ui::primitives::modal::{spawn_modal_shell_with_handles, ModalShellConfig};
+use crate::ui::primitives::panel::{spawn_mounted_panel, MountedPanelConfig};
+use crate::ui::primitives::scroll::spawn_scroll_viewport;
+use crate::ui::primitives::section::spawn_framed_section_header;
+use crate::ui::primitives::skill_icon::{spawn_skill_icon, SkillIconConfig};
+use crate::ui::primitives::{spawn_button, UiButtonConfig, UiButtonVariant};
+use crate::ui::skill_presentation::accent_for_skill;
+use crate::ui::theme::{caption_text, headline_text, UiDensity, UiTheme};
+
+const SHOP_MODAL_MARGIN_X: f32 = 28.0;
+const SHOP_MODAL_MARGIN_Y: f32 = 44.0;
+const SHOP_MODAL_W: f32 = 520.0;
+const SHOP_CATALOG_H: f32 = 280.0;
 
 pub fn spawn_skill_shop_modal(
     parent: &mut ChildSpawnerCommands<'_>,
     unlocked: &[SkillId],
     gold: u32,
+    ph: &UiPlaceholderImages,
 ) {
     let unlocked_set: std::collections::HashSet<SkillId> = unlocked.iter().copied().collect();
+    let density = UiDensity::Camp;
+    let icon_px = density.icon_library_px();
+    let grid_gap = density.gutter_grid();
+
     parent
         .spawn((
             Node {
@@ -34,229 +50,197 @@ pub fn spawn_skill_shop_modal(
         ))
         .insert(FocusPolicy::Block)
         .with_children(|layer| {
-            let backdrop_pal = UiButtonPalette {
-                idle_bg: Color::srgba(0.02, 0.02, 0.04, 0.58),
-                hover_bg: Color::srgba(0.04, 0.04, 0.06, 0.65),
-                pressed_bg: Color::srgba(0.06, 0.06, 0.08, 0.72),
-                idle_border: Color::NONE,
-                hover_border: Color::NONE,
-                pressed_border: Color::NONE,
-            };
-            layer.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    position_type: PositionType::Absolute,
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(100.0),
-                    left: Val::Px(0.0),
-                    top: Val::Px(0.0),
-                    ..default()
+            let shell = spawn_modal_shell_with_handles(
+                layer,
+                ModalShellConfig {
+                    backdrop_clicks_close: true,
                 },
-                Button,
-                BackgroundColor(backdrop_pal.idle_bg.into()),
-                BorderColor::from(backdrop_pal.idle_border),
-                SkillShopBackdrop,
-                crate::ui::interaction::UiClickAction::CloseSkillShop,
-                backdrop_pal,
-                InspectHint("Click outside to close."),
-            ));
-            layer
-                .spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        position_type: PositionType::Absolute,
-                        left: Val::Percent(50.0),
-                        top: Val::Percent(45.0),
-                        margin: UiRect {
-                            left: Val::Px(-260.0),
-                            top: Val::Px(-220.0),
-                            right: Val::Auto,
-                            bottom: Val::Auto,
-                        },
-                        width: Val::Px(520.0),
-                        max_height: Val::Percent(88.0),
-                        padding: UiRect::all(Val::Px(UiTheme::PAD_ROOT)),
-                        flex_direction: FlexDirection::Column,
-                        align_items: AlignItems::Stretch,
-                        row_gap: Val::Px(UiTheme::PANEL_INSET),
-                        border: UiRect::all(Val::Px(2.0)),
-                        ..default()
-                    },
-                    BackgroundColor(UiTheme::panel_bg_deep().into()),
-                    BorderColor::from(UiTheme::ornate_gold()),
-                ))
-                .with_children(|dialog| {
-                    dialog.spawn(headline_text("Skill guild"));
-                    dialog.spawn(caption_text(format!(
-                        "Gold: {} — purchase skills to expand your library.",
-                        gold
-                    )));
-                    dialog.spawn(section_title("CATALOGUE"));
-                    dialog
+                |columns| {
+                    columns
                         .spawn((
                             Node {
                                 box_sizing: BoxSizing::BorderBox,
                                 width: Val::Percent(100.0),
-                                height: Val::Px(280.0),
-                                flex_shrink: 0.0,
-                                position_type: PositionType::Relative,
-                                flex_direction: FlexDirection::Column,
-                                overflow: Overflow::clip_y(),
-                                border: UiRect::all(Val::Px(1.0)),
+                                height: Val::Percent(100.0),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                padding: UiRect::axes(
+                                    Val::Px(SHOP_MODAL_MARGIN_X),
+                                    Val::Px(SHOP_MODAL_MARGIN_Y),
+                                ),
                                 ..default()
                             },
-                            BackgroundColor(UiTheme::panel_bg().into()),
-                            BorderColor::from(UiTheme::panel_border_inner()),
                             FocusPolicy::Pass,
-                            bevy::ui::RelativeCursorPosition::default(),
-                            UiScrollState::default(),
-                            UiScrollRegion,
                         ))
-                        .with_children(|viewport| {
-                            viewport
+                        .with_children(|center| {
+                            center
                                 .spawn((
                                     Node {
                                         box_sizing: BoxSizing::BorderBox,
-                                        position_type: PositionType::Absolute,
-                                        left: Val::Px(0.0),
-                                        right: Val::Px(0.0),
-                                        top: Val::Px(0.0),
-                                        padding: UiRect::all(Val::Px(UiTheme::PANEL_INSET_SM)),
+                                        width: Val::Px(SHOP_MODAL_W),
+                                        max_height: Val::Percent(88.0),
+                                        padding: UiRect::all(Val::Px(UiTheme::PAD_ROOT)),
                                         flex_direction: FlexDirection::Column,
                                         align_items: AlignItems::Stretch,
-                                        row_gap: Val::Px(6.0),
+                                        row_gap: Val::Px(UiTheme::PANEL_INSET),
+                                        border: UiRect::all(Val::Px(2.0)),
+                                        overflow: Overflow::clip_y(),
                                         ..default()
                                     },
-                                    UiScrollContent,
+                                    BackgroundColor(UiTheme::panel_bg_deep()),
+                                    BorderColor::from(UiTheme::ornate_gold()),
                                 ))
-                                .with_children(|inner| {
-                                    let mut any = false;
-                                    for &id in SkillId::ALL {
-                                        if unlocked_set.contains(&id) {
-                                            continue;
-                                        }
-                                        let Some(price) = skill_shop_price_gold(id) else {
-                                            continue;
-                                        };
-                                        any = true;
-                                        spawn_buy_row(inner, id, price, gold);
-                                    }
-                                    if !any {
-                                        inner.spawn(caption_text(
-                                            "Every discoverable skill is in your book.",
-                                        ));
-                                    }
+                                .with_children(|dialog| {
+                                    dialog.spawn(headline_text("Skill guild"));
+                                    dialog.spawn(caption_text(format!(
+                                        "Gold: {gold} — purchase skills to expand your library."
+                                    )));
+                                    spawn_framed_section_header(dialog, "CATALOGUE");
+                                    dialog
+                                        .spawn(Node {
+                                            box_sizing: BoxSizing::BorderBox,
+                                            width: Val::Percent(100.0),
+                                            height: Val::Px(SHOP_CATALOG_H),
+                                            min_height: Val::Px(SHOP_CATALOG_H),
+                                            flex_shrink: 0.0,
+                                            flex_direction: FlexDirection::Column,
+                                            ..default()
+                                        })
+                                        .with_children(|holder| {
+                                            spawn_mounted_panel(
+                                                holder,
+                                                MountedPanelConfig::recessed_flex(),
+                                                |frame| {
+                                                    spawn_scroll_viewport(frame, |scroll| {
+                                                        scroll
+                                                            .spawn(Node {
+                                                                box_sizing: BoxSizing::BorderBox,
+                                                                width: Val::Percent(100.0),
+                                                                flex_direction: FlexDirection::Row,
+                                                                flex_wrap: FlexWrap::Wrap,
+                                                                column_gap: Val::Px(grid_gap),
+                                                                row_gap: Val::Px(grid_gap),
+                                                                ..default()
+                                                            })
+                                                            .with_children(|grid| {
+                                                                let mut any = false;
+                                                                for &id in SkillId::ALL {
+                                                                    if unlocked_set.contains(&id) {
+                                                                        continue;
+                                                                    }
+                                                                    let Some(price) =
+                                                                        skill_shop_price_gold(id)
+                                                                    else {
+                                                                        continue;
+                                                                    };
+                                                                    any = true;
+                                                                    spawn_catalog_skill(
+                                                                        grid,
+                                                                        id,
+                                                                        price,
+                                                                        gold,
+                                                                        ph,
+                                                                        icon_px,
+                                                                    );
+                                                                }
+                                                                if !any {
+                                                                    grid.spawn(caption_text(
+                                                                        "Every discoverable skill is in your book.",
+                                                                    ));
+                                                                }
+                                                            });
+                                                    });
+                                                },
+                                            );
+                                        });
+                                    let inspect = spawn_inspect_panel_compact(
+                                        dialog,
+                                        InspectRegionScope::SkillShop,
+                                    );
+                                    dialog.commands_mut().entity(inspect).insert((
+                                        InspectRegion,
+                                        InspectRegionScope::SkillShop,
+                                    ));
+                                    let close_ent = spawn_button(
+                                        dialog,
+                                        UiButtonConfig {
+                                            label: "Close",
+                                            variant: UiButtonVariant::PanelOutlined,
+                                            width: Val::Percent(100.0),
+                                            height: Val::Px(40.0),
+                                            font_size: UiTheme::FONT_BODY,
+                                            text_color: UiTheme::muted_cream(),
+                                            flex_shrink: 0.0,
+                                        },
+                                    );
+                                    dialog.commands_mut().entity(close_ent).insert((
+                                        SkillShopCloseButton,
+                                        UiClickAction::CloseSkillShop,
+                                        InspectHint("Close skill shop."),
+                                    ));
                                 });
                         });
-                    let inspect =
-                        spawn_inspect_panel_compact(dialog, InspectRegionScope::SkillShop);
-                    dialog.commands_mut().entity(inspect).insert((
-                        InspectRegion,
-                        InspectRegionScope::SkillShop,
-                    ));
-                    let close_pal = UiButtonPalette::panel_outlined();
-                    dialog
-                        .spawn((
-                            Node {
-                                box_sizing: BoxSizing::BorderBox,
-                                width: Val::Percent(100.0),
-                                min_height: Val::Px(40.0),
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                border: UiRect::all(Val::Px(1.0)),
-                                ..default()
-                            },
-                            Button,
-                            BackgroundColor(close_pal.idle_bg.into()),
-                            BorderColor::from(close_pal.idle_border),
-                            SkillShopCloseButton,
-                            crate::ui::interaction::UiClickAction::CloseSkillShop,
-                            close_pal,
-                            InspectHint("Close skill shop."),
-                        ))
-                        .with_children(|b| {
-                            b.spawn((
-                                Text::new("Close"),
-                                TextFont::from_font_size(UiTheme::FONT_BODY),
-                                TextColor(UiTheme::muted_cream()),
-                            ));
-                        });
-                });
+                },
+            );
+            layer.commands_mut().entity(shell.backdrop).insert((
+                SkillShopBackdrop,
+                UiClickAction::CloseSkillShop,
+                InspectHint("Click outside to close."),
+            ));
         });
 }
 
-fn spawn_buy_row(inner: &mut ChildSpawnerCommands<'_>, id: SkillId, price: u32, gold: u32) {
-    let d = skill_definition(id);
-    let kind_str = match d.kind {
-        SkillKind::Active => "Active",
-        SkillKind::Passive => "Passive",
-    };
+fn spawn_catalog_skill(
+    parent: &mut ChildSpawnerCommands<'_>,
+    id: SkillId,
+    price: u32,
+    gold: u32,
+    ph: &UiPlaceholderImages,
+    icon_px: f32,
+) {
     let can_afford = gold >= price;
-    let label = format!(
-        "Buy {} · {} · {} gold {}",
-        d.name,
-        kind_str,
-        price,
-        if can_afford { "" } else { "(need gold)" }
-    );
+    let accent = accent_for_skill(id);
 
-    let row_bg = UiTheme::panel_bg_deep();
+    parent
+        .spawn(Node {
+            box_sizing: BoxSizing::BorderBox,
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            row_gap: Val::Px(4.0),
+            width: Val::Px(icon_px),
+            ..default()
+        })
+        .with_children(|cell| {
+            let icon_ent = spawn_skill_icon(
+                cell,
+                SkillIconConfig::filled(id, icon_px),
+                ph,
+            );
+            cell.commands_mut().entity(icon_ent).insert(SkillShopInspect(id));
 
-    if !can_afford {
-        let p = UiButtonPalette::panel_outlined();
-        inner
-            .spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    width: Val::Percent(100.0),
-                    min_height: Val::Px(44.0),
-                    justify_content: JustifyContent::FlexStart,
-                    align_items: AlignItems::Center,
-                    padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(row_bg.into()),
-                BorderColor::from(p.idle_border),
-                Interaction::default(),
-                SkillShopInspect(id),
-            ))
-            .with_children(|b| {
-                b.spawn((
-                    Text::new(label),
-                    TextFont::from_font_size(UiTheme::FONT_COMPACT),
-                    TextColor(UiTheme::body_dim()),
+            if can_afford {
+                cell.commands_mut().entity(icon_ent).insert((
+                    Button,
+                    SkillShopBuyButton { skill: id },
+                    UiClickAction::BuySkillUnlock,
+                    BorderColor::from(accent.mix(&UiTheme::void_black(), 0.25)),
+                    InspectHint("Click to buy — added to your library permanently."),
                 ));
-            });
-        return;
-    }
+            } else {
+                cell.commands_mut().entity(icon_ent).insert((
+                    Interaction::default(),
+                    BorderColor::from(UiTheme::panel_border_inner()),
+                ));
+            }
 
-    let p = UiButtonPalette::primary_cta();
-    inner
-        .spawn((
-            Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Percent(100.0),
-                min_height: Val::Px(44.0),
-                justify_content: JustifyContent::FlexStart,
-                align_items: AlignItems::Center,
-                padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)),
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
-            Button,
-            BackgroundColor(p.idle_bg.into()),
-            BorderColor::from(p.idle_border),
-            SkillShopBuyButton { skill: id },
-            crate::ui::interaction::UiClickAction::BuySkillUnlock,
-            p,
-            SkillShopInspect(id),
-        ))
-        .with_children(|b| {
-            b.spawn((
-                Text::new(label),
-                TextFont::from_font_size(UiTheme::FONT_COMPACT),
-                TextColor(UiTheme::body()),
+            cell.spawn((
+                Text::new(format!("{price}g")),
+                TextFont::from_font_size(UiTheme::FONT_MICRO),
+                TextColor(if can_afford {
+                    UiTheme::muted_gold()
+                } else {
+                    UiTheme::body_dim()
+                }),
             ));
         });
 }
