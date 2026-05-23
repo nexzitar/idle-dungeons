@@ -122,6 +122,7 @@ pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>) {
             BackgroundColor(backdrop_pal.idle_bg.into()),
             BorderColor::from(backdrop_pal.idle_border),
                 SettingsModalBackdrop,
+                crate::ui::interaction::UiClickAction::CloseSettings,
                 backdrop_pal,
                 UiTooltip::txt("Click the dimmed backdrop to close settings (same as Close)."),
             ));
@@ -171,6 +172,7 @@ pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>) {
             BackgroundColor(reset_pal.idle_bg.into()),
             BorderColor::from(reset_pal.idle_border),
                             ResetProgressButton,
+                            crate::ui::interaction::UiClickAction::ResetProgress,
                             reset_pal,
                             UiTooltip::txt(
                                 "Permanently wipe local save data—hero, stash, gold, upgrades—and return to a fresh profile.",
@@ -199,6 +201,7 @@ pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>) {
             BackgroundColor(close_pal.idle_bg.into()),
             BorderColor::from(close_pal.idle_border),
                             SettingsModalCloseButton,
+                            crate::ui::interaction::UiClickAction::CloseSettings,
                             close_pal,
                             UiTooltip::txt("Close the settings dialog without applying other changes."),
                         ))
@@ -231,6 +234,7 @@ pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>) {
                                 BackgroundColor(pe_pal.idle_bg.into()),
                                 BorderColor::from(pe_pal.idle_border),
                                 PresentationEditorSettingsToggleButton,
+                                crate::ui::interaction::UiClickAction::EditorToggleLayout,
                                 pe_pal,
                                 UiTooltip::txt(
                                     "Open the fullscreen presentation editor overlay (same as layout mode).",
@@ -308,6 +312,7 @@ fn spawn_playback_speed_controls(parent: &mut ChildSpawnerCommands<'_>, initial_
                     BackgroundColor(p_dec.idle_bg.into()),
                     BorderColor::from(p_dec.idle_border),
                     PlaybackSpeedDecButton,
+                    crate::ui::interaction::UiClickAction::PlaybackSpeedDec,
                     p_dec,
                     UiTooltip::txt("Slower delve playback (steps down to 1×)."),
                 ))
@@ -338,6 +343,7 @@ fn spawn_playback_speed_controls(parent: &mut ChildSpawnerCommands<'_>, initial_
                     BackgroundColor(p_inc.idle_bg.into()),
                     BorderColor::from(p_inc.idle_border),
                     PlaybackSpeedIncButton,
+                    crate::ui::interaction::UiClickAction::PlaybackSpeedInc,
                     p_inc,
                     UiTooltip::txt("Faster delve playback (steps up to 10×)."),
                 ))
@@ -459,6 +465,7 @@ pub fn spawn_mockup_header(
             BackgroundColor(p.idle_bg.into()),
             BorderColor::from(p.idle_border),
                         SettingsButton,
+                        crate::ui::interaction::UiClickAction::OpenSettings,
                         p,
                         UiTooltip::txt(
                             "Open settings: reset all progress or review this note.",
@@ -493,6 +500,7 @@ pub fn title_settings_menu_button(parent: &mut ChildSpawnerCommands<'_>) {
             BackgroundColor(p.idle_bg.into()),
             BorderColor::from(p.idle_border),
             SettingsButton,
+            crate::ui::interaction::UiClickAction::OpenSettings,
             p,
             UiTooltip::txt("Open settings: reset all progress and saves."),
         ))
@@ -664,6 +672,7 @@ fn spawn_hero_name_row(parent: &mut ChildSpawnerCommands<'_>, slot: u8, allow_re
                     BackgroundColor(p.idle_bg.into()),
                     BorderColor::from(p.idle_border),
                     HeroNameEditButton { slot },
+                    crate::ui::interaction::UiClickAction::HeroNameEdit,
                     p,
                     UiTooltip::txt(
                         "Rename this hero: type, Enter to save, Esc to cancel.".to_string(),
@@ -863,6 +872,7 @@ fn skill_slot_row(
             BackgroundColor(p.idle_bg.into()),
             BorderColor::from(p.idle_border),
                         SkillSlotButton { slot: i, kind: sheet },
+                        crate::ui::interaction::UiClickAction::OpenSkillBook,
                         p,
                         UiTooltip::txt(tip),
                     ))

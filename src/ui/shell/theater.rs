@@ -426,6 +426,7 @@ pub fn spawn_run_playback_middle_column(
                 BackgroundColor(log_pal.idle_bg.into()),
                 BorderColor::from(log_pal.idle_border),
                 ToggleCombatLogButton,
+                crate::ui::interaction::UiClickAction::ToggleCombatLog,
                 log_pal,
                 UiTooltip::txt("Show or hide the text combat log."),
             ))

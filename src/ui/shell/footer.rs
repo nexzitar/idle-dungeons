@@ -49,6 +49,7 @@ pub fn spawn_stash_filters_and_sort_row(
             BackgroundColor(p.idle_bg.into()),
             BorderColor::from(p.idle_border),
                 StashSortCycleButton,
+                UiClickAction::CycleStashSort,
                 p,
                 UiTooltip::txt(
                     "Cycle stash sort. Newest-first follows save-file order (last appended = newest). Rarity: Rare → Uncommon → Common, then name A–Z, then item id.",
@@ -194,6 +195,7 @@ pub fn spawn_summary_rewards_modal(
             BackgroundColor(p.idle_bg.into()),
             BorderColor::from(p.idle_border),
                             AcceptRewardsButton,
+                            UiClickAction::AcceptRewards,
                             p,
                             UiTooltip::txt(
                                 "Add this run's gold, salvage, and loot to your profile and return to briefing.",
@@ -315,6 +317,7 @@ pub fn spawn_mockup_footer(parent: &mut ChildSpawnerCommands<'_>, mode: FooterMo
             BackgroundColor(p.idle_bg.into()),
             BorderColor::from(p.idle_border),
                         SkipPlaybackButton,
+                        UiClickAction::SkipPlayback,
                         p,
                         UiTooltip::txt(
                             "Jump straight to the run summary without watching the rest of playback.",
@@ -352,6 +355,7 @@ fn footer_gear_hub_button(parent: &mut ChildSpawnerCommands<'_>) {
             BackgroundColor(p.idle_bg.into()),
             BorderColor::from(p.idle_border),
             GearHubOpenButton,
+            UiClickAction::OpenGearHub,
             p,
             UiTooltip::txt("Open the gear hub (loadout and stash)."),
         ))
@@ -382,6 +386,7 @@ fn footer_skill_shop_button(parent: &mut ChildSpawnerCommands<'_>) {
             BackgroundColor(p.idle_bg.into()),
             BorderColor::from(p.idle_border),
             SkillShopOpenButton,
+            UiClickAction::OpenSkillShop,
             p,
             UiTooltip::txt("Spend gold to add skills to your library."),
         ))

@@ -61,6 +61,7 @@ pub fn spawn_skill_book_modal(
             BackgroundColor(backdrop_pal.idle_bg.into()),
             BorderColor::from(backdrop_pal.idle_border),
                 SkillBookBackdrop,
+                crate::ui::interaction::UiClickAction::CloseSkillBook,
                 backdrop_pal,
                 UiTooltip::txt("Click outside to close the skill book."),
             ));
@@ -193,6 +194,7 @@ pub fn spawn_skill_book_modal(
             BackgroundColor(close_pal.idle_bg.into()),
             BorderColor::from(close_pal.idle_border),
                             SkillBookCloseButton,
+                            crate::ui::interaction::UiClickAction::CloseSkillBook,
                             close_pal,
                             UiTooltip::txt("Close without changing the slot."),
                         ))
@@ -247,6 +249,7 @@ fn spawn_pick_row(
                 skill,
                 kind: sheet,
             },
+            crate::ui::interaction::UiClickAction::SkillBookPick,
             p,
             UiTooltip::txt(tip.to_string()),
         ))

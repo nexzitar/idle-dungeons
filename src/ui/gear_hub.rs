@@ -143,6 +143,7 @@ pub fn spawn_gear_hub_modal(
                                     );
                                     stash_panel.commands_mut().entity(close_ent).insert((
                                         GearHubCloseButton,
+                                        crate::ui::interaction::UiClickAction::CloseGearHub,
                                         UiTooltip::txt("Close both gear panels."),
                                     ));
                                 });
@@ -151,6 +152,7 @@ pub fn spawn_gear_hub_modal(
             );
             layer.commands_mut().entity(shell.backdrop).insert((
                 GearHubBackdrop,
+                crate::ui::interaction::UiClickAction::CloseGearHub,
                 UiTooltip::txt("Click outside empty space to close the gear hub."),
             ));
         });

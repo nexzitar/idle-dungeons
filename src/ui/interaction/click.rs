@@ -193,6 +193,20 @@ pub(crate) fn ui_click_release_confirms(interaction: Interaction) -> bool {
     )
 }
 
+pub(crate) fn resolve_clicked_action(
+    mouse: &ButtonInput<MouseButton>,
+    press: &UiClickPress,
+    clicked: &Query<(Entity, &Interaction, &crate::ui::interaction::UiClickAction)>,
+) -> Option<crate::ui::interaction::UiClickAction> {
+    if !mouse.just_released(MouseButton::Left) {
+        return None;
+    }
+    let target = press.0?;
+    clicked.iter().find_map(|(entity, interaction, action)| {
+        (entity == target && ui_click_release_confirms(*interaction)).then_some(*action)
+    })
+}
+
 pub(crate) fn clear_ui_click_after_release(
     mouse: Res<ButtonInput<MouseButton>>,
     mut press: ResMut<UiClickPress>,

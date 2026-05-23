@@ -196,24 +196,28 @@ pub fn spawn_presentation_editor_overlay(parent: &mut ChildSpawnerCommands<'_>) 
                     foot,
                     "Reset to center",
                     PresentationEditorResetCenterButton,
+                    crate::ui::interaction::UiClickAction::EditorResetCenter,
                     "Selected element: zero offsets on its anchor, scale 1, rotation 0.",
                 );
                 spawn_footer_button(
                     foot,
                     "Reset all",
                     PresentationEditorResetAllButton,
+                    crate::ui::interaction::UiClickAction::EditorResetAll,
                     "All camp elements: snap fireplace, lead, and ally back to anchor center.",
                 );
                 spawn_footer_button(
                     foot,
                     "Save to disk",
                     PresentationEditorSaveButton,
+                    crate::ui::interaction::UiClickAction::EditorSave,
                     "Write title scene JSON (same as debug Ctrl+S).",
                 );
                 spawn_footer_button(
                     foot,
                     "Reload from disk",
                     PresentationEditorReloadButton,
+                    crate::ui::interaction::UiClickAction::EditorReload,
                     "Reload title scene JSON (same as debug F5).",
                 );
             });
@@ -279,6 +283,7 @@ fn hierarchy_row(parent: &mut ChildSpawnerCommands<'_>, label: &str, id: &'stati
             BorderColor::from(pal.idle_border),
             pal,
             PresentationEditorHierarchyButton(id.into()),
+            crate::ui::interaction::UiClickAction::EditorHierarchySelect,
             UiTooltip::txt("Select this presentation element for editing."),
         ))
         .with_children(|b| {
@@ -409,6 +414,7 @@ fn spawn_footer_button<M: Component>(
     parent: &mut ChildSpawnerCommands<'_>,
     label: &str,
     marker: M,
+    action: crate::ui::interaction::UiClickAction,
     tip: &'static str,
 ) {
     let pal = UiButtonPalette::panel_outlined();
@@ -428,6 +434,7 @@ fn spawn_footer_button<M: Component>(
             BackgroundColor(pal.idle_bg.into()),
             BorderColor::from(pal.idle_border),
             marker,
+            action,
             pal,
             UiTooltip::txt(tip),
         ))
@@ -498,6 +505,7 @@ fn tune_row(
                         field,
                         positive: false,
                     },
+                    crate::ui::interaction::UiClickAction::EditorTuneDelta,
                     UiTooltip::txt("Decrease (Shift = 10× step)."),
                 ))
                 .with_children(|b| {
@@ -523,6 +531,7 @@ fn tune_row(
                     BorderColor::from(val_pal.idle_border),
                     val_pal,
                     PresentationEditorTuneValueButton(field),
+                    crate::ui::interaction::UiClickAction::EditorTuneValue,
                     UiTooltip::txt("Click to type a value. Enter applies, Esc cancels. Hold Shift with −/+ for 10× steps."),
                 ))
                 .with_children(|b| {

@@ -79,7 +79,7 @@ use bevy::transform::prelude::TransformSystems;
 use bevy::ui::UiSystems;
 
 #[derive(Resource, Default)]
-struct GearHubKeepOpen(pub bool);
+pub(crate) struct GearHubKeepOpen(pub bool);
 
 #[derive(Resource, Default)]
 pub(crate) struct PlaybackCombatLogVisible(pub bool);
@@ -162,39 +162,17 @@ impl Plugin for UiPlugin {
                             interaction::click::capture_ui_pressed_button_entities,
                             interaction::click::capture_ui_click_start,
                             interaction::dispatch::dispatch_ui_clicks,
-                            apply_ui_button_palettes,
-                            handle_skip_playback_button.run_if(in_state(GameState::Running)),
-                            send_reset_progress_requests,
-                            fulfill_reset_progress,
-                            open_settings_modal,
-                            close_settings_modal,
-                            handle_playback_speed_arrows,
                         )
                             .chain(),
                         (
-                            close_skill_book_modal,
-                            close_gear_hub_modal,
-                            close_skill_shop_modal,
-                            handle_skill_book_pick,
-                            handle_stash_sort_button,
-                            handle_skill_slot_buttons,
-                            request_gear_hub_open,
-                            request_skill_shop_open,
-                            handle_open_skill_book,
+                            apply_ui_button_palettes,
+                            fulfill_reset_progress,
+                            open_skill_book_from_events,
                             open_gear_hub_from_events,
                             open_skill_shop_from_events,
-                            handle_skill_shop_purchase,
-                            handle_hero_name_edit_button,
                             hero_rename_keyboard,
-                        )
-                            .chain(),
-                        (
-                            handle_accept_button.run_if(in_state(GameState::Summary)),
-                            handle_equip_buttons.run_if(in_build_or_summary),
-                            handle_salvage_buttons.run_if(in_build_or_summary),
                             interaction::click::clear_ui_click_after_release,
-                        )
-                            .chain(),
+                        ),
                     )
                         .chain(),
                     sync_top_bar,
@@ -222,7 +200,6 @@ impl Plugin for UiPlugin {
                     sync_playback_theater_slot_visibility
                         .run_if(in_state(GameState::Running))
                         .after(sync_run_playback_ui),
-                    handle_toggle_combat_log_button.run_if(in_state(GameState::Running)),
                     sync_playback_combat_log_panel_visibility.run_if(in_state(GameState::Running)),
                     sync_combat_log_toggle_label.run_if(in_state(GameState::Running)),
                     spawn_playback_floating_combat_text.run_if(in_state(GameState::Running)),
@@ -250,6 +227,12 @@ impl Plugin for UiPlugin {
         #[cfg(debug_assertions)]
         app.add_systems(
             Update,
+            interaction::dispatch::dispatch_editor_ui_clicks
+                .after(interaction::dispatch::dispatch_ui_clicks),
+        );
+        #[cfg(debug_assertions)]
+        app.add_systems(
+            Update,
             crate::ui::scene_tune::title_scene_tune_hotkeys
                 .run_if(in_state(GameState::Title))
                 .after(apply_ui_button_palettes)
@@ -259,8 +242,6 @@ impl Plugin for UiPlugin {
         app.add_systems(
             Update,
             (
-                handle_presentation_editor_overlay_buttons,
-                handle_presentation_editor_settings_toggle,
                 presentation_editor_tune_field_keyboard,
                 crate::presentation::editor::toggle_presentation_editor_visibility,
                 crate::presentation::editor::presentation_editor_pick,
@@ -380,7 +361,7 @@ fn spawn_running_screen(
     spawn_running_screen_root(&mut commands, &profile, speed.multiplier(), &ph);
 }
 
-fn spawn_running_screen_root(
+pub(crate) fn spawn_running_screen_root(
     commands: &mut Commands,
     profile: &ProfileState,
     speed_mult: f32,
@@ -445,7 +426,7 @@ fn spawn_build_screen(
     spawn_build_screen_root(&mut commands, &profile, speed.multiplier(), &ph);
 }
 
-fn spawn_build_screen_root(
+pub(crate) fn spawn_build_screen_root(
     commands: &mut Commands,
     profile: &ProfileState,
     speed_mult: f32,
@@ -516,7 +497,7 @@ fn spawn_summary_screen(
     spawn_summary_screen_root(&mut commands, &profile, &summary, speed.multiplier(), &ph);
 }
 
-fn spawn_summary_screen_root(
+pub(crate) fn spawn_summary_screen_root(
     commands: &mut Commands,
     profile: &ProfileState,
     summary: &RunSummary,
@@ -580,7 +561,7 @@ fn spawn_summary_screen_root(
 }
 
 /// Re-spawns the gear hub modal after a full UI root rebuild when the player still has it open.
-fn attach_gear_hub_if_kept_open(
+pub(crate) fn attach_gear_hub_if_kept_open(
     commands: &mut Commands,
     root: Entity,
     gear_keep: &GearHubKeepOpen,
@@ -608,94 +589,6 @@ fn attach_gear_hub_if_kept_open(
             ph,
         );
     });
-}
-
-fn handle_stash_sort_button(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    sort_buttons: Query<(Entity, &Interaction), With<StashSortCycleButton>>,
-    mut profile: ResMut<ProfileState>,
-    save_path: Res<ProfileSavePath>,
-    mut commands: Commands,
-    speed: Res<RunSpeedSetting>,
-    latest_summary: Option<Res<LatestRunSummary>>,
-    state: Res<State<GameState>>,
-    build_roots: Query<Entity, With<BuildScreen>>,
-    summary_roots: Query<Entity, With<SummaryScreen>>,
-    running_roots: Query<Entity, With<RunPlaybackScreen>>,
-    ph: Res<UiPlaceholderImages>,
-    mut name_edit: ResMut<HeroNameEditState>,
-    gear_keep: Res<GearHubKeepOpen>,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    for (entity, interaction) in &sort_buttons {
-        if entity != target || !ui_click_release_confirms(*interaction) {
-            continue;
-        }
-        profile.profile.stash_sort = profile.profile.stash_sort.toggle();
-        if let Err(e) = crate::save::save_profile(&save_path.0, &profile.profile) {
-            warn!("failed to save stash sort preference: {e}");
-        }
-
-        match state.get() {
-            GameState::Build => {
-                for e in &build_roots {
-                    commands.entity(e).despawn();
-                }
-                *name_edit = HeroNameEditState::default();
-                let root =
-                    spawn_build_screen_root(&mut commands, &profile, speed.multiplier(), &ph);
-                attach_gear_hub_if_kept_open(
-                    &mut commands,
-                    root,
-                    &*gear_keep,
-                    &profile,
-                    GameState::Build,
-                    latest_summary.as_deref(),
-                    &ph,
-                );
-            }
-            GameState::Summary => {
-                let summary = latest_summary
-                    .as_deref()
-                    .map(|s| s.summary.clone())
-                    .unwrap_or_else(crate::ui::summary_panel::empty_run_summary);
-                for e in &summary_roots {
-                    commands.entity(e).despawn();
-                }
-                *name_edit = HeroNameEditState::default();
-                let root = spawn_summary_screen_root(
-                    &mut commands,
-                    &profile,
-                    &summary,
-                    speed.multiplier(),
-                    &ph,
-                );
-                attach_gear_hub_if_kept_open(
-                    &mut commands,
-                    root,
-                    &*gear_keep,
-                    &profile,
-                    GameState::Summary,
-                    latest_summary.as_deref(),
-                    &ph,
-                );
-            }
-            GameState::Running => {
-                for e in &running_roots {
-                    commands.entity(e).despawn();
-                }
-                spawn_running_screen_root(&mut commands, &profile, speed.multiplier(), &ph);
-            }
-            GameState::Title => {}
-        }
-        break;
-    }
 }
 
 fn refresh_profile_screen_on_profile_change(
@@ -879,6 +772,7 @@ pub(crate) fn spawn_item_card(
                     BackgroundColor(equip_pal.idle_bg),
                     BorderColor::from(equip_pal.idle_border),
                     EquipItemButton { item_id: item.id },
+                    interaction::UiClickAction::EquipItem,
                     equip_pal,
                     UiTooltip::txt(
                         "Equip this item on your hero. It replaces whatever is currently in this gear slot.",
@@ -906,6 +800,7 @@ pub(crate) fn spawn_item_card(
                     BackgroundColor(salvage_pal.idle_bg),
                     BorderColor::from(salvage_pal.idle_border),
                     SalvageItemButton { item_id: item.id },
+                    interaction::UiClickAction::SalvageItem,
                     salvage_pal,
                     UiTooltip::txt(
                         "Salvage this item for currency. The item is removed from your stash permanently.",
@@ -1078,26 +973,6 @@ fn apply_ui_button_palettes(
     }
 }
 
-fn send_reset_progress_requests(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    interactions: Query<(Entity, &Interaction), With<ResetProgressButton>>,
-    mut events: MessageWriter<ResetProgress>,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    for (entity, interaction) in &interactions {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            events.write(ResetProgress);
-            break;
-        }
-    }
-}
-
 fn fulfill_reset_progress(
     mut events: MessageReader<ResetProgress>,
     mut profile: ResMut<ProfileState>,
@@ -1139,170 +1014,9 @@ fn fulfill_reset_progress(
     }
 }
 
-fn open_settings_modal(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    interactions: Query<(Entity, &Interaction), With<SettingsButton>>,
-    roots: Query<Entity, With<UiRoot>>,
-    existing: Query<(), With<SettingsModalRoot>>,
-    mut commands: Commands,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    for (entity, interaction) in &interactions {
-        if entity != target || !ui_click_release_confirms(*interaction) {
-            continue;
-        }
-        if !existing.is_empty() {
-            return;
-        }
-        let Ok(root) = roots.single() else {
-            return;
-        };
-        commands.entity(root).with_children(|parent| {
-            crate::ui::shell::spawn_settings_modal(parent);
-        });
-        break;
-    }
-}
-
 #[cfg(debug_assertions)]
-fn handle_presentation_editor_overlay_buttons(
-    mouse: Res<ButtonInput<MouseButton>>,
-    kb: Res<ButtonInput<KeyCode>>,
-    press: Res<UiClickPress>,
-    mut layout: ResMut<TitleSceneLayout>,
-    mut session: ResMut<PresentationEditorSession>,
-    mut field_edit: ResMut<PresentationEditorFieldEditState>,
-    reset_center: Query<(Entity, &Interaction), With<PresentationEditorResetCenterButton>>,
-    reset_all: Query<(Entity, &Interaction), With<PresentationEditorResetAllButton>>,
-    save: Query<(Entity, &Interaction), With<PresentationEditorSaveButton>>,
-    reload: Query<(Entity, &Interaction), With<PresentationEditorReloadButton>>,
-    hierarchy: Query<(Entity, &Interaction, &PresentationEditorHierarchyButton)>,
-    value_btns: Query<(Entity, &Interaction, &PresentationEditorTuneValueButton)>,
-    deltas: Query<(Entity, &Interaction, &PresentationEditorTuneDeltaButton)>,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-
-    for (entity, interaction, hb) in &hierarchy {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            session.selected_element = Some(hb.0.clone());
-            field_edit.clear();
-            return;
-        }
-    }
-
-    let sel = session
-        .selected_element
-        .as_deref()
-        .unwrap_or(TITLE_ELEMENT_FIREPLACE);
-
-    for (entity, interaction) in &reset_center {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            reset_editor_selection_placement(&mut layout, sel);
-            field_edit.clear();
-            return;
-        }
-    }
-
-    for (entity, interaction) in &reset_all {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            reset_all_title_placements(&mut layout);
-            field_edit.clear();
-            return;
-        }
-    }
-
-    for (entity, interaction) in &save {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            layout.try_save_to_disk();
-            return;
-        }
-    }
-
-    for (entity, interaction) in &reload {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            *layout = TitleSceneLayout::try_load_from_disk();
-            return;
-        }
-    }
-
-    for (entity, interaction, vb) in &value_btns {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            field_edit.begin(vb.0, &layout, sel);
-            return;
-        }
-    }
-
-    let coarse = kb.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
-    for (entity, interaction, delta) in &deltas {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            apply_editor_tune_delta(&mut layout, sel, delta.field, delta.positive, coarse);
-            field_edit.clear();
-            return;
-        }
-    }
-}
-
 #[cfg(debug_assertions)]
-fn handle_presentation_editor_settings_toggle(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    mut session: ResMut<PresentationEditorSession>,
-    buttons: Query<(Entity, &Interaction), With<PresentationEditorSettingsToggleButton>>,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    for (entity, interaction) in &buttons {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            let on = session.layout_mode();
-            session.set_layout_mode(!on);
-            break;
-        }
-    }
-}
-
-fn close_settings_modal(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    backdrop: Query<(Entity, &Interaction), With<SettingsModalBackdrop>>,
-    close_btn: Query<(Entity, &Interaction), With<SettingsModalCloseButton>>,
-    modal: Query<Entity, With<SettingsModalRoot>>,
-    mut commands: Commands,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    let should_close = backdrop
-        .iter()
-        .any(|(e, i)| e == target && ui_click_release_confirms(*i))
-        || close_btn
-            .iter()
-            .any(|(e, i)| e == target && ui_click_release_confirms(*i));
-    if should_close {
-        for entity in &modal {
-            commands.entity(entity).despawn();
-        }
-    }
-}
-
-fn handle_open_skill_book(
+fn open_skill_book_from_events(
     mut events: MessageReader<OpenSkillBook>,
     roots: Query<Entity, With<UiRoot>>,
     existing: Query<(), With<SkillBookRoot>>,
@@ -1321,26 +1035,6 @@ fn handle_open_skill_book(
         commands.entity(root).with_children(|parent| {
             crate::ui::skill_book::spawn_skill_book_modal(parent, ev.slot, ev.kind, &unlocked, &ph);
         });
-    }
-}
-
-fn request_gear_hub_open(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    open_btns: Query<(Entity, &Interaction), With<GearHubOpenButton>>,
-    mut writer: MessageWriter<OpenGearHub>,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    for (entity, interaction) in &open_btns {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            writer.write(OpenGearHub);
-            return;
-        }
     }
 }
 
@@ -1382,55 +1076,6 @@ fn open_gear_hub_from_events(
     }
 }
 
-fn close_gear_hub_modal(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    backdrop: Query<(Entity, &Interaction), With<GearHubBackdrop>>,
-    close_btn: Query<(Entity, &Interaction), With<GearHubCloseButton>>,
-    modal: Query<Entity, With<GearHubRoot>>,
-    mut commands: Commands,
-    mut gear_keep: ResMut<GearHubKeepOpen>,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    let should_close = backdrop
-        .iter()
-        .any(|(e, i)| e == target && ui_click_release_confirms(*i))
-        || close_btn
-            .iter()
-            .any(|(e, i)| e == target && ui_click_release_confirms(*i));
-    if should_close {
-        gear_keep.0 = false;
-        for entity in &modal {
-            commands.entity(entity).despawn();
-        }
-    }
-}
-
-fn request_skill_shop_open(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    open_btns: Query<(Entity, &Interaction), With<SkillShopOpenButton>>,
-    mut writer: MessageWriter<OpenSkillShop>,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    for (entity, interaction) in &open_btns {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            writer.write(OpenSkillShop);
-            return;
-        }
-    }
-}
-
 fn open_skill_shop_from_events(
     mut events: MessageReader<OpenSkillShop>,
     roots: Query<Entity, With<UiRoot>>,
@@ -1454,184 +1099,6 @@ fn open_skill_shop_from_events(
         commands.entity(root).with_children(|parent| {
             crate::ui::skill_shop::spawn_skill_shop_modal(parent, &unlocked, gold);
         });
-    }
-}
-
-fn close_skill_shop_modal(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    backdrop: Query<(Entity, &Interaction), With<SkillShopBackdrop>>,
-    close_btn: Query<(Entity, &Interaction), With<SkillShopCloseButton>>,
-    modal: Query<Entity, With<SkillShopRoot>>,
-    mut commands: Commands,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    let should_close = backdrop
-        .iter()
-        .any(|(e, i)| e == target && ui_click_release_confirms(*i))
-        || close_btn
-            .iter()
-            .any(|(e, i)| e == target && ui_click_release_confirms(*i));
-    if should_close {
-        for entity in &modal {
-            commands.entity(entity).despawn();
-        }
-    }
-}
-
-fn handle_skill_shop_purchase(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    buttons: Query<(Entity, &Interaction, &SkillShopBuyButton)>,
-    mut writer: MessageWriter<BuySkillUnlock>,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    if let Ok((_, interaction, btn)) = buttons.get(target) {
-        if ui_click_release_confirms(*interaction) {
-            writer.write(BuySkillUnlock { skill: btn.skill });
-        }
-    }
-}
-
-fn close_skill_book_modal(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    backdrop: Query<(Entity, &Interaction), With<SkillBookBackdrop>>,
-    close_btn: Query<(Entity, &Interaction), With<SkillBookCloseButton>>,
-    modal: Query<Entity, With<SkillBookRoot>>,
-    mut commands: Commands,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    let should_close = backdrop
-        .iter()
-        .any(|(e, i)| e == target && ui_click_release_confirms(*i))
-        || close_btn
-            .iter()
-            .any(|(e, i)| e == target && ui_click_release_confirms(*i));
-    if should_close {
-        for entity in &modal {
-            commands.entity(entity).despawn();
-        }
-    }
-}
-
-fn handle_skill_book_pick(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    buttons: Query<(Entity, &Interaction, &SkillBookPickButton), With<SkillBookPickButton>>,
-    mut writer: MessageWriter<AssignHeroSkill>,
-    modal: Query<Entity, With<SkillBookRoot>>,
-    mut commands: Commands,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    if modal.is_empty() {
-        return;
-    }
-
-    let candidates: Vec<(Entity, SkillBookPickButton)> = buttons
-        .iter()
-        .filter_map(|(entity, interaction, pick)| {
-            ui_click_release_confirms(*interaction).then_some((entity, *pick))
-        })
-        .collect();
-
-    if candidates.is_empty() {
-        return;
-    }
-
-    let pick_btn = if candidates.len() == 1 {
-        candidates[0].1
-    } else if let Some(target) = press.0 {
-        candidates
-            .iter()
-            .find(|(entity, _)| *entity == target)
-            .map(|(_, p)| *p)
-            .unwrap_or_else(|| {
-                candidates
-                    .iter()
-                    .min_by_key(|(e, _)| e.to_bits())
-                    .map(|(_, p)| *p)
-                    .unwrap_or(candidates[0].1)
-            })
-    } else {
-        candidates
-            .iter()
-            .min_by_key(|(e, _)| e.to_bits())
-            .map(|(_, p)| *p)
-            .unwrap_or(candidates[0].1)
-    };
-
-    writer.write(AssignHeroSkill {
-        slot: pick_btn.slot,
-        skill: pick_btn.skill,
-        kind: pick_btn.kind,
-    });
-    for e in &modal {
-        commands.entity(e).despawn();
-    }
-}
-
-fn handle_playback_speed_arrows(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    dec: Query<(Entity, &Interaction), With<PlaybackSpeedDecButton>>,
-    inc: Query<(Entity, &Interaction), With<PlaybackSpeedIncButton>>,
-    mut speed: ResMut<RunSpeedSetting>,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    for (entity, interaction) in &dec {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            speed.dec();
-            return;
-        }
-    }
-    for (entity, interaction) in &inc {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            speed.inc();
-            return;
-        }
-    }
-}
-
-fn handle_skip_playback_button(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    buttons: Query<(Entity, &Interaction), With<SkipPlaybackButton>>,
-    mut events: MessageWriter<SkipRunPlayback>,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    for (entity, interaction) in &buttons {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            events.write(SkipRunPlayback);
-            break;
-        }
     }
 }
 
@@ -2027,26 +1494,6 @@ fn sync_playback_damage_meters(
     }
 }
 
-fn handle_toggle_combat_log_button(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    buttons: Query<(Entity, &Interaction), With<ToggleCombatLogButton>>,
-    mut vis: ResMut<PlaybackCombatLogVisible>,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    for (entity, interaction) in &buttons {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            vis.0 = !vis.0;
-            break;
-        }
-    }
-}
-
 fn sync_playback_combat_log_panel_visibility(
     vis: Res<PlaybackCombatLogVisible>,
     mut panel: Query<&mut Visibility, With<PlaybackCombatLogPanel>>,
@@ -2250,75 +1697,6 @@ fn sync_playback_delve_progress_bar(
     }
 }
 
-fn handle_accept_button(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    buttons: Query<(Entity, &Interaction), With<AcceptRewardsButton>>,
-    mut events: MessageWriter<AcceptRunRewards>,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    for (entity, interaction) in &buttons {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            events.write(AcceptRunRewards);
-            break;
-        }
-    }
-}
-
-fn handle_equip_buttons(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    buttons: Query<(Entity, &Interaction, &EquipItemButton)>,
-    mut events: MessageWriter<EquipInventoryItem>,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    for (entity, interaction, button) in &buttons {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            events.write(EquipInventoryItem {
-                item_id: button.item_id,
-            });
-            break;
-        }
-    }
-}
-
-fn handle_skill_slot_buttons(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    buttons: Query<(Entity, &Interaction, &SkillSlotButton)>,
-    mut events: MessageWriter<OpenSkillBook>,
-    state: Res<State<GameState>>,
-) {
-    if *state.get() != GameState::Build {
-        return;
-    }
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    for (entity, interaction, btn) in &buttons {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            events.write(OpenSkillBook {
-                slot: btn.slot,
-                kind: btn.kind,
-            });
-            break;
-        }
-    }
-}
-
 fn hero_display_name_for_slot(profile: &crate::save::SaveProfile, slot: u8) -> String {
     match slot {
         0 => profile.hero.name.clone(),
@@ -2328,36 +1706,6 @@ fn hero_display_name_for_slot(profile: &crate::save::SaveProfile, slot: u8) -> S
             .map(|p| p.name.clone())
             .unwrap_or_default(),
         _ => String::new(),
-    }
-}
-
-fn handle_hero_name_edit_button(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    buttons: Query<(Entity, &Interaction, &HeroNameEditButton)>,
-    mut edit: ResMut<HeroNameEditState>,
-    profile: Res<ProfileState>,
-    state: Res<State<GameState>>,
-) {
-    if *state.get() != GameState::Build {
-        return;
-    }
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    for (entity, interaction, btn) in &buttons {
-        if entity != target || !ui_click_release_confirms(*interaction) {
-            continue;
-        }
-        if btn.slot == 1 && profile.profile.party_partner.is_none() {
-            return;
-        }
-        edit.active_slot = Some(btn.slot);
-        edit.buffer = hero_display_name_for_slot(&profile.profile, btn.slot);
-        break;
     }
 }
 
@@ -2460,28 +1808,6 @@ fn hero_rename_keyboard(
                 continue;
             }
             edit.buffer.push(c);
-        }
-    }
-}
-
-fn handle_salvage_buttons(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    buttons: Query<(Entity, &Interaction, &SalvageItemButton)>,
-    mut events: MessageWriter<SalvageInventoryItem>,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    for (entity, interaction, button) in &buttons {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            events.write(SalvageInventoryItem {
-                item_id: button.item_id,
-            });
-            break;
         }
     }
 }
