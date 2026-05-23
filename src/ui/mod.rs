@@ -29,16 +29,16 @@ use crate::ui::components::{
     AcceptRewardsButton, BuildScreen, EquipItemButton, FloatingCombatPopup, GearHubBackdrop,
     GearHubCloseButton, GearHubOpenButton, GearHubRoot, HeroNameDisplayText, HeroNameEditButton,
     HeroNameEditState, MainCamera, PlaybackAggroArrowLine, PlaybackAggroArrowText,
-    PlaybackAllyBarFill, PlaybackAllyCastFill, PlaybackAllyCdFill, PlaybackAllyInstantRechargeFill,
-    PlaybackAllyPortraitBlock, PlaybackAllySkillGcdFill, PlaybackCaptionText,
+    PlaybackPlayer1BarFill, PlaybackPlayer1CastFill, PlaybackPlayer1CdFill, PlaybackPlayer1InstantRechargeFill,
+    PlaybackPlayer1PortraitBlock, PlaybackPlayer1SkillGcdFill, PlaybackCaptionText,
     PlaybackCombatLogPanel, PlaybackCombatLogToggleLabel, PlaybackDepthText,
-    PlaybackDmgMeterEnemyFill, PlaybackDmgMeterEnemyValue, PlaybackDmgMeterLeadFill,
-    PlaybackDmgMeterLeadValue, PlaybackDmgMeterPartnerFill, PlaybackDmgMeterPartnerRow,
-    PlaybackDmgMeterPartnerValue, PlaybackEnemyBarFill, PlaybackEnemyDebuffLine,
+    PlaybackDmgMeterEnemyFill, PlaybackDmgMeterEnemyValue, PlaybackDmgMeterPlayer0Fill,
+    PlaybackDmgMeterPlayer0Value, PlaybackDmgMeterPlayer1Fill, PlaybackDmgMeterPlayer1Row,
+    PlaybackDmgMeterPlayer1Value, PlaybackEnemyBarFill, PlaybackEnemyDebuffLine,
     PlaybackEnemyNameText, PlaybackEnemyPortraitBlock, PlaybackFoeAltCastFill,
     PlaybackFoeAltCdFill, PlaybackFoeAltTimingRow, PlaybackFoeCastFill, PlaybackFoeCdFill,
-    PlaybackHeroBarFill, PlaybackHeroDebuffLine, PlaybackLeadCastFill, PlaybackLeadCdFill,
-    PlaybackLeadInstantRechargeFill, PlaybackLeadSkillGcdFill, PlaybackLogScrollRegion,
+    PlaybackPlayer0BarFill, PlaybackPlayer0DebuffLine, PlaybackPlayer0CastFill, PlaybackPlayer0CdFill,
+    PlaybackPlayer0InstantRechargeFill, PlaybackPlayer0SkillGcdFill, PlaybackLogScrollRegion,
     PlaybackLogText, PlaybackProgressBarFill, PlaybackProgressLabel, PlaybackRoomKindText,
     PlaybackSpeedDecButton, PlaybackSpeedIncButton, PlaybackSpeedValueText,
     PlaybackTheaterFloatLayer, ResetProgressButton, RunPlaybackScreen, SalvageItemButton,
@@ -1904,7 +1904,7 @@ fn sync_run_playback_ui(
         Query<&mut Text, With<PlaybackEnemyNameText>>,
         Query<&mut Text, With<PlaybackCaptionText>>,
         Query<&mut Text, With<PlaybackLogText>>,
-        Query<&mut Node, With<PlaybackHeroBarFill>>,
+        Query<&mut Node, With<PlaybackPlayer0BarFill>>,
         Query<&mut Node, With<PlaybackEnemyBarFill>>,
     )>,
 ) {
@@ -1973,14 +1973,14 @@ fn sync_run_playback_ui(
 fn sync_playback_cast_bars_party(
     playback: Res<ActiveRunPlayback>,
     mut params: ParamSet<(
-        Query<&mut Node, With<PlaybackLeadCastFill>>,
-        Query<&mut Node, With<PlaybackLeadCdFill>>,
-        Query<&mut Node, With<PlaybackLeadSkillGcdFill>>,
-        Query<&mut Node, With<PlaybackLeadInstantRechargeFill>>,
-        Query<&mut Node, With<PlaybackAllyCastFill>>,
-        Query<&mut Node, With<PlaybackAllyCdFill>>,
-        Query<&mut Node, With<PlaybackAllySkillGcdFill>>,
-        Query<&mut Node, With<PlaybackAllyInstantRechargeFill>>,
+        Query<&mut Node, With<PlaybackPlayer0CastFill>>,
+        Query<&mut Node, With<PlaybackPlayer0CdFill>>,
+        Query<&mut Node, With<PlaybackPlayer0SkillGcdFill>>,
+        Query<&mut Node, With<PlaybackPlayer0InstantRechargeFill>>,
+        Query<&mut Node, With<PlaybackPlayer1CastFill>>,
+        Query<&mut Node, With<PlaybackPlayer1CdFill>>,
+        Query<&mut Node, With<PlaybackPlayer1SkillGcdFill>>,
+        Query<&mut Node, With<PlaybackPlayer1InstantRechargeFill>>,
     )>,
 ) {
     if playback.frames.is_empty() {
@@ -2074,7 +2074,7 @@ fn sync_playback_cast_bars_foe(
 
 fn sync_run_playback_party_bars(
     playback: Res<ActiveRunPlayback>,
-    mut ally_bar: Query<&mut Node, With<PlaybackAllyBarFill>>,
+    mut player1_bar: Query<&mut Node, With<PlaybackPlayer1BarFill>>,
 ) {
     if playback.frames.is_empty() {
         return;
@@ -2088,7 +2088,7 @@ fn sync_run_playback_party_bars(
         }
         _ => Val::Percent(0.0),
     };
-    for mut style in &mut ally_bar {
+    for mut style in &mut player1_bar {
         style.width = ally_w;
     }
 }
@@ -2130,7 +2130,7 @@ fn sync_playback_theater_slot_visibility(
     mut ally: Query<
         &mut Visibility,
         (
-            With<PlaybackAllyPortraitBlock>,
+            With<PlaybackPlayer1PortraitBlock>,
             Without<PlaybackEnemyPortraitBlock>,
         ),
     >,
@@ -2138,7 +2138,7 @@ fn sync_playback_theater_slot_visibility(
         &mut Visibility,
         (
             With<PlaybackEnemyPortraitBlock>,
-            Without<PlaybackAllyPortraitBlock>,
+            Without<PlaybackPlayer1PortraitBlock>,
         ),
     >,
 ) {
@@ -2208,15 +2208,15 @@ fn sync_playback_aggro_arrow_line(
 
 fn sync_playback_damage_meters(
     playback: Res<ActiveRunPlayback>,
-    mut partner_row: Query<&mut Visibility, With<PlaybackDmgMeterPartnerRow>>,
+    mut player1_row: Query<&mut Visibility, With<PlaybackDmgMeterPlayer1Row>>,
     mut fills: ParamSet<(
-        Query<&mut Node, With<PlaybackDmgMeterLeadFill>>,
-        Query<&mut Node, With<PlaybackDmgMeterPartnerFill>>,
+        Query<&mut Node, With<PlaybackDmgMeterPlayer0Fill>>,
+        Query<&mut Node, With<PlaybackDmgMeterPlayer1Fill>>,
         Query<&mut Node, With<PlaybackDmgMeterEnemyFill>>,
     )>,
     mut vals: ParamSet<(
-        Query<&mut Text, With<PlaybackDmgMeterLeadValue>>,
-        Query<&mut Text, With<PlaybackDmgMeterPartnerValue>>,
+        Query<&mut Text, With<PlaybackDmgMeterPlayer0Value>>,
+        Query<&mut Text, With<PlaybackDmgMeterPlayer1Value>>,
         Query<&mut Text, With<PlaybackDmgMeterEnemyValue>>,
     )>,
 ) {
@@ -2279,7 +2279,7 @@ fn sync_playback_damage_meters(
             t.0.clone_from(&sf);
         }
     }
-    for mut v in &mut partner_row {
+    for mut v in &mut player1_row {
         *v = if has_partner {
             Visibility::Visible
         } else {
@@ -2446,7 +2446,7 @@ fn sync_run_playback_debuff_slots(
     mut hero: Query<
         &mut Text,
         (
-            With<PlaybackHeroDebuffLine>,
+            With<PlaybackPlayer0DebuffLine>,
             Without<PlaybackEnemyDebuffLine>,
         ),
     >,
@@ -2454,7 +2454,7 @@ fn sync_run_playback_debuff_slots(
         &mut Text,
         (
             With<PlaybackEnemyDebuffLine>,
-            Without<PlaybackHeroDebuffLine>,
+            Without<PlaybackPlayer0DebuffLine>,
         ),
     >,
 ) {

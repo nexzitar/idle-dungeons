@@ -15,18 +15,18 @@ use crate::domain::skills::{skill_definition, SkillKind};
 use crate::save::StashSortOrder;
 use crate::ui::components::{
     GearHubOpenButton, HeroNameDisplayText,
-    HeroNameEditButton, PlaybackAggroArrowLine, PlaybackAggroArrowText, PlaybackAllyCastFill,
-    PlaybackAllyCdFill, PlaybackAllyInstantRechargeFill, PlaybackAllyPortraitBlock,
-    PlaybackAllySkillGcdFill, PlaybackCaptionText, PlaybackCombatLogPanel,
+    HeroNameEditButton, PlaybackAggroArrowLine, PlaybackAggroArrowText, PlaybackPlayer1CastFill,
+    PlaybackPlayer1CdFill, PlaybackPlayer1InstantRechargeFill, PlaybackPlayer1PortraitBlock,
+    PlaybackPlayer1SkillGcdFill, PlaybackCaptionText, PlaybackCombatLogPanel,
     PlaybackDepthText, PlaybackDmgMeterEnemyFill, PlaybackDmgMeterEnemyValue,
-    PlaybackDmgMeterLeadFill, PlaybackDmgMeterLeadValue, PlaybackDmgMeterPartnerFill,
-    PlaybackDmgMeterPartnerRow, PlaybackDmgMeterPartnerValue, PlaybackEnemyBarFill,
+    PlaybackDmgMeterPlayer0Fill, PlaybackDmgMeterPlayer0Value, PlaybackDmgMeterPlayer1Fill,
+    PlaybackDmgMeterPlayer1Row, PlaybackDmgMeterPlayer1Value, PlaybackEnemyBarFill,
     PlaybackEnemyDebuffLine, PlaybackEnemyNameText, PlaybackEnemyPortraitBlock, PlaybackFoeAltCastFill,
     PlaybackFoeAltCdFill, PlaybackFoeAltTimingRow, PlaybackFoeCastFill,
-    PlaybackFoeCdFill, PlaybackHeroBarFill, PlaybackHeroDebuffLine, PlaybackLeadCastFill,
-    PlaybackLeadCdFill, PlaybackLeadInstantRechargeFill, PlaybackLeadPortraitBlock,
-    PlaybackLeadSkillGcdFill, PlaybackLogScrollRegion, PlaybackLogText,
-    PlaybackAllyBarFill, PlaybackProgressBarFill, PlaybackProgressLabel, PlaybackRoomKindText,
+    PlaybackFoeCdFill, PlaybackPlayer0BarFill, PlaybackPlayer0DebuffLine, PlaybackPlayer0CastFill,
+    PlaybackPlayer0CdFill, PlaybackPlayer0InstantRechargeFill, PlaybackPlayer0PortraitBlock,
+    PlaybackPlayer0SkillGcdFill, PlaybackLogScrollRegion, PlaybackLogText,
+    PlaybackPlayer1BarFill, PlaybackProgressBarFill, PlaybackProgressLabel, PlaybackRoomKindText,
     PlaybackTheaterFloatLayer, PlaybackSpeedDecButton, PlaybackSpeedIncButton,
     PlaybackSpeedValueText, SkillShopOpenButton,
     PlaybackCombatLogToggleLabel, ResetProgressButton, SettingsButton, SettingsModalBackdrop,
@@ -1160,7 +1160,7 @@ pub fn room_kind_label(kind: RoomKind) -> &'static str {
     }
 }
 
-fn playback_hero_bar(parent: &mut ChildSpawnerCommands<'_>, fill_pct: f32) {
+fn playback_player0_bar(parent: &mut ChildSpawnerCommands<'_>, fill_pct: f32) {
     parent
         .spawn((
             Node {
@@ -1182,12 +1182,12 @@ fn playback_hero_bar(parent: &mut ChildSpawnerCommands<'_>, fill_pct: f32) {
                         ..default()
             },
             BackgroundColor(UiTheme::healing().into()),
-                PlaybackHeroBarFill,
+                PlaybackPlayer0BarFill,
             ));
         });
 }
 
-fn playback_ally_bar(parent: &mut ChildSpawnerCommands<'_>, fill_pct: f32) {
+fn playback_player1_bar(parent: &mut ChildSpawnerCommands<'_>, fill_pct: f32) {
     let tone = Color::srgb(0.38, 0.72, 0.92);
     parent
         .spawn((
@@ -1210,7 +1210,7 @@ fn playback_ally_bar(parent: &mut ChildSpawnerCommands<'_>, fill_pct: f32) {
                         ..default()
             },
             BackgroundColor(tone.into()),
-                PlaybackAllyBarFill,
+                PlaybackPlayer1BarFill,
             ));
         });
 }
@@ -1272,7 +1272,7 @@ fn playback_cast_cd_stack_lead(parent: &mut ChildSpawnerCommands<'_>) {
                         ..default()
                     },
                     BackgroundColor(UiTheme::muted_gold().into()),
-                    PlaybackLeadCastFill,
+                    PlaybackPlayer0CastFill,
                 ));
             });
             col.spawn((
@@ -1295,7 +1295,7 @@ fn playback_cast_cd_stack_lead(parent: &mut ChildSpawnerCommands<'_>) {
                         ..default()
                     },
                     BackgroundColor(Color::srgb(0.28, 0.32, 0.42).into()),
-                    PlaybackLeadCdFill,
+                    PlaybackPlayer0CdFill,
                 ));
             });
             col.spawn((
@@ -1318,7 +1318,7 @@ fn playback_cast_cd_stack_lead(parent: &mut ChildSpawnerCommands<'_>) {
                         ..default()
                     },
                     BackgroundColor(Color::srgb(0.52, 0.38, 0.62).into()),
-                    PlaybackLeadSkillGcdFill,
+                    PlaybackPlayer0SkillGcdFill,
                 ));
             });
             col.spawn((
@@ -1341,7 +1341,7 @@ fn playback_cast_cd_stack_lead(parent: &mut ChildSpawnerCommands<'_>) {
                         ..default()
                     },
                     BackgroundColor(Color::srgb(0.34, 0.52, 0.40).into()),
-                    PlaybackLeadInstantRechargeFill,
+                    PlaybackPlayer0InstantRechargeFill,
                 ));
             });
         });
@@ -1378,7 +1378,7 @@ fn playback_cast_cd_stack_ally(parent: &mut ChildSpawnerCommands<'_>) {
                         ..default()
                     },
                     BackgroundColor(tone.into()),
-                    PlaybackAllyCastFill,
+                    PlaybackPlayer1CastFill,
                 ));
             });
             col.spawn((
@@ -1401,7 +1401,7 @@ fn playback_cast_cd_stack_ally(parent: &mut ChildSpawnerCommands<'_>) {
                         ..default()
                     },
                     BackgroundColor(Color::srgb(0.22, 0.36, 0.48).into()),
-                    PlaybackAllyCdFill,
+                    PlaybackPlayer1CdFill,
                 ));
             });
             col.spawn((
@@ -1424,7 +1424,7 @@ fn playback_cast_cd_stack_ally(parent: &mut ChildSpawnerCommands<'_>) {
                         ..default()
                     },
                     BackgroundColor(Color::srgb(0.32, 0.48, 0.62).into()),
-                    PlaybackAllySkillGcdFill,
+                    PlaybackPlayer1SkillGcdFill,
                 ));
             });
             col.spawn((
@@ -1447,7 +1447,7 @@ fn playback_cast_cd_stack_ally(parent: &mut ChildSpawnerCommands<'_>) {
                         ..default()
                     },
                     BackgroundColor(Color::srgb(0.28, 0.55, 0.45).into()),
-                    PlaybackAllyInstantRechargeFill,
+                    PlaybackPlayer1InstantRechargeFill,
                 ));
             });
         });
@@ -1575,7 +1575,7 @@ fn playback_cast_cd_stack_foe(parent: &mut ChildSpawnerCommands<'_>) {
         });
 }
 
-fn spawn_playback_hero_plate_lead(parent: &mut ChildSpawnerCommands<'_>) {
+fn spawn_playback_player0_plate(parent: &mut ChildSpawnerCommands<'_>) {
     parent
         .spawn((
             Node {
@@ -1585,7 +1585,7 @@ fn spawn_playback_hero_plate_lead(parent: &mut ChildSpawnerCommands<'_>) {
                     align_items: AlignItems::FlexStart,
                     ..default()
             },
-            PlaybackLeadPortraitBlock,
+            PlaybackPlayer0PortraitBlock,
         ))
         .with_children(|plate| {
             plate
@@ -1610,16 +1610,16 @@ fn spawn_playback_hero_plate_lead(parent: &mut ChildSpawnerCommands<'_>) {
             ));
                 });
             plate.spawn(caption_text("You"));
-            playback_hero_bar(plate, 1.0);
+            playback_player0_bar(plate, 1.0);
             playback_cast_cd_stack_lead(plate);
             plate.spawn((
                 crate::ui::theme::playback_debuff_line_bundle("—  ·  —  ·  —  ·  —"),
-                PlaybackHeroDebuffLine,
+                PlaybackPlayer0DebuffLine,
             ));
         });
 }
 
-fn spawn_playback_hero_plate_ally(parent: &mut ChildSpawnerCommands<'_>) {
+fn spawn_playback_player1_plate(parent: &mut ChildSpawnerCommands<'_>) {
     let tone = Color::srgb(0.38, 0.72, 0.92);
     parent
         .spawn((
@@ -1630,7 +1630,7 @@ fn spawn_playback_hero_plate_ally(parent: &mut ChildSpawnerCommands<'_>) {
                     align_items: AlignItems::FlexStart,
                     ..default()
             },
-            PlaybackAllyPortraitBlock,
+            PlaybackPlayer1PortraitBlock,
         ))
         .with_children(|plate| {
             plate
@@ -1655,7 +1655,7 @@ fn spawn_playback_hero_plate_ally(parent: &mut ChildSpawnerCommands<'_>) {
             ));
                 });
             plate.spawn(caption_text("Player 2"));
-            playback_ally_bar(plate, 1.0);
+            playback_player1_bar(plate, 1.0);
             playback_cast_cd_stack_ally(plate);
         });
 }
@@ -1777,7 +1777,7 @@ fn spawn_playback_damage_meters_block(parent: &mut ChildSpawnerCommands<'_>) {
                                 ..default()
             },
             BackgroundColor(Color::srgb(0.92, 0.55, 0.22).into()),
-                        PlaybackDmgMeterLeadFill,
+                        PlaybackDmgMeterPlayer0Fill,
                     ));
                 });
                 r.spawn((
@@ -1786,7 +1786,7 @@ fn spawn_playback_damage_meters_block(parent: &mut ChildSpawnerCommands<'_>) {
                 TextFont::from_font_size(UiTheme::FONT_COMPACT),
                 TextColor(UiTheme::body_dim()),
             ),
-                    PlaybackDmgMeterLeadValue,
+                    PlaybackDmgMeterPlayer0Value,
                 ));
             });
 
@@ -1800,7 +1800,7 @@ fn spawn_playback_damage_meters_block(parent: &mut ChildSpawnerCommands<'_>) {
                         margin: UiRect::bottom(Val::Px(2.0)),
                         ..default()
             },
-                PlaybackDmgMeterPartnerRow,
+                PlaybackDmgMeterPlayer1Row,
             ))
             .with_children(|r| {
                 r.spawn(Node {
@@ -1830,7 +1830,7 @@ fn spawn_playback_damage_meters_block(parent: &mut ChildSpawnerCommands<'_>) {
                                 ..default()
             },
             BackgroundColor(Color::srgb(0.38, 0.72, 0.95).into()),
-                        PlaybackDmgMeterPartnerFill,
+                        PlaybackDmgMeterPlayer1Fill,
                     ));
                 });
                 r.spawn((
@@ -1839,7 +1839,7 @@ fn spawn_playback_damage_meters_block(parent: &mut ChildSpawnerCommands<'_>) {
                 TextFont::from_font_size(UiTheme::FONT_COMPACT),
                 TextColor(UiTheme::body_dim()),
             ),
-                    PlaybackDmgMeterPartnerValue,
+                    PlaybackDmgMeterPlayer1Value,
                 ));
             });
 
@@ -2004,8 +2004,8 @@ pub fn spawn_run_playback_middle_column(parent: &mut ChildSpawnerCommands<'_>, p
                             ..default()
             })
                     .with_children(|left| {
-                        spawn_playback_hero_plate_lead(left);
-                        spawn_playback_hero_plate_ally(left);
+                        spawn_playback_player0_plate(left);
+                        spawn_playback_player1_plate(left);
                     });
                     row.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,

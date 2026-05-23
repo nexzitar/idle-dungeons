@@ -42,10 +42,10 @@ pub struct PlaybackRoomKindText;
 pub struct PlaybackEnemyNameText;
 
 #[derive(Component)]
-pub struct PlaybackHeroBarFill;
+pub struct PlaybackPlayer0BarFill;
 
 #[derive(Component)]
-pub struct PlaybackAllyBarFill;
+pub struct PlaybackPlayer1BarFill;
 
 #[derive(Component)]
 pub struct PlaybackEnemyBarFill;
@@ -58,10 +58,10 @@ pub struct PlaybackAggroArrowText;
 pub struct PlaybackAggroArrowLine;
 
 #[derive(Component)]
-pub struct PlaybackLeadPortraitBlock;
+pub struct PlaybackPlayer0PortraitBlock;
 
 #[derive(Component)]
-pub struct PlaybackAllyPortraitBlock;
+pub struct PlaybackPlayer1PortraitBlock;
 
 #[derive(Component)]
 pub struct PlaybackEnemyPortraitBlock;
@@ -102,28 +102,28 @@ pub struct GearHubCloseButton;
 pub struct SummaryRewardsModalRoot;
 
 #[derive(Component)]
-pub struct PlaybackDmgMeterPartnerRow;
+pub struct PlaybackDmgMeterPlayer1Row;
 
 #[derive(Component)]
-pub struct PlaybackDmgMeterLeadFill;
+pub struct PlaybackDmgMeterPlayer0Fill;
 
 #[derive(Component)]
-pub struct PlaybackDmgMeterPartnerFill;
+pub struct PlaybackDmgMeterPlayer1Fill;
 
 #[derive(Component)]
 pub struct PlaybackDmgMeterEnemyFill;
 
 #[derive(Component)]
-pub struct PlaybackDmgMeterLeadValue;
+pub struct PlaybackDmgMeterPlayer0Value;
 
 #[derive(Component)]
-pub struct PlaybackDmgMeterPartnerValue;
+pub struct PlaybackDmgMeterPlayer1Value;
 
 #[derive(Component)]
 pub struct PlaybackDmgMeterEnemyValue;
 
 #[derive(Component)]
-pub struct PlaybackHeroDebuffLine;
+pub struct PlaybackPlayer0DebuffLine;
 
 #[derive(Component)]
 pub struct PlaybackEnemyDebuffLine;
@@ -208,28 +208,28 @@ pub struct SkillShopBuyButton {
 }
 
 #[derive(Component)]
-pub struct PlaybackLeadCastFill;
+pub struct PlaybackPlayer0CastFill;
 
 #[derive(Component)]
-pub struct PlaybackLeadCdFill;
+pub struct PlaybackPlayer0CdFill;
 
 #[derive(Component)]
-pub struct PlaybackLeadSkillGcdFill;
+pub struct PlaybackPlayer0SkillGcdFill;
 
 #[derive(Component)]
-pub struct PlaybackLeadInstantRechargeFill;
+pub struct PlaybackPlayer0InstantRechargeFill;
 
 #[derive(Component)]
-pub struct PlaybackAllyCastFill;
+pub struct PlaybackPlayer1CastFill;
 
 #[derive(Component)]
-pub struct PlaybackAllyCdFill;
+pub struct PlaybackPlayer1CdFill;
 
 #[derive(Component)]
-pub struct PlaybackAllySkillGcdFill;
+pub struct PlaybackPlayer1SkillGcdFill;
 
 #[derive(Component)]
-pub struct PlaybackAllyInstantRechargeFill;
+pub struct PlaybackPlayer1InstantRechargeFill;
 
 #[derive(Component)]
 pub struct PlaybackFoeCastFill;
