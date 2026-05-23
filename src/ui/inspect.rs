@@ -9,6 +9,7 @@
 //! 3. Party Buildcraft keeps its own full inspect panel while `SkillBookRoot` is open.
 
 use bevy::prelude::*;
+use bevy::text::TextColor;
 
 use crate::app::ProfileState;
 use crate::domain::items::GearSlot;
@@ -25,6 +26,7 @@ use crate::ui::primitives::inspect_panel::{
     CampInspectTitle, InspectStripScope,
 };
 use crate::ui::primitives::skill_bar::SkillBarSlot;
+use crate::ui::theme::UiTheme;
 
 /// Marks stable inspect real estate (see `docs/ui-design-system.md` §4).
 #[derive(Component, Clone, Copy, Debug)]
@@ -175,6 +177,67 @@ pub fn sync_ui_inspect_hover(
     }
 }
 
+#[derive(Resource, Default)]
+pub struct CampInspectFade(pub crate::ui::inspect_fade::InspectContentFade);
+
+fn inspect_target_key(target: &UiInspectTarget) -> String {
+    format!("{target:?}")
+}
+
+fn apply_camp_inspect_content(
+    region_scope: InspectRegionScope,
+    content: &crate::ui::primitives::inspect_panel::InspectPanelContent,
+    alpha: f32,
+    icon: &mut Query<(&InspectStripScope, &mut ImageNode), With<CampInspectIcon>>,
+    texts: &mut ParamSet<(
+        Query<(&InspectStripScope, &mut Text, &mut TextColor), With<CampInspectTitle>>,
+        Query<(&InspectStripScope, &mut Text, &mut TextColor), With<CampInspectMeta>>,
+        Query<(&InspectStripScope, &mut Text, &mut TextColor), With<CampInspectTags>>,
+        Query<(&InspectStripScope, &mut Text, &mut TextColor), With<CampInspectBody>>,
+        Query<(&InspectStripScope, &mut Text, &mut TextColor), With<CampInspectHint>>,
+    )>,
+) {
+    use crate::ui::inspect_fade::fade_tint;
+    for (strip, mut icon) in icon.iter_mut() {
+        if strip.0 != region_scope {
+            continue;
+        }
+        icon.image = content.icon_image.clone();
+        icon.color = fade_tint(content.icon_color, alpha);
+        break;
+    }
+    for (strip, mut text, mut color) in texts.p0().iter_mut() {
+        if strip.0 == region_scope {
+            text.0 = content.title.clone();
+            *color = TextColor(fade_tint(UiTheme::muted_cream(), alpha));
+        }
+    }
+    for (strip, mut text, mut color) in texts.p1().iter_mut() {
+        if strip.0 == region_scope {
+            text.0 = content.meta.clone();
+            *color = TextColor(fade_tint(UiTheme::body_dim(), alpha));
+        }
+    }
+    for (strip, mut text, mut color) in texts.p2().iter_mut() {
+        if strip.0 == region_scope {
+            text.0 = content.tags.clone();
+            *color = TextColor(fade_tint(UiTheme::body_dim(), alpha));
+        }
+    }
+    for (strip, mut text, mut color) in texts.p3().iter_mut() {
+        if strip.0 == region_scope {
+            text.0 = content.body.clone();
+            *color = TextColor(fade_tint(UiTheme::body(), alpha));
+        }
+    }
+    for (strip, mut text, mut color) in texts.p4().iter_mut() {
+        if strip.0 == region_scope {
+            text.0 = content.hint.clone();
+            *color = TextColor(fade_tint(UiTheme::muted_gold(), alpha));
+        }
+    }
+}
+
 pub fn sync_ui_inspect_panel(
     build: Query<(), With<BuildScreen>>,
     summary: Query<(), With<SummaryScreen>>,
@@ -185,14 +248,16 @@ pub fn sync_ui_inspect_panel(
     state: Res<UiInspectState>,
     profile: Res<ProfileState>,
     ph: Res<UiPlaceholderImages>,
+    time: Res<Time>,
+    mut fade: ResMut<CampInspectFade>,
     regions: Query<&InspectRegionScope, With<InspectRegion>>,
     mut icon: Query<(&InspectStripScope, &mut ImageNode), With<CampInspectIcon>>,
     mut texts: ParamSet<(
-        Query<(&InspectStripScope, &mut Text), With<CampInspectTitle>>,
-        Query<(&InspectStripScope, &mut Text), With<CampInspectMeta>>,
-        Query<(&InspectStripScope, &mut Text), With<CampInspectTags>>,
-        Query<(&InspectStripScope, &mut Text), With<CampInspectBody>>,
-        Query<(&InspectStripScope, &mut Text), With<CampInspectHint>>,
+        Query<(&InspectStripScope, &mut Text, &mut TextColor), With<CampInspectTitle>>,
+        Query<(&InspectStripScope, &mut Text, &mut TextColor), With<CampInspectMeta>>,
+        Query<(&InspectStripScope, &mut Text, &mut TextColor), With<CampInspectTags>>,
+        Query<(&InspectStripScope, &mut Text, &mut TextColor), With<CampInspectBody>>,
+        Query<(&InspectStripScope, &mut Text, &mut TextColor), With<CampInspectHint>>,
     )>,
 ) {
     if !book.is_empty() {
@@ -208,7 +273,23 @@ pub fn sync_ui_inspect_panel(
     if regions.iter().all(|s| *s != region_scope) {
         return;
     }
-    if !state.is_changed() && !profile.is_changed() {
+
+    let key = inspect_target_key(&state.target);
+    if fade.0.is_uninitialized() {
+        fade.0.mark_initialized(key);
+    } else {
+        fade.0.notify_target(key);
+    }
+    fade.0.tick(time.delta_secs());
+    let profile_changed = profile.is_changed();
+    let target_changed = state.is_changed();
+    let apply_content = fade.0.take_apply_pending()
+        || ((target_changed || profile_changed)
+            && !fade.0.is_debouncing()
+            && fade.0.alpha >= 1.0);
+    let refresh_alpha = fade.0.fade_remaining > 0.0;
+
+    if !apply_content && !refresh_alpha {
         return;
     }
 
@@ -222,40 +303,13 @@ pub fn sync_ui_inspect_panel(
         region_scope,
         &ph,
     );
-
-    for (strip, mut icon) in &mut icon {
-        if strip.0 != region_scope {
-            continue;
-        }
-        icon.image = content.icon_image.clone();
-        icon.color = content.icon_color;
-        break;
-    }
-    for (strip, mut text) in texts.p0().iter_mut() {
-        if strip.0 == region_scope {
-            text.0 = content.title.clone();
-        }
-    }
-    for (strip, mut text) in texts.p1().iter_mut() {
-        if strip.0 == region_scope {
-            text.0 = content.meta.clone();
-        }
-    }
-    for (strip, mut text) in texts.p2().iter_mut() {
-        if strip.0 == region_scope {
-            text.0 = content.tags.clone();
-        }
-    }
-    for (strip, mut text) in texts.p3().iter_mut() {
-        if strip.0 == region_scope {
-            text.0 = content.body.clone();
-        }
-    }
-    for (strip, mut text) in texts.p4().iter_mut() {
-        if strip.0 == region_scope {
-            text.0 = content.hint.clone();
-        }
-    }
+    apply_camp_inspect_content(
+        region_scope,
+        &content,
+        fade.0.alpha,
+        &mut icon,
+        &mut texts,
+    );
 }
 
 fn active_scope(

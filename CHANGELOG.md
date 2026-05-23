@@ -14,6 +14,7 @@ All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **
 - **Phase 6:** Gear hub convergence — `icon_frame` / `rarity_frame_border`; icon-first stash cards (52px art, compact actions, stats in inspect strip); `hero_identity_card` above loadout scroll.
 - **Phase 7:** Summary rewards — `reward_card` (72px icon, rarity glow, NEW badge); dungeon summary column outcome → treasure row → loot grid + recessed chronicle; rewards modal uses `spawn_modal_shell` framing.
 - **Phase 8:** Combat theater — `UiBarStyle` playback presets; enemy/timing bars unified on `spawn_horizontal_bar`; 40px combat `skill_bar` under theater portraits (overlays hidden, hooks reserved).
+- **Phase 9:** Motion hooks — focused slot gold glow; debounced inspect fade (150ms alpha); theater skill GCD overlay stub wired from playback frames.
 
 ### Party buildcraft sheet (Phase 1)
 

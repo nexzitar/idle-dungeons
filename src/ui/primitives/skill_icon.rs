@@ -28,6 +28,27 @@ pub struct BuildcraftSlotArt {
     pub index: usize,
 }
 
+/// Soft gold wash when a buildcraft slot is focused.
+#[derive(Component, Clone, Copy)]
+pub struct SkillIconFocusGlow {
+    pub hero: PartyHeroKind,
+    pub index: usize,
+}
+
+/// Per-slot cooldown dim — hidden until playback provides per-skill timing.
+#[derive(Component, Clone, Copy)]
+pub struct SkillIconCooldownOverlay {
+    pub hero: PartyHeroKind,
+    pub index: usize,
+}
+
+/// Shared ability GCD sweep — hidden until playback sync enables it.
+#[derive(Component, Clone, Copy)]
+pub struct SkillIconGcdOverlay {
+    pub hero: PartyHeroKind,
+    pub index: usize,
+}
+
 #[derive(Component)]
 pub struct SkillIconDimOverlay;
 
@@ -98,6 +119,11 @@ pub fn spawn_skill_icon(
     } else {
         Color::WHITE
     };
+    let slot_ix = config
+        .slot_index
+        .map(|n| n.saturating_sub(1))
+        .unwrap_or(0);
+    let overlay_slot = config.bar_hero.map(|hero| (hero, slot_ix));
 
     parent
         .spawn((
@@ -147,6 +173,57 @@ pub fn spawn_skill_icon(
                         hero,
                         index: slot_n.saturating_sub(1),
                     });
+                }
+                if let Some((hero, index)) = overlay_slot {
+                    let glow_color = UiTheme::torch_glow()
+                        .mix(&UiTheme::muted_gold(), 0.45)
+                        .with_alpha(0.38);
+                    stack.spawn((
+                        Node {
+                            box_sizing: BoxSizing::BorderBox,
+                            position_type: PositionType::Absolute,
+                            width: Val::Percent(100.0),
+                            height: Val::Percent(100.0),
+                            ..default()
+                        },
+                        BackgroundColor(glow_color),
+                        if config.focused {
+                            Visibility::Visible
+                        } else {
+                            Visibility::Hidden
+                        },
+                        SkillIconFocusGlow { hero, index },
+                    ));
+                    stack
+                        .spawn((
+                            Node {
+                                box_sizing: BoxSizing::BorderBox,
+                                position_type: PositionType::Absolute,
+                                left: Val::Px(0.0),
+                                right: Val::Px(0.0),
+                                bottom: Val::Px(0.0),
+                                height: Val::Percent(0.0),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgba(0.05, 0.05, 0.08, 0.72)),
+                            Visibility::Hidden,
+                        ))
+                        .insert(SkillIconCooldownOverlay { hero, index });
+                    stack
+                        .spawn((
+                            Node {
+                                box_sizing: BoxSizing::BorderBox,
+                                position_type: PositionType::Absolute,
+                                left: Val::Px(0.0),
+                                right: Val::Px(0.0),
+                                top: Val::Px(0.0),
+                                height: Val::Percent(0.0),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgba(0.52, 0.38, 0.62, 0.55)),
+                            Visibility::Hidden,
+                        ))
+                        .insert(SkillIconGcdOverlay { hero, index });
                 }
                 stack
                     .spawn((

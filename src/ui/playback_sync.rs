@@ -20,6 +20,9 @@ use crate::ui::components::{
     PlaybackProgressBarFill, PlaybackProgressLabel, PlaybackRoomKindText,
     PlaybackTheaterFloatLayer,
 };
+use crate::ui::components::RunPlaybackScreen;
+use crate::ui::primitives::skill_icon::SkillIconGcdOverlay;
+use crate::domain::party::PartyHeroKind;
 use crate::ui::theme::UiTheme;
 use crate::ui::PlaybackCombatLogVisible;
 use crate::ui::FloatingCombatPopupSeq;
@@ -615,6 +618,46 @@ pub(crate) fn sync_playback_delve_progress_bar(
     for mut text in &mut label {
         if text.0 != line {
             text.0 = line.clone();
+        }
+    }
+}
+
+/// Maps aggregate hero GCD from playback frames onto theater skill icon overlays.
+pub(crate) fn sync_playback_skill_icon_overlays(
+    playback: Res<ActiveRunPlayback>,
+    running: Query<(), With<RunPlaybackScreen>>,
+    mut overlays: Query<(&SkillIconGcdOverlay, &mut Node, &mut Visibility)>,
+) {
+    if running.is_empty() {
+        return;
+    }
+    let mut hide_all = || {
+        for (_, mut node, mut vis) in &mut overlays {
+            *vis = Visibility::Hidden;
+            node.height = Val::Percent(0.0);
+        }
+    };
+    if playback.frames.is_empty() {
+        hide_all();
+        return;
+    }
+    let idx = playback.display_index.min(playback.frames.len() - 1);
+    let frame = &playback.frames[idx];
+    let crate::domain::run::RunPlaybackFrameKind::Combat(c) = &frame.kind else {
+        hide_all();
+        return;
+    };
+    for (slot, mut node, mut vis) in &mut overlays {
+        let frac = match slot.hero {
+            PartyHeroKind::Player1 => c.player0_skill_gcd,
+            PartyHeroKind::Player2 => c.player1_skill_gcd,
+        };
+        if frac <= 0.001 {
+            *vis = Visibility::Hidden;
+            node.height = Val::Percent(0.0);
+        } else {
+            *vis = Visibility::Visible;
+            node.height = Val::Percent((frac * 100.0).clamp(0.0, 100.0));
         }
     }
 }
