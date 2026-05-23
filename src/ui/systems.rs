@@ -305,25 +305,37 @@ pub(crate) fn fulfill_reset_progress(
     }
 }
 
-#[cfg(debug_assertions)]
 pub(crate) fn open_skill_book_from_events(
     mut events: MessageReader<OpenSkillBook>,
     roots: Query<Entity, With<UiRoot>>,
-    existing: Query<(), With<SkillBookRoot>>,
+    existing: Query<Entity, With<SkillBookRoot>>,
     mut commands: Commands,
     ph: Res<UiPlaceholderImages>,
     profile: Res<ProfileState>,
+    mut session: ResMut<crate::ui::buildcraft::BuildcraftEditSession>,
 ) {
     for ev in events.read() {
-        if !existing.is_empty() {
-            continue;
+        for e in existing.iter() {
+            commands.entity(e).despawn();
         }
         let Ok(root) = roots.single() else {
             continue;
         };
+        *session = crate::ui::buildcraft::BuildcraftEditSession::open_from_profile(
+            &profile.profile,
+            ev.kind,
+            ev.slot,
+        );
         let unlocked = profile.profile.meta.unlocked_skill_ids.clone();
         commands.entity(root).with_children(|parent| {
-            crate::ui::skill_book::spawn_skill_book_modal(parent, ev.slot, ev.kind, &unlocked, &ph);
+            crate::ui::skill_book::spawn_skill_book_modal(
+                parent,
+                ev.slot,
+                ev.kind,
+                &unlocked,
+                &ph,
+                &session,
+            );
         });
     }
 }

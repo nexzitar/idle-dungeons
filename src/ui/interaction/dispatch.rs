@@ -19,7 +19,7 @@ pub(crate) fn dispatch_ui_clicks(
     press: Res<UiClickPress>,
     mut commands: Commands,
     mut writers: UiClickWriters,
-    mut q: UiClickQueries,
+    q: UiClickQueries,
     mut s: UiClickState,
 ) {
     let Some(action) = resolve_clicked_action(&mouse, &press, &q.clicked) else {
@@ -76,10 +76,31 @@ pub(crate) fn dispatch_ui_clicks(
                 commands.entity(e).despawn();
             }
         }
-        UiClickAction::CloseSkillBook => {
+        UiClickAction::CloseSkillBook | UiClickAction::BuildcraftCancel => {
             for e in &q.book_modal {
                 commands.entity(e).despawn();
             }
+        }
+        UiClickAction::BuildcraftApply => {
+            if s.buildcraft.is_dirty() {
+                if s.buildcraft.commit(&mut s.profile.profile) {
+                    if let Err(e) = crate::save::save_profile(&s.save_path.0, &s.profile.profile) {
+                        warn!("failed to save profile after buildcraft apply: {e}");
+                    }
+                }
+            }
+            for e in &q.book_modal {
+                commands.entity(e).despawn();
+            }
+        }
+        UiClickAction::BuildcraftFocusSlot { hero, index } => {
+            s.buildcraft.set_focus(hero, index);
+        }
+        UiClickAction::BuildcraftPickSkill(skill) => {
+            s.buildcraft.assign_to_focused(Some(skill));
+        }
+        UiClickAction::BuildcraftClearSlot => {
+            s.buildcraft.assign_to_focused(None);
         }
         UiClickAction::SkillBookPick => {
             if let Some(target) = press.0.and_then(|t| q.book_pick.get(t).ok()) {

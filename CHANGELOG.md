@@ -4,6 +4,13 @@ All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **
 
 ## Unreleased
 
+### Party buildcraft sheet (Phase 1)
+
+- **Party-first skill workspace:** Replaces the list-style skill book with a full **Party Buildcraft** sheet — party loadout column (P1/P2, six slots each), icon library grid, and fixed inspect panel.
+- **Edit session:** Pending loadout changes live in `BuildcraftEditSession`; **Apply** commits all heroes and saves, **Cancel** discards. Same skill forbidden within one hero, allowed across heroes.
+- **Primitives:** `skill_icon`, `skill_bar`, and `inspect_panel` under `ui/primitives/`; cooldown overlay hooks reserved for future playback VFX.
+- **Spec:** `docs/superpowers/specs/2026-05-20-skillbook-buildcraft-ux-design.md` (rev. 2).
+
 ### UI foundation extraction (Phases 1–6, complete)
 
 - **Phase 1:** Extracted `ui/primitives` (button, scroll, bar, panel, modal, text) — behavior-neutral moves from `widgets` / shell layout / `gear_hub`.

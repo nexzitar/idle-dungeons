@@ -15,6 +15,7 @@ use crate::ui::components::{
 use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::interaction::registry::UiClickAction;
 use crate::ui::scene_tune::TitleSceneLayout;
+use crate::ui::buildcraft::BuildcraftEditSession;
 use crate::ui::{GearHubKeepOpen, PlaybackCombatLogVisible};
 
 #[derive(SystemParam)]
@@ -64,6 +65,7 @@ pub(crate) struct UiClickState<'w> {
     pub latest_summary: Option<Res<'w, LatestRunSummary>>,
     pub ph: Res<'w, UiPlaceholderImages>,
     pub game_state: Res<'w, State<GameState>>,
+    pub buildcraft: ResMut<'w, BuildcraftEditSession>,
     #[cfg(debug_assertions)]
     pub layout: ResMut<'w, TitleSceneLayout>,
     #[cfg(debug_assertions)]

@@ -6,9 +6,10 @@ use crate::presentation::editor::PresentationEditorSettingsToggleButton;
 use crate::ui::components::{
     EquipItemButton, GearHubBackdrop, GearHubCloseButton, PlaybackSpeedDecButton,
     PlaybackSpeedIncButton, ResetProgressButton, SalvageItemButton, SettingsModalBackdrop,
-    SettingsModalCloseButton, SkillBookBackdrop, SkillBookCloseButton, SkillBookPickButton,
-    SkillShopBackdrop, SkillShopBuyButton, SkillShopCloseButton, StashSortCycleButton,
+    SettingsModalCloseButton, SkillBookBackdrop, SkillShopBackdrop, SkillShopBuyButton,
+    SkillShopCloseButton, StashSortCycleButton,
 };
+use crate::ui::interaction::registry::UiClickAction;
 
 /// Button that received [`Interaction::Pressed`] on press; used to confirm click on mouse-up.
 #[derive(Resource, Default)]
@@ -36,9 +37,8 @@ pub(crate) struct UiClickResolveMarkers<'w, 's> {
     settings_back: Query<'w, 's, (), With<SettingsModalBackdrop>>,
     #[cfg(debug_assertions)]
     presentation_settings_toggle: Query<'w, 's, (), With<PresentationEditorSettingsToggleButton>>,
-    sbook_pick: Query<'w, 's, (), With<SkillBookPickButton>>,
-    sbook_close: Query<'w, 's, (), With<SkillBookCloseButton>>,
     sbook_back: Query<'w, 's, (), With<SkillBookBackdrop>>,
+    click_action: Query<'w, 's, (), With<UiClickAction>>,
     shop_buy: Query<'w, 's, (), With<SkillShopBuyButton>>,
     shop_close: Query<'w, 's, (), With<SkillShopCloseButton>>,
     shop_back: Query<'w, 's, (), With<SkillShopBackdrop>>,
@@ -105,21 +105,9 @@ pub(crate) fn capture_ui_click_start(
     }
 
     if !overlay.skill_book.is_empty() {
-        pressed.retain(|&e| {
-            m.sbook_pick.get(e).is_ok()
-                || m.sbook_close.get(e).is_ok()
-                || m.sbook_back.get(e).is_ok()
-        });
+        pressed.retain(|&e| m.click_action.get(e).is_ok());
         press.0 = pressed.iter().copied().min_by_key(|&e| {
-            let tier = if m.sbook_pick.get(e).is_ok() {
-                0u8
-            } else if m.sbook_close.get(e).is_ok() {
-                1
-            } else if m.sbook_back.get(e).is_ok() {
-                2
-            } else {
-                255
-            };
+            let tier = if m.sbook_back.get(e).is_ok() { 2u8 } else { 0 };
             (tier, e.to_bits())
         });
         return;

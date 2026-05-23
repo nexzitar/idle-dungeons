@@ -4,6 +4,9 @@ pub mod card;
 pub mod modal;
 pub mod panel;
 pub mod scroll;
+pub mod inspect_panel;
+pub mod skill_bar;
+pub mod skill_icon;
 pub mod spacing;
 pub mod text;
 

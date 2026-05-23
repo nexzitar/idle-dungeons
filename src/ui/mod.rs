@@ -1,4 +1,5 @@
 pub mod assets;
+pub mod buildcraft;
 pub mod build_panel;
 pub mod components;
 pub mod gear_hub;
@@ -12,6 +13,7 @@ pub mod scene_tune;
 pub mod screens;
 pub mod shell;
 pub mod skill_book;
+pub mod skill_presentation;
 pub mod skill_shop;
 pub mod stash_sort;
 pub mod summary_panel;
@@ -93,6 +95,7 @@ impl Plugin for UiPlugin {
         app.init_resource::<HeroNameEditState>();
         app.init_resource::<PlaybackCombatLogVisible>();
         app.init_resource::<FloatingCombatPopupSeq>();
+        app.init_resource::<buildcraft::BuildcraftEditSession>();
         app.insert_resource(crate::ui::scene_tune::TitleSceneLayout::try_load_from_disk());
         app.init_resource::<PresentationEditorSession>();
         #[cfg(debug_assertions)]
@@ -154,6 +157,10 @@ impl Plugin for UiPlugin {
                             open_gear_hub_from_events,
                             open_skill_shop_from_events,
                             hero_rename_keyboard,
+                            buildcraft::sync::sync_buildcraft_hover,
+                            buildcraft::sync::sync_buildcraft_inspect,
+                            buildcraft::sync::sync_buildcraft_apply_enabled,
+                            buildcraft::sync::sync_buildcraft_party_bars,
                             interaction::click::clear_ui_click_after_release,
                         ),
                     )
