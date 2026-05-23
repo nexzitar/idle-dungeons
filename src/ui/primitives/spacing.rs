@@ -1,5 +1,5 @@
-use bevy::prelude::*;
 use crate::ui::theme::UiTheme;
+use bevy::prelude::*;
 
 pub fn column_stretch() -> Node {
     Node {

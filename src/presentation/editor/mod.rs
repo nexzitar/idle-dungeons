@@ -7,25 +7,25 @@ mod selection;
 
 pub use overlay::{
     spawn_presentation_editor_overlay, PresentationEditorBannerHintText,
-    PresentationEditorBannerTitleText, PresentationEditorHierarchyButton,
-    PresentationEditorFireAtmosphereBlock, PresentationEditorPivotSummaryText,
+    PresentationEditorBannerTitleText, PresentationEditorFireAtmosphereBlock,
+    PresentationEditorHierarchyButton, PresentationEditorPivotSummaryText,
     PresentationEditorReloadButton, PresentationEditorResetAllButton,
     PresentationEditorResetCenterButton, PresentationEditorRoot, PresentationEditorSaveButton,
-    PresentationEditorSettingsToggleButton,
-    PresentationEditorSettingsToggleText, PresentationEditorTuneDeltaButton,
-    PresentationEditorTuneField, PresentationEditorTuneValueButton, PresentationEditorTuneValueText,
+    PresentationEditorSettingsToggleButton, PresentationEditorSettingsToggleText,
+    PresentationEditorTuneDeltaButton, PresentationEditorTuneField,
+    PresentationEditorTuneValueButton, PresentationEditorTuneValueText,
 };
 
-pub use field_edit::{
-    presentation_editor_tune_field_keyboard, PresentationEditorFieldEditState,
-};
+pub use field_edit::{presentation_editor_tune_field_keyboard, PresentationEditorFieldEditState};
 
 #[cfg(debug_assertions)]
 pub use mouse::{presentation_editor_drag, presentation_editor_pick};
 #[cfg(debug_assertions)]
 pub use selection::presentation_editor_hover_outline;
 
-use crate::presentation::element::{PresentationElementId, PresentationElementTune, PresentationLayerTune};
+use crate::presentation::element::{
+    PresentationElementId, PresentationElementTune, PresentationLayerTune,
+};
 use crate::presentation::is_presentation_layer_id;
 use crate::presentation::scene::TitleCampSceneLayout;
 use crate::presentation::track::CurveKind;
@@ -114,7 +114,11 @@ impl PresentationEditorSession {
     /// Compatibility: [`crate::presentation::scene::TitleCampSceneTuneTarget`] derived from [`Self::selected_element`].
     #[must_use]
     pub fn target(&self) -> crate::presentation::scene::TitleCampSceneTuneTarget {
-        match self.selected_element.as_deref().map(crate::presentation::normalize_layer_id) {
+        match self
+            .selected_element
+            .as_deref()
+            .map(crate::presentation::normalize_layer_id)
+        {
             Some(id) if id == TITLE_ELEMENT_FIREPLACE => {
                 crate::presentation::scene::TitleCampSceneTuneTarget::Fireplace
             }
@@ -317,8 +321,7 @@ fn apply_fire_atmosphere_delta(
                 });
             }
             let layer = &mut track.layers[0];
-            layer.frequency_hz =
-                (layer.frequency_hz + sign * 0.01 * mult).clamp(0.03, 1.2);
+            layer.frequency_hz = (layer.frequency_hz + sign * 0.01 * mult).clamp(0.03, 1.2);
         }
         PresentationEditorTuneField::FireGroundAlphaBase => {
             let track = fire.ground_alpha_track_mut();
@@ -329,8 +332,7 @@ fn apply_fire_atmosphere_delta(
                 (fire.crossfade_period_secs + sign * 0.1 * mult).clamp(1.0, 24.0);
         }
         PresentationEditorTuneField::FireGlowMinAlpha => {
-            fire.glow_min_alpha =
-                (fire.glow_min_alpha + sign * 0.01 * mult).clamp(0.0, 0.5);
+            fire.glow_min_alpha = (fire.glow_min_alpha + sign * 0.01 * mult).clamp(0.0, 0.5);
         }
         _ => {}
     }
@@ -524,7 +526,10 @@ pub(crate) fn format_layer_tune_field(
     }
 }
 
-pub(crate) fn format_tune_field(tune: &PresentationElementTune, field: PresentationEditorTuneField) -> String {
+pub(crate) fn format_tune_field(
+    tune: &PresentationElementTune,
+    field: PresentationEditorTuneField,
+) -> String {
     match field {
         PresentationEditorTuneField::OffsetX => format!("{:.1}", tune.offset_x),
         PresentationEditorTuneField::OffsetY => format!("{:.1}", tune.offset_y),

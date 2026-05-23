@@ -9,9 +9,9 @@ use bevy::ui::{BorderRadius, UiTransform, ZIndex};
 use serde::{Deserialize, Serialize};
 
 use crate::presentation::element::PresentationLayerTune;
-use crate::presentation::track::{CurveBlendMode, CurveKind, CurveLayer, PresentationTrack};
 use crate::presentation::layer::{compose_layer_id, TITLE_ELEMENT_FIREPLACE};
 use crate::presentation::markers::PresentationLayerHost;
+use crate::presentation::track::{CurveBlendMode, CurveKind, CurveLayer, PresentationTrack};
 
 /// Deterministic seed for [`PresentationTrack::evaluate`] on title fire ambient layers.
 pub const TITLE_FIRE_TRACK_EVAL_SEED: u64 = 0xF1EE_CAFE_DA7A_u64;
@@ -245,7 +245,9 @@ impl TitleFirePresentationTune {
         if self.glow_alpha.is_none() {
             self.glow_alpha = Some(self.synthesize_glow_track_from_legacy());
         }
-        self.glow_alpha.as_mut().expect("glow_alpha just initialized")
+        self.glow_alpha
+            .as_mut()
+            .expect("glow_alpha just initialized")
     }
 
     /// Ensures a compositional ground track exists (for editor / inspector).
@@ -253,7 +255,9 @@ impl TitleFirePresentationTune {
         if self.ground_alpha.is_none() {
             self.ground_alpha = Some(self.synthesize_ground_track_from_legacy());
         }
-        self.ground_alpha.as_mut().expect("ground_alpha just initialized")
+        self.ground_alpha
+            .as_mut()
+            .expect("ground_alpha just initialized")
     }
 
     /// Ground wash RGBA alpha factor before clamp.
@@ -463,7 +467,10 @@ mod tests {
     #[test]
     fn default_glow_track_is_in_fire_breathing_band() {
         let cfg = TitleFirePresentationTune::default();
-        let track = cfg.glow_alpha.as_ref().expect("default includes glow_alpha");
+        let track = cfg
+            .glow_alpha
+            .as_ref()
+            .expect("default includes glow_alpha");
         assert!(track.base_value > 0.05 && track.base_value < 0.4);
         let hz = track.layers.first().map(|l| l.frequency_hz).unwrap_or(0.0);
         assert!(hz >= 0.15 && hz <= 0.35, "hz={hz}");

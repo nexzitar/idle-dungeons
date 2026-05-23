@@ -3,11 +3,11 @@
 use crate::domain::title_camp::CAMP_FIRE_SEATS;
 use crate::presentation::anchor::SceneAnchorPose;
 use crate::presentation::element::PresentationElementTune;
-use crate::presentation::fire::TitleFirePresentationTune;
 use crate::presentation::element::PresentationLayerTune;
+use crate::presentation::fire::TitleFirePresentationTune;
 use crate::presentation::layer::{
-    normalize_layer_id, parse_layer_id, parse_player_element_seat,
-    TitleCampExtraLayerTunes, TitleCampFigureLayerTunes, TITLE_ELEMENT_FIREPLACE,
+    normalize_layer_id, parse_layer_id, parse_player_element_seat, TitleCampExtraLayerTunes,
+    TitleCampFigureLayerTunes, TITLE_ELEMENT_FIREPLACE,
 };
 use bevy::log::{info, warn};
 use bevy::prelude::Resource;
@@ -37,10 +37,7 @@ fn default_title_anchors() -> HashMap<String, SceneAnchorPose> {
     .map(|(k, v)| (k.to_string(), v))
     .collect();
     for seat in 1..=CAMP_FIRE_SEATS {
-        anchors.insert(
-            format!("player{seat}"),
-            SceneAnchorPose::default(),
-        );
+        anchors.insert(format!("player{seat}"), SceneAnchorPose::default());
     }
     anchors
 }

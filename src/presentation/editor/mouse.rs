@@ -32,12 +32,7 @@ fn consider_pressed(
 }
 
 fn top_pressed_target(
-    fire_q: &Query<(
-        Entity,
-        &Interaction,
-        &PresentationLayerHost,
-        &GlobalZIndex,
-    )>,
+    fire_q: &Query<(Entity, &Interaction, &PresentationLayerHost, &GlobalZIndex)>,
     host_q: &Query<(
         Entity,
         &Interaction,
@@ -60,12 +55,7 @@ pub fn presentation_editor_pick(
     mouse: Res<ButtonInput<MouseButton>>,
     mut session: ResMut<PresentationEditorSession>,
     mut field_edit: ResMut<crate::presentation::editor::PresentationEditorFieldEditState>,
-    fire_q: Query<(
-        Entity,
-        &Interaction,
-        &PresentationLayerHost,
-        &GlobalZIndex,
-    )>,
+    fire_q: Query<(Entity, &Interaction, &PresentationLayerHost, &GlobalZIndex)>,
     host_q: Query<(
         Entity,
         &Interaction,
@@ -93,12 +83,7 @@ pub fn presentation_editor_drag(
     mut layout: ResMut<TitleSceneLayout>,
     mut drag: ResMut<PresentationEditorDragState>,
     accumulated: Res<AccumulatedMouseMotion>,
-    fire_q: Query<(
-        Entity,
-        &Interaction,
-        &PresentationLayerHost,
-        &GlobalZIndex,
-    )>,
+    fire_q: Query<(Entity, &Interaction, &PresentationLayerHost, &GlobalZIndex)>,
     host_q: Query<(
         Entity,
         &Interaction,

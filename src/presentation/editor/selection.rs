@@ -18,16 +18,14 @@ pub fn presentation_editor_hover_outline(
             &Interaction,
             &GlobalZIndex,
         )>,
-        Query<(
-            Entity,
-            &PresentationLayerHost,
-            &Interaction,
-            &GlobalZIndex,
-        )>,
+        Query<(Entity, &PresentationLayerHost, &Interaction, &GlobalZIndex)>,
         Query<(&mut BorderColor, &mut Node), With<PresentationElementHost>>,
         Query<
             (&mut BorderColor, &mut Node),
-            (With<PresentationLayerHost>, Without<PresentationElementHost>),
+            (
+                With<PresentationLayerHost>,
+                Without<PresentationElementHost>,
+            ),
         >,
     )>,
 ) {

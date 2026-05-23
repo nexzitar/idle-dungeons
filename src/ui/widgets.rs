@@ -11,7 +11,7 @@ pub use crate::ui::primitives::scroll::{
     spawn_scroll_viewport, spawn_scrollable_flex_column, spawn_scrollable_log,
 };
 pub use crate::ui::primitives::{
-    spawn_bottom_strip, spawn_framed_panel, spawn_button, UiButtonConfig, UiButtonVariant,
+    spawn_bottom_strip, spawn_button, spawn_framed_panel, UiButtonConfig, UiButtonVariant,
 };
 
 pub fn spawn_atmosphere(parent: &mut ChildSpawnerCommands<'_>) {
@@ -170,4 +170,3 @@ fn metric_chip(parent: &mut ChildSpawnerCommands<'_>, field: TopBarField, label:
         field,
     ));
 }
-

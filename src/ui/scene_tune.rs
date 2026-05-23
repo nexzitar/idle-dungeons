@@ -11,10 +11,10 @@ use crate::presentation::layer::title_player_element_id;
 use crate::presentation::markers::PresentationLayerHost;
 use crate::presentation::{
     apply_layer_ui_transform, is_presentation_layer_id, normalize_layer_id,
-    pivot_translation_compensation_px, resolve_element_translation_px,
-    PresentationEditorSession, PresentationFirePart, PresentationFireStackRoot, SceneAnchorPose,
-    TitleCampSceneLayout, TitleCampSceneTuneTarget, TITLE_FIRE_FLAME_BREATHE_AMP,
-    TITLE_FIRE_FLAME_BREATHE_HZ, TITLE_FIRE_GLOW_CORE_INSET_X, TITLE_FIRE_GLOW_CORE_INSET_Y_BOTTOM,
+    pivot_translation_compensation_px, resolve_element_translation_px, PresentationEditorSession,
+    PresentationFirePart, PresentationFireStackRoot, SceneAnchorPose, TitleCampSceneLayout,
+    TitleCampSceneTuneTarget, TITLE_FIRE_FLAME_BREATHE_AMP, TITLE_FIRE_FLAME_BREATHE_HZ,
+    TITLE_FIRE_GLOW_CORE_INSET_X, TITLE_FIRE_GLOW_CORE_INSET_Y_BOTTOM,
     TITLE_FIRE_GLOW_CORE_INSET_Y_TOP, TITLE_FIRE_GLOW_HALO_INSET_X,
     TITLE_FIRE_GLOW_HALO_INSET_Y_BOTTOM, TITLE_FIRE_GLOW_HALO_INSET_Y_TOP,
     TITLE_FIRE_GROUND_LIGHT_H_PX, TITLE_FIRE_GROUND_LIGHT_W_MULT, TITLE_FIRE_TRACK_EVAL_SEED,
@@ -278,8 +278,8 @@ pub fn tick_title_fire_ambient(
                 ui.scale = Vec2::new(layer.scale_x, layer.scale_y * breathe);
             }
             PresentationFirePart::GlowHalo => {
-                ui.scale = Vec2::new(layer.scale_x, layer.scale_y)
-                    * Vec2::splat(glow_breathe * 1.06);
+                ui.scale =
+                    Vec2::new(layer.scale_x, layer.scale_y) * Vec2::splat(glow_breathe * 1.06);
             }
             PresentationFirePart::Glow => {
                 ui.scale = Vec2::new(layer.scale_x, layer.scale_y)
@@ -346,11 +346,7 @@ pub fn title_scene_tune_selection_gizmo(
             Without<crate::ui::components::TitleCampfireTuneMarker>,
         >,
         Query<
-            (
-                &PresentationLayerHost,
-                &mut BorderColor,
-                &mut Node,
-            ),
+            (&PresentationLayerHost, &mut BorderColor, &mut Node),
             Without<crate::ui::components::TitleCampfireTuneMarker>,
         >,
     )>,

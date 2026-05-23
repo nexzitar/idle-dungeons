@@ -8,7 +8,7 @@ use crate::presentation::is_presentation_layer_id;
 use crate::presentation::PresentationEditorSession;
 use crate::ui::scene_tune::TitleSceneLayout;
 use bevy::input::keyboard::KeyboardInput;
-use bevy::input::{ButtonState, ButtonInput};
+use bevy::input::{ButtonInput, ButtonState};
 use bevy::prelude::*;
 
 /// Active inspector field being typed (Enter applies, Esc cancels).
@@ -49,8 +49,10 @@ fn apply_buffer_to_element(
         return;
     }
     match field {
-        PresentationEditorTuneField::OffsetX | PresentationEditorTuneField::OffsetY
-        | PresentationEditorTuneField::RotationDeg | PresentationEditorTuneField::SizeBasis => {
+        PresentationEditorTuneField::OffsetX
+        | PresentationEditorTuneField::OffsetY
+        | PresentationEditorTuneField::RotationDeg
+        | PresentationEditorTuneField::SizeBasis => {
             if let Ok(v) = trimmed.parse::<f32>() {
                 match field {
                     PresentationEditorTuneField::OffsetX => tune.offset_x = v,
@@ -63,8 +65,10 @@ fn apply_buffer_to_element(
                 }
             }
         }
-        PresentationEditorTuneField::ScaleX | PresentationEditorTuneField::ScaleY
-        | PresentationEditorTuneField::Exposure | PresentationEditorTuneField::Glow
+        PresentationEditorTuneField::ScaleX
+        | PresentationEditorTuneField::ScaleY
+        | PresentationEditorTuneField::Exposure
+        | PresentationEditorTuneField::Glow
         | PresentationEditorTuneField::Bloom => {
             if let Ok(v) = trimmed.parse::<f32>() {
                 match field {

@@ -40,10 +40,7 @@ pub struct UiButtonConfig<'a> {
     pub flex_shrink: f32,
 }
 
-pub fn spawn_button(
-    parent: &mut ChildSpawnerCommands<'_>,
-    config: UiButtonConfig<'_>,
-) -> Entity {
+pub fn spawn_button(parent: &mut ChildSpawnerCommands<'_>, config: UiButtonConfig<'_>) -> Entity {
     let pal = config.variant.palette();
     parent
         .spawn((

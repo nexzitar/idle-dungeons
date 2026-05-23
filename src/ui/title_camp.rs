@@ -14,17 +14,18 @@ use crate::domain::progression::PARTY_SLOT_2_UNLOCK_DEPTH;
 use crate::domain::title_camp::{assign_players_to_camp_seats, CAMP_FIRE_SEATS};
 use crate::presentation::editor::TITLE_ELEMENT_FIREPLACE;
 use crate::presentation::layer::title_player_element_id;
-use crate::presentation::{compose_layer_id, spawn_title_fire_layers};
 use crate::presentation::markers::PresentationLayerHost;
+use crate::presentation::{compose_layer_id, spawn_title_fire_layers};
 use crate::ui::components::{
     PresentationElementHost, TitleCampFigureEmoji, TitleCampFigureSlot, TitleCampFigureTuneMarker,
-    TitleCampMilestoneExtras,
-    TitleCampSceneRoot, TitleCampStageRoot, TitleCampfireTuneMarker, TitleEnterCampButton,
-    TitleQuitButton, TitleScreen, UiRoot,
+    TitleCampMilestoneExtras, TitleCampSceneRoot, TitleCampStageRoot, TitleCampfireTuneMarker,
+    TitleEnterCampButton, TitleQuitButton, TitleScreen, UiRoot,
 };
 use crate::ui::mockup_layout::spawn_mockup_header;
 use crate::ui::placeholder_graphics::UiPlaceholderImages;
-use crate::ui::scene_tune::{title_fireplace_base_px, tune_to_figure_emoji_color, TitleSceneLayout};
+use crate::ui::scene_tune::{
+    title_fireplace_base_px, tune_to_figure_emoji_color, TitleSceneLayout,
+};
 use crate::ui::theme::{body_text, caption_text, section_title, UiTheme};
 use crate::ui::tooltip;
 use crate::ui::widgets::spawn_atmosphere;

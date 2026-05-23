@@ -229,7 +229,10 @@ fn combat_event_caption(event: &CombatEvent, partner_name: Option<&str>) -> Stri
             }
         }
         CombatEvent::PartyMemberDown { party_index } => {
-            format!("{} is down.", party_player_label(*party_index, partner_name))
+            format!(
+                "{} is down.",
+                party_player_label(*party_index, partner_name)
+            )
         }
         CombatEvent::HeroDefeated => "Player 1 is down.".to_string(),
         CombatEvent::BuffApplied {
@@ -406,11 +409,19 @@ fn playback_apply_opening_event(
             stacks,
             ..
         } => {
-            let map = if *target == 0 { player0_buffs } else { player1_buffs };
+            let map = if *target == 0 {
+                player0_buffs
+            } else {
+                player1_buffs
+            };
             map.insert(*buff_id, (*stacks).max(1));
         }
         CombatEvent::BuffExpired { target, buff_id } => {
-            let map = if *target == 0 { player0_buffs } else { player1_buffs };
+            let map = if *target == 0 {
+                player0_buffs
+            } else {
+                player1_buffs
+            };
             map.remove(buff_id);
         }
         _ => {}
@@ -2999,29 +3010,33 @@ pub fn simulate_combat_party_with_options(
         } else {
             (0, 0)
         };
-        let (player1_skill_gcd, player1_instant_recharge, player1_instant_charges, player1_instant_max_charges) =
-            if has_partner {
-                let p1p = &p1.as_ref().unwrap().0;
-                let g = ability_gcd_bar_frac(h1_skill_gcd_left, h1_skill_gcd_denom);
-                let ir = if p1p.has_victory_rush {
-                    instant_recharge_bar_frac(
-                        h1_vr_recharge_left,
-                        p1p.vr_icd_ticks,
-                        h1_vr_charges,
-                        p1p.vr_max_charges,
-                    )
-                } else {
-                    0.0
-                };
-                let (c, m) = if p1p.has_victory_rush {
-                    (h1_vr_charges, p1p.vr_max_charges)
-                } else {
-                    (0, 0)
-                };
-                (g, ir, c, m)
+        let (
+            player1_skill_gcd,
+            player1_instant_recharge,
+            player1_instant_charges,
+            player1_instant_max_charges,
+        ) = if has_partner {
+            let p1p = &p1.as_ref().unwrap().0;
+            let g = ability_gcd_bar_frac(h1_skill_gcd_left, h1_skill_gcd_denom);
+            let ir = if p1p.has_victory_rush {
+                instant_recharge_bar_frac(
+                    h1_vr_recharge_left,
+                    p1p.vr_icd_ticks,
+                    h1_vr_charges,
+                    p1p.vr_max_charges,
+                )
             } else {
-                (0.0, 0.0, 0, 0)
+                0.0
             };
+            let (c, m) = if p1p.has_victory_rush {
+                (h1_vr_charges, p1p.vr_max_charges)
+            } else {
+                (0, 0)
+            };
+            (g, ir, c, m)
+        } else {
+            (0.0, 0.0, 0, 0)
+        };
         if events.len() < MAX_EVENTS {
             events.push(CombatEvent::TimingPulse {
                 player0_cast,
@@ -3609,29 +3624,33 @@ fn simulate_combat_party_foes(
         } else {
             (0, 0)
         };
-        let (player1_skill_gcd, player1_instant_recharge, player1_instant_charges, player1_instant_max_charges) =
-            if has_partner {
-                let p1p = &p1.as_ref().unwrap().0;
-                let g = ability_gcd_bar_frac(h1_skill_gcd_left, h1_skill_gcd_denom);
-                let ir = if p1p.has_victory_rush {
-                    instant_recharge_bar_frac(
-                        h1_vr_recharge_left,
-                        p1p.vr_icd_ticks,
-                        h1_vr_charges,
-                        p1p.vr_max_charges,
-                    )
-                } else {
-                    0.0
-                };
-                let (c, m) = if p1p.has_victory_rush {
-                    (h1_vr_charges, p1p.vr_max_charges)
-                } else {
-                    (0, 0)
-                };
-                (g, ir, c, m)
+        let (
+            player1_skill_gcd,
+            player1_instant_recharge,
+            player1_instant_charges,
+            player1_instant_max_charges,
+        ) = if has_partner {
+            let p1p = &p1.as_ref().unwrap().0;
+            let g = ability_gcd_bar_frac(h1_skill_gcd_left, h1_skill_gcd_denom);
+            let ir = if p1p.has_victory_rush {
+                instant_recharge_bar_frac(
+                    h1_vr_recharge_left,
+                    p1p.vr_icd_ticks,
+                    h1_vr_charges,
+                    p1p.vr_max_charges,
+                )
             } else {
-                (0.0, 0.0, 0, 0)
+                0.0
             };
+            let (c, m) = if p1p.has_victory_rush {
+                (h1_vr_charges, p1p.vr_max_charges)
+            } else {
+                (0, 0)
+            };
+            (g, ir, c, m)
+        } else {
+            (0.0, 0.0, 0, 0)
+        };
         let mut foe_alt_idx = None;
         for ai in 0..foes.len() {
             if ai != fd && enemy_health[ai] > 0 {

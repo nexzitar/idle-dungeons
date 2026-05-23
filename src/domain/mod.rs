@@ -12,6 +12,6 @@ pub mod party;
 pub mod progression;
 pub mod run;
 pub mod skill_layering;
-pub mod title_camp;
 pub mod skills;
 pub mod stats;
+pub mod title_camp;

@@ -5,7 +5,10 @@ pub const CAMP_FIRE_SEATS: usize = 6;
 
 /// Assign `unlocked_players` (0..=6) to distinct random seats. `out[seat]` = player index (0-based).
 #[must_use]
-pub fn assign_players_to_camp_seats(unlocked_players: usize, seed: u64) -> [Option<u8>; CAMP_FIRE_SEATS] {
+pub fn assign_players_to_camp_seats(
+    unlocked_players: usize,
+    seed: u64,
+) -> [Option<u8>; CAMP_FIRE_SEATS] {
     let mut out = [None; CAMP_FIRE_SEATS];
     let n = unlocked_players.min(CAMP_FIRE_SEATS);
     if n == 0 {

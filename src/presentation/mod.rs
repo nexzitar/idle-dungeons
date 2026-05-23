@@ -28,8 +28,8 @@ pub use fire::{
 };
 pub use layer::{
     compose_layer_id, is_presentation_layer_id, normalize_layer_id, parse_layer_id,
-    FigureSlotLayerTunes, TitleCampExtraLayerTunes, TitleCampFigureLayerTunes,
-    PresentationElementLayers, PresentationLayerRow, TITLE_CAMP_LAYER_REGISTRY,
+    FigureSlotLayerTunes, PresentationElementLayers, PresentationLayerRow,
+    TitleCampExtraLayerTunes, TitleCampFigureLayerTunes, TITLE_CAMP_LAYER_REGISTRY,
     TITLE_ELEMENT_ALLY_SLOT, TITLE_ELEMENT_FIREPLACE, TITLE_ELEMENT_LEAD_SLOT,
 };
 pub use pivot::{pivot_translation_compensation_px, ScenePivot};

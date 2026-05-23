@@ -1,8 +1,8 @@
 //! Full-screen presentation editor chrome (title camp first).
 
 use crate::presentation::editor::PresentationEditorSession;
-use crate::presentation::layer::{TITLE_CAMP_LAYER_REGISTRY, TITLE_ELEMENT_FIREPLACE};
 use crate::presentation::element::PresentationElementId;
+use crate::presentation::layer::{TITLE_CAMP_LAYER_REGISTRY, TITLE_ELEMENT_FIREPLACE};
 use crate::ui::components::{UiButtonPalette, UiTooltip};
 use crate::ui::theme::{section_title, UiTheme};
 use bevy::picking::prelude::Pickable;
