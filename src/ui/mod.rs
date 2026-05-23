@@ -97,7 +97,7 @@ impl Plugin for UiPlugin {
         app.init_resource::<PlaybackCombatLogVisible>();
         app.init_resource::<FloatingCombatPopupSeq>();
         app.init_resource::<buildcraft::BuildcraftEditSession>();
-        app.init_resource::<inspect::CampInspectState>();
+        app.init_resource::<inspect::UiInspectState>();
         app.insert_resource(crate::ui::scene_tune::TitleSceneLayout::try_load_from_disk());
         app.init_resource::<PresentationEditorSession>();
         #[cfg(debug_assertions)]
@@ -163,8 +163,8 @@ impl Plugin for UiPlugin {
                             buildcraft::sync::sync_buildcraft_inspect,
                             buildcraft::sync::sync_buildcraft_apply_enabled,
                             buildcraft::sync::sync_buildcraft_party_bars,
-                            inspect::sync_camp_inspect_hover,
-                            inspect::sync_camp_inspect_panel,
+                            inspect::sync_ui_inspect_hover,
+                            inspect::sync_ui_inspect_panel,
                             interaction::click::clear_ui_click_after_release,
                         ),
                     )

@@ -3,9 +3,11 @@
 use bevy::prelude::*;
 use bevy::text::{Justify, TextColor, TextFont, TextLayout};
 
+use crate::domain::items::{GearSlot, ItemInstance};
 use crate::domain::party::PartyHeroKind;
-use crate::domain::skills::{format_skill_tags, skill_category, skill_definition, SkillId, SkillKind};
+use crate::domain::skills::{format_skill_tags, skill_category, skill_definition, skill_shop_price_gold, SkillId, SkillKind};
 use crate::ui::assets::UiPlaceholderImages;
+use crate::ui::inspect::InspectRegionScope;
 use crate::ui::skill_presentation::icon_for;
 use crate::ui::theme::{skill_category_chip_colors, UiTheme};
 
@@ -57,6 +59,9 @@ pub struct CampInspectBody;
 #[derive(Component)]
 pub struct CampInspectHint;
 
+#[derive(Component, Clone, Copy, Debug)]
+pub struct InspectStripScope(pub InspectRegionScope);
+
 pub fn spawn_inspect_panel(parent: &mut ChildSpawnerCommands<'_>) {
     spawn_inspect_shell(
         parent,
@@ -64,17 +69,22 @@ pub fn spawn_inspect_panel(parent: &mut ChildSpawnerCommands<'_>) {
         false,
         "Hover a skill in the library or a loadout slot.",
         BuildcraftInspectPanel,
+        None,
     );
 }
 
-/// Camp build column — ~140px fixed strip below party loadouts. Returns panel root entity.
-pub fn spawn_inspect_panel_compact(parent: &mut ChildSpawnerCommands<'_>) -> Entity {
+/// Camp build column — ~140px fixed strip. Returns panel root entity.
+pub fn spawn_inspect_panel_compact(
+    parent: &mut ChildSpawnerCommands<'_>,
+    scope: InspectRegionScope,
+) -> Entity {
     spawn_inspect_shell(
         parent,
         INSPECT_COMPACT_PX,
         true,
-        "Hover a loadout slot to see skill details.",
+        "Hover elements in this panel for details.",
         CampInspectPanel,
+        Some(scope),
     )
 }
 
@@ -84,6 +94,7 @@ fn spawn_inspect_shell<M: Component>(
     compact: bool,
     default_body: &'static str,
     panel_marker: M,
+    scope: Option<InspectRegionScope>,
 ) -> Entity {
     let node = if compact {
         Node {
@@ -129,7 +140,7 @@ fn spawn_inspect_shell<M: Component>(
                 })
                 .with_children(|head| {
                     if compact {
-                        head.spawn((
+                        let icon_node = (
                             Node {
                                 box_sizing: BoxSizing::BorderBox,
                                 width: Val::Px(40.0),
@@ -142,8 +153,21 @@ fn spawn_inspect_shell<M: Component>(
                                 ..default()
                             },
                             CampInspectIcon,
-                        ));
-                        spawn_inspect_head_text(head, "Inspect", false);
+                        );
+                        match scope {
+                            Some(s) => {
+                                head.spawn((
+                                    icon_node.0,
+                                    icon_node.1,
+                                    icon_node.2,
+                                    InspectStripScope(s),
+                                ));
+                            }
+                            None => {
+                                head.spawn(icon_node);
+                            }
+                        }
+                        spawn_inspect_head_text(head, "Inspect", false, scope);
                     } else {
                         head.spawn((
                             Node {
@@ -159,23 +183,31 @@ fn spawn_inspect_shell<M: Component>(
                             },
                             BuildcraftInspectIcon,
                         ));
-                        spawn_inspect_head_text(head, "Select a skill or slot", true);
+                        spawn_inspect_head_text(head, "Select a skill or slot", true, None);
                     }
                 });
             if compact {
-                panel.spawn((
-                    Text::new(default_body),
-                    TextFont::from_font_size(UiTheme::FONT_COMPACT),
-                    TextColor(UiTheme::body()),
-                    TextLayout::new_with_justify(Justify::Left),
-                    CampInspectBody,
-                ));
-                panel.spawn((
-                    Text::new("Click a slot to open Party Buildcraft."),
-                    TextFont::from_font_size(UiTheme::FONT_CAPTION),
-                    TextColor(UiTheme::muted_gold()),
-                    CampInspectHint,
-                ));
+                spawn_scoped_text(
+                    panel,
+                    (
+                        Text::new(default_body),
+                        TextFont::from_font_size(UiTheme::FONT_COMPACT),
+                        TextColor(UiTheme::body()),
+                        TextLayout::new_with_justify(Justify::Left),
+                        CampInspectBody,
+                    ),
+                    scope,
+                );
+                spawn_scoped_text(
+                    panel,
+                    (
+                        Text::new("Hover panel elements for details."),
+                        TextFont::from_font_size(UiTheme::FONT_CAPTION),
+                        TextColor(UiTheme::muted_gold()),
+                        CampInspectHint,
+                    ),
+                    scope,
+                );
             } else {
                 panel.spawn((
                     Text::new(default_body),
@@ -202,10 +234,26 @@ fn spawn_inspect_shell<M: Component>(
         .id()
 }
 
+fn spawn_scoped_text(
+    parent: &mut ChildSpawnerCommands<'_>,
+    bundle: impl Bundle,
+    scope: Option<InspectRegionScope>,
+) {
+    match scope {
+        Some(s) => {
+            parent.spawn((bundle, InspectStripScope(s)));
+        }
+        None => {
+            parent.spawn(bundle);
+        }
+    }
+}
+
 fn spawn_inspect_head_text(
     parent: &mut ChildSpawnerCommands<'_>,
     default_title: &'static str,
     buildcraft: bool,
+    scope: Option<InspectRegionScope>,
 ) {
     parent
         .spawn((
@@ -239,24 +287,36 @@ fn spawn_inspect_head_text(
                     BuildcraftInspectTags,
                 ));
             } else {
-                txt.spawn((
-                    Text::new(default_title),
-                    TextFont::from_font_size(UiTheme::FONT_SECTION),
-                    TextColor(UiTheme::muted_cream()),
-                    CampInspectTitle,
-                ));
-                txt.spawn((
-                    Text::new(""),
-                    TextFont::from_font_size(UiTheme::FONT_CAPTION),
-                    TextColor(UiTheme::body_dim()),
-                    CampInspectMeta,
-                ));
-                txt.spawn((
-                    Text::new(""),
-                    TextFont::from_font_size(UiTheme::FONT_MICRO),
-                    TextColor(UiTheme::body_dim()),
-                    CampInspectTags,
-                ));
+                spawn_scoped_text(
+                    txt,
+                    (
+                        Text::new(default_title),
+                        TextFont::from_font_size(UiTheme::FONT_SECTION),
+                        TextColor(UiTheme::muted_cream()),
+                        CampInspectTitle,
+                    ),
+                    scope,
+                );
+                spawn_scoped_text(
+                    txt,
+                    (
+                        Text::new(""),
+                        TextFont::from_font_size(UiTheme::FONT_CAPTION),
+                        TextColor(UiTheme::body_dim()),
+                        CampInspectMeta,
+                    ),
+                    scope,
+                );
+                spawn_scoped_text(
+                    txt,
+                    (
+                        Text::new(""),
+                        TextFont::from_font_size(UiTheme::FONT_MICRO),
+                        TextColor(UiTheme::body_dim()),
+                        CampInspectTags,
+                    ),
+                    scope,
+                );
             }
         });
 }
@@ -293,16 +353,133 @@ pub fn inspect_content_none(ph: &UiPlaceholderImages) -> InspectPanelContent {
 }
 
 pub fn inspect_content_none_camp(ph: &UiPlaceholderImages) -> InspectPanelContent {
+    inspect_content_none_for_scope(InspectRegionScope::Camp, ph)
+}
+
+pub fn inspect_content_none_for_scope(
+    scope: InspectRegionScope,
+    ph: &UiPlaceholderImages,
+) -> InspectPanelContent {
+    let (body, hint) = match scope {
+        InspectRegionScope::Camp => (
+            "Hover skills, header stats, or footer controls for details.",
+            "Click skill slots on the build screen to open Party Buildcraft.",
+        ),
+        InspectRegionScope::GearHub => (
+            "Hover equipped gear, stash items, or controls for details.",
+            "Equip or salvage using the buttons on each stash card.",
+        ),
+        InspectRegionScope::SkillShop => (
+            "Hover a catalogue row for full skill details.",
+            "Purchased skills are added to your library permanently.",
+        ),
+    };
     InspectPanelContent {
         icon_image: ph.skill_empty.clone(),
         icon_color: Color::srgba(0.5, 0.48, 0.45, 0.6),
         title: "Inspect".to_string(),
         meta: String::new(),
         tags: String::new(),
-        body: "Hover a loadout slot to see skill details.".to_string(),
+        body: body.to_string(),
         synergy: String::new(),
-        hint: "Click a slot to open Party Buildcraft.".to_string(),
+        hint: hint.to_string(),
     }
+}
+
+pub fn inspect_content_hint(
+    title: &str,
+    body: &str,
+    hint: &str,
+) -> InspectPanelContent {
+    InspectPanelContent {
+        icon_image: Handle::default(),
+        icon_color: Color::srgba(0.5, 0.48, 0.45, 0.6),
+        title: title.to_string(),
+        meta: String::new(),
+        tags: String::new(),
+        body: body.to_string(),
+        synergy: String::new(),
+        hint: hint.to_string(),
+    }
+}
+
+pub fn inspect_content_gear_item(
+    item: &ItemInstance,
+    ph: &UiPlaceholderImages,
+    hint: &str,
+) -> InspectPanelContent {
+    use crate::ui::theme::{format_item_affix_lines, format_item_stat_summary, rarity_color};
+    let aff = format_item_affix_lines(item);
+    let mut body = format_item_stat_summary(item);
+    if !aff.is_empty() {
+        body.push_str("\n");
+        body.push_str(&aff);
+    }
+    InspectPanelContent {
+        icon_image: ph.item_generic.clone(),
+        icon_color: rarity_color(item.rarity).mix(&Color::WHITE, 0.35),
+        title: item.name.clone(),
+        meta: format!("{:?} · {}", item.rarity, item.slot.display_label()),
+        tags: String::new(),
+        body,
+        synergy: String::new(),
+        hint: hint.to_string(),
+    }
+}
+
+pub fn inspect_content_gear_slot(
+    slot: GearSlot,
+    item: Option<&ItemInstance>,
+    blocked_off_hand: bool,
+    ph: &UiPlaceholderImages,
+) -> InspectPanelContent {
+    if blocked_off_hand {
+        return InspectPanelContent {
+            icon_image: ph.item_generic.clone(),
+            icon_color: Color::srgba(0.45, 0.42, 0.4, 0.55),
+            title: format!("{} (locked)", slot.display_label()),
+            meta: String::new(),
+            tags: String::new(),
+            body: "Two-handed weapon equipped — off-hand is locked until you equip a one-handed main weapon.".to_string(),
+            synergy: String::new(),
+            hint: "Change main weapon in stash, then equip off-hand here.".to_string(),
+        };
+    }
+    let Some(item) = item else {
+        return InspectPanelContent {
+            icon_image: ph.item_generic.clone(),
+            icon_color: Color::srgba(0.45, 0.42, 0.4, 0.55),
+            title: slot.display_label().to_string(),
+            meta: String::new(),
+            tags: String::new(),
+            body: format!(
+                "No {} equipped. Loot gear on runs and equip from the stash.",
+                slot.display_label().to_lowercase()
+            ),
+            synergy: String::new(),
+            hint: "Open stash items in the gear hub to equip.".to_string(),
+        };
+    };
+    inspect_content_gear_item(item, ph, "Equipped on your hero.")
+}
+
+pub fn inspect_content_skill_shop(
+    id: SkillId,
+    gold: u32,
+    ph: &UiPlaceholderImages,
+) -> InspectPanelContent {
+    let mut content = inspect_content_library(id, ph);
+    let price = skill_shop_price_gold(id).unwrap_or(0);
+    if gold >= price {
+        content.hint = format!("Buy for {price} gold — added to your library permanently.");
+    } else {
+        content.hint = format!(
+            "Need {} more gold (costs {price}).",
+            price.saturating_sub(gold)
+        );
+    }
+    content.meta = format!("{} · {} gold", content.meta, price);
+    content
 }
 
 pub fn inspect_content_slot(

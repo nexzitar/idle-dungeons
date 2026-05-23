@@ -69,7 +69,6 @@ pub(crate) fn spawn_summary_screen_root(
             shell::spawn_mockup_footer(col, shell::FooterMode::Summary);
         });
         shell::spawn_summary_rewards_modal(root, summary, profile.profile.stash_sort, ph);
-        crate::ui::tooltip::spawn_tooltip_layer(root);
     });
     root_entity
 }

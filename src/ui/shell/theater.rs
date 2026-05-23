@@ -15,8 +15,9 @@ use crate::ui::components::{
     PlaybackFoeAltTimingRow, PlaybackLogScrollRegion, PlaybackLogText, PlaybackPlayer0DebuffLine,
     PlaybackPlayer0PortraitBlock, PlaybackPlayer1PortraitBlock, PlaybackProgressBarFill,
     PlaybackProgressLabel, PlaybackRoomKindText, PlaybackTheaterFloatLayer, ToggleCombatLogButton,
-    UiButtonPalette, UiScrollContent, UiScrollRegion, UiScrollState, UiTooltip,
+    UiButtonPalette, UiScrollContent, UiScrollRegion, UiScrollState,
 };
+use crate::ui::inspect::InspectHint;
 use crate::ui::theme::{body_text, caption_text, headline_text, section_title, UiTheme};
 
 use super::layout::panel_title_centered;

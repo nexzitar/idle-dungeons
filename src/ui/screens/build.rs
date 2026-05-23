@@ -63,7 +63,6 @@ pub(crate) fn spawn_build_screen_root(
             });
             shell::spawn_mockup_footer(col, shell::FooterMode::Briefing);
         });
-        crate::ui::tooltip::spawn_tooltip_layer(root);
     });
     root_entity
 }

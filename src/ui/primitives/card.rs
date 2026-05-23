@@ -4,7 +4,8 @@ use bevy::prelude::*;
 
 use crate::domain::items::ItemInstance;
 use crate::ui::assets::UiPlaceholderImages;
-use crate::ui::components::{EquipItemButton, SalvageItemButton, UiTooltip};
+use crate::ui::components::{EquipItemButton, SalvageItemButton};
+use crate::ui::inspect::{InspectHint, StashItemInspect};
 use crate::ui::interaction::UiClickAction;
 use crate::ui::primitives::button::{spawn_button, UiButtonConfig, UiButtonVariant};
 use crate::ui::theme::{
@@ -24,6 +25,8 @@ pub fn spawn_item_card(
             style.inset_column_node(),
             BackgroundColor(style.background),
             BorderColor::from(border),
+            Interaction::default(),
+            StashItemInspect { item_id: item.id },
         ))
         .with_children(|card| {
             spawn_item_card_header(card, item, ph);
@@ -155,5 +158,5 @@ fn spawn_item_action_button<M: Component>(
     );
     row.commands_mut()
         .entity(entity)
-        .insert((marker, action, UiTooltip::txt(tip)));
+        .insert((marker, action, InspectHint(tip)));
 }

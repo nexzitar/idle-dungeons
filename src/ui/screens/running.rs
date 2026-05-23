@@ -62,6 +62,5 @@ pub(crate) fn spawn_running_screen_root(
                 });
                 shell::spawn_mockup_footer(col, shell::FooterMode::DelvePlayback);
             });
-            crate::ui::tooltip::spawn_tooltip_layer(root);
         });
 }

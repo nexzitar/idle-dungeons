@@ -7,8 +7,10 @@ use bevy::ui::FocusPolicy;
 use crate::domain::skills::{skill_definition, skill_shop_price_gold, SkillId, SkillKind};
 use crate::ui::components::{
     SkillShopBackdrop, SkillShopBuyButton, SkillShopCloseButton, SkillShopRoot, UiButtonPalette,
-    UiScrollContent, UiScrollRegion, UiScrollState, UiTooltip,
+    UiScrollContent, UiScrollRegion, UiScrollState,
 };
+use crate::ui::inspect::{InspectHint, InspectRegion, InspectRegionScope, SkillShopInspect};
+use crate::ui::primitives::inspect_panel::spawn_inspect_panel_compact;
 use crate::ui::theme::{caption_text, headline_text, section_title, UiTheme};
 
 pub fn spawn_skill_shop_modal(
@@ -56,7 +58,7 @@ pub fn spawn_skill_shop_modal(
                 SkillShopBackdrop,
                 crate::ui::interaction::UiClickAction::CloseSkillShop,
                 backdrop_pal,
-                UiTooltip::txt("Click outside to close."),
+                InspectHint("Click outside to close."),
             ));
             layer
                 .spawn((
@@ -146,6 +148,12 @@ pub fn spawn_skill_shop_modal(
                                     }
                                 });
                         });
+                    let inspect =
+                        spawn_inspect_panel_compact(dialog, InspectRegionScope::SkillShop);
+                    dialog.commands_mut().entity(inspect).insert((
+                        InspectRegion,
+                        InspectRegionScope::SkillShop,
+                    ));
                     let close_pal = UiButtonPalette::panel_outlined();
                     dialog
                         .spawn((
@@ -164,7 +172,7 @@ pub fn spawn_skill_shop_modal(
                             SkillShopCloseButton,
                             crate::ui::interaction::UiClickAction::CloseSkillShop,
                             close_pal,
-                            UiTooltip::txt("Close"),
+                            InspectHint("Close skill shop."),
                         ))
                         .with_children(|b| {
                             b.spawn((
@@ -191,22 +199,9 @@ fn spawn_buy_row(inner: &mut ChildSpawnerCommands<'_>, id: SkillId, price: u32, 
         price,
         if can_afford { "" } else { "(need gold)" }
     );
-    let tip = if can_afford {
-        format!("{}\n{}\n\n{}", d.name, d.description, d.synergy_hint)
-    } else {
-        format!(
-            "{}\n{}\n\n{}\nNeed {} more gold.",
-            d.name,
-            d.description,
-            d.synergy_hint,
-            price.saturating_sub(gold),
-        )
-    };
 
     let row_bg = UiTheme::panel_bg_deep();
 
-    // When broke, show a passive row — no [`Button`] / [`SkillShopBuyButton`] so we never
-    // enqueue a doomed purchase click (was easy to confuse with "button dead").
     if !can_afford {
         let p = UiButtonPalette::panel_outlined();
         inner
@@ -223,7 +218,8 @@ fn spawn_buy_row(inner: &mut ChildSpawnerCommands<'_>, id: SkillId, price: u32, 
                 },
                 BackgroundColor(row_bg.into()),
                 BorderColor::from(p.idle_border),
-                UiTooltip::txt(tip.clone()),
+                Interaction::default(),
+                SkillShopInspect(id),
             ))
             .with_children(|b| {
                 b.spawn((
@@ -254,7 +250,7 @@ fn spawn_buy_row(inner: &mut ChildSpawnerCommands<'_>, id: SkillId, price: u32, 
             SkillShopBuyButton { skill: id },
             crate::ui::interaction::UiClickAction::BuySkillUnlock,
             p,
-            UiTooltip::txt(tip),
+            SkillShopInspect(id),
         ))
         .with_children(|b| {
             b.spawn((

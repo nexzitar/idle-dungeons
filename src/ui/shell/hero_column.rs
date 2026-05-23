@@ -7,7 +7,7 @@ use crate::domain::party::PartyHeroKind;
 use crate::domain::progression::PARTY_SLOT_2_UNLOCK_DEPTH;
 use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::build_panel::hero_layering_warnings;
-use crate::ui::inspect::InspectRegion;
+use crate::ui::inspect::{InspectRegion, InspectRegionScope};
 use crate::ui::primitives::hero_card::{spawn_hero_identity_card, HeroIdentityConfig};
 use crate::ui::primitives::inspect_panel::spawn_inspect_panel_compact;
 use crate::ui::primitives::loadout::{spawn_loadout_row, slots_from_hero, LoadoutRowConfig};
@@ -78,10 +78,11 @@ pub fn spawn_hero_column(
                     )));
                 }
             });
-            if config.skill_slots_interactive {
-                let inspect = spawn_inspect_panel_compact(panel);
-                panel.commands_mut().entity(inspect).insert(InspectRegion);
-            }
+            let inspect = spawn_inspect_panel_compact(panel, InspectRegionScope::Camp);
+            panel.commands_mut().entity(inspect).insert((
+                InspectRegion,
+                InspectRegionScope::Camp,
+            ));
         },
     );
 }

@@ -13,8 +13,9 @@ use crate::ui::components::{
     PlaybackSpeedDecButton, PlaybackSpeedIncButton, PlaybackSpeedValueText,
     ResetProgressButton, SettingsButton, SettingsModalBackdrop,
     SettingsModalCloseButton, SettingsModalRoot,
-    TopBarField, UiButtonPalette, UiTooltip,
+    TopBarField, UiButtonPalette,
 };
+use crate::ui::inspect::{GearSlotInspect, InspectHint};
 use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::primitives::panel::{spawn_mounted_panel, MountedPanelConfig};
 use crate::ui::primitives::section::spawn_framed_section_header;
@@ -123,7 +124,7 @@ pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>) {
                 SettingsModalBackdrop,
                 crate::ui::interaction::UiClickAction::CloseSettings,
                 backdrop_pal,
-                UiTooltip::txt("Click backdrop to close."),
+                InspectHint("Click backdrop to close."),
             ));
             layer
                 .spawn((
@@ -173,7 +174,7 @@ pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>) {
                             ResetProgressButton,
                             crate::ui::interaction::UiClickAction::ResetProgress,
                             reset_pal,
-                            UiTooltip::txt("Wipe save data and start fresh."),
+                            InspectHint("Wipe save data and start fresh."),
                         ))
                         .with_children(|b| {
                             b.spawn((
@@ -200,7 +201,7 @@ pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>) {
                             SettingsModalCloseButton,
                             crate::ui::interaction::UiClickAction::CloseSettings,
                             close_pal,
-                            UiTooltip::txt("Close settings."),
+                            InspectHint("Close settings."),
                         ))
                         .with_children(|b| {
                             b.spawn((
@@ -233,9 +234,7 @@ pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>) {
                                 PresentationEditorSettingsToggleButton,
                                 crate::ui::interaction::UiClickAction::EditorToggleLayout,
                                 pe_pal,
-                                UiTooltip::txt(
-                                    "Open the fullscreen presentation editor overlay (same as layout mode).",
-                                ),
+                                InspectHint("Open presentation editor overlay."),
                             ))
                             .with_children(|b| {
                                 b.spawn((
@@ -261,7 +260,7 @@ fn spawn_playback_speed_controls(parent: &mut ChildSpawnerCommands<'_>, initial_
                 ..default()
             },
             Interaction::default(),
-            UiTooltip::txt("Delve playback speed."),
+            InspectHint("Delve playback speed."),
         ))
         .with_children(|wrap| {
             wrap.spawn(Node {
@@ -311,7 +310,7 @@ fn spawn_playback_speed_controls(parent: &mut ChildSpawnerCommands<'_>, initial_
                     PlaybackSpeedDecButton,
                     crate::ui::interaction::UiClickAction::PlaybackSpeedDec,
                     p_dec,
-                    UiTooltip::txt("Slower playback."),
+                    InspectHint("Slower playback."),
                 ))
                 .with_children(|b| {
                     b.spawn((
@@ -342,7 +341,7 @@ fn spawn_playback_speed_controls(parent: &mut ChildSpawnerCommands<'_>, initial_
                     PlaybackSpeedIncButton,
                     crate::ui::interaction::UiClickAction::PlaybackSpeedInc,
                     p_inc,
-                    UiTooltip::txt("Faster playback."),
+                    InspectHint("Faster playback."),
                 ))
                 .with_children(|b| {
                     b.spawn((
@@ -464,7 +463,7 @@ pub fn spawn_mockup_header(
                         SettingsButton,
                         crate::ui::interaction::UiClickAction::OpenSettings,
                         p,
-                        UiTooltip::txt("Open settings."),
+                        InspectHint("Open settings."),
                     ))
                     .with_children(|btn| {
                         btn.spawn((
@@ -497,7 +496,7 @@ pub fn title_settings_menu_button(parent: &mut ChildSpawnerCommands<'_>) {
             SettingsButton,
             crate::ui::interaction::UiClickAction::OpenSettings,
             p,
-            UiTooltip::txt("Open settings: reset all progress and saves."),
+            InspectHint("Open settings."),
         ))
         .with_children(|b| {
             b.spawn((
@@ -535,7 +534,7 @@ fn resource_chip(
                 ..default()
             },
             Interaction::default(),
-            UiTooltip::txt(tooltip),
+            InspectHint(tooltip),
         ))
         .with_children(|col| {
             col.spawn(Node {
@@ -654,34 +653,6 @@ pub fn mockup_gear_cards(
         let label = slot.display_label();
         let item = profile.profile.hero.equipped_item(slot);
         let blocked_off_hand = matches!(slot, GearSlot::OffHand) && main_two_handed;
-        let tip = if blocked_off_hand {
-            "Two-handed weapon equipped — off-hand is locked while this weapon is in use. \
-             Equip a one-handed main weapon to use a shield or focus again."
-                .to_string()
-        } else if let Some(item) = item {
-            let aff = format_item_affix_lines(item);
-            if aff.is_empty() {
-                format!(
-                    "{}\n{:?}\n{}",
-                    item.name,
-                    item.rarity,
-                    format_item_stat_summary(item)
-                )
-            } else {
-                format!(
-                    "{}\n{:?}\n{}\n{}",
-                    item.name,
-                    item.rarity,
-                    format_item_stat_summary(item),
-                    aff
-                )
-            }
-        } else {
-            format!(
-                "No {} equipped yet. Loot gear on runs and equip it from the Inventory tab.",
-                label.to_lowercase()
-            )
-        };
         parent
             .spawn((
                 Node {
@@ -697,7 +668,7 @@ pub fn mockup_gear_cards(
                 BackgroundColor(UiTheme::panel_bg_deep().into()),
                 BorderColor::from(UiTheme::ornate_gold()),
                 Interaction::default(),
-                UiTooltip::txt(tip),
+                GearSlotInspect(slot),
             ))
             .with_children(|card| {
                 card.spawn((

@@ -6,7 +6,8 @@ use crate::domain::combat_archetype::{hints_for_hero, CombatArchetypeHint};
 use crate::domain::hero::HeroProfile;
 use crate::domain::party::PartyHeroKind;
 use crate::ui::assets::UiPlaceholderImages;
-use crate::ui::components::{HeroNameDisplayText, HeroNameEditButton, UiButtonPalette, UiTooltip};
+use crate::ui::components::{HeroNameDisplayText, HeroNameEditButton, UiButtonPalette};
+use crate::ui::inspect::InspectHint;
 use crate::ui::interaction::UiClickAction;
 use crate::ui::primitives::panel::{spawn_mounted_panel, MountedPanelConfig};
 use crate::ui::theme::{MountedPanelStyle, UiDensity, UiTheme};
@@ -155,7 +156,7 @@ pub fn spawn_hero_identity_card(
                             },
                             UiClickAction::HeroNameEdit,
                             p,
-                            UiTooltip::txt("Rename this hero."),
+                            InspectHint("Rename this hero."),
                         ))
                         .with_children(|b| {
                             b.spawn((

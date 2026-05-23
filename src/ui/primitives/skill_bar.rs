@@ -74,7 +74,9 @@ pub fn spawn_skill_bar(
                     continue;
                 }
                 match config.interaction {
-                    SkillBarInteraction::None => {}
+                    SkillBarInteraction::None => {
+                        row.commands_mut().entity(cell).insert(Interaction::default());
+                    }
                     SkillBarInteraction::OpenSkillBook(kind) => {
                         row.commands_mut().entity(cell).insert((
                             Button,

@@ -9,8 +9,9 @@ use crate::save::StashSortOrder;
 use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::components::{
     GearHubOpenButton, SkillShopOpenButton, SkipPlaybackButton, StashSortCycleButton,
-    UiButtonPalette, UiTooltip,
+    UiButtonPalette, AcceptRewardsButton,
 };
+use crate::ui::inspect::InspectHint;
 use crate::ui::interaction::UiClickAction;
 use crate::ui::primitives::button::{spawn_button, UiButtonConfig, UiButtonVariant};
 use crate::ui::theme::{body_text, caption_text, headline_text, section_title, UiTheme};
@@ -52,9 +53,7 @@ pub fn spawn_stash_filters_and_sort_row(
                 StashSortCycleButton,
                 UiClickAction::CycleStashSort,
                 p,
-                UiTooltip::txt(
-                    "Cycle stash sort. Newest-first follows save-file order (last appended = newest). Rarity: Rare → Uncommon → Common, then name A–Z, then item id.",
-                ),
+                InspectHint("Cycle stash sort order."),
             ))
             .with_children(|b| {
                 b.spawn((
@@ -198,9 +197,7 @@ pub fn spawn_summary_rewards_modal(
                             AcceptRewardsButton,
                             UiClickAction::AcceptRewards,
                             p,
-                            UiTooltip::txt(
-                                "Add this run's gold, salvage, and loot to your profile and return to briefing.",
-                            ),
+                            InspectHint("Accept run rewards and return to camp."),
                         ))
                         .with_children(|b| {
                             b.spawn((
@@ -287,7 +284,7 @@ pub fn spawn_mockup_footer(parent: &mut ChildSpawnerCommands<'_>, mode: FooterMo
                     right.commands_mut().entity(start).insert((
                         crate::ui::components::StartRunButton,
                         UiClickAction::StartRun,
-                        UiTooltip::txt("Begin a seeded run with your current build."),
+                        InspectHint("Begin a seeded run with your current build."),
                     ));
                 }
                 FooterMode::DelvePlayback => {
@@ -306,7 +303,7 @@ pub fn spawn_mockup_footer(parent: &mut ChildSpawnerCommands<'_>, mode: FooterMo
                     right.commands_mut().entity(skip).insert((
                         SkipPlaybackButton,
                         UiClickAction::SkipPlayback,
-                        UiTooltip::txt("Jump to the run summary."),
+                        InspectHint("Jump to the run summary."),
                     ));
                 }
                 FooterMode::Summary => {}
@@ -331,7 +328,7 @@ fn footer_gear_hub_button(parent: &mut ChildSpawnerCommands<'_>) {
     parent.commands_mut().entity(gear).insert((
         GearHubOpenButton,
         UiClickAction::OpenGearHub,
-        UiTooltip::txt("Loadout and stash."),
+        InspectHint("Loadout and stash."),
     ));
 }
 
@@ -351,7 +348,7 @@ fn footer_skill_shop_button(parent: &mut ChildSpawnerCommands<'_>) {
     parent.commands_mut().entity(skills).insert((
         SkillShopOpenButton,
         UiClickAction::OpenSkillShop,
-        UiTooltip::txt("Buy skills with gold."),
+        InspectHint("Buy skills with gold."),
     ));
 }
 
