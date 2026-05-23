@@ -1,5 +1,6 @@
 pub mod build_panel;
 pub mod components;
+pub mod primitives;
 pub mod gear_hub;
 pub mod inventory_panel;
 pub mod log_panel;
