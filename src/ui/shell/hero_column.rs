@@ -7,7 +7,9 @@ use crate::domain::party::PartyHeroKind;
 use crate::domain::progression::PARTY_SLOT_2_UNLOCK_DEPTH;
 use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::build_panel::hero_layering_warnings;
+use crate::ui::inspect::InspectRegion;
 use crate::ui::primitives::hero_card::{spawn_hero_identity_card, HeroIdentityConfig};
+use crate::ui::primitives::inspect_panel::spawn_inspect_panel_compact;
 use crate::ui::primitives::loadout::{spawn_loadout_row, slots_from_hero, LoadoutRowConfig};
 use crate::ui::primitives::panel::{spawn_mounted_panel, MountedPanelConfig};
 use crate::ui::primitives::section::spawn_framed_section_header;
@@ -76,6 +78,10 @@ pub fn spawn_hero_column(
                     )));
                 }
             });
+            if config.skill_slots_interactive {
+                let inspect = spawn_inspect_panel_compact(panel);
+                panel.commands_mut().entity(inspect).insert(InspectRegion);
+            }
         },
     );
 }
@@ -109,15 +115,6 @@ fn spawn_hero_block(
         ));
     }
     spawn_framed_section_header(parent, "SKILLS");
-    if config.skill_slots_interactive {
-        let hint = match kind {
-            PartyHeroKind::Player1 => "Click a slot to open Party Buildcraft.",
-            PartyHeroKind::Player2 => {
-                "Player 2 has their own skills — click a slot to change them."
-            }
-        };
-        parent.spawn(caption_text(hint));
-    }
     let slots = slots_from_hero(hero);
     spawn_loadout_row(
         parent,

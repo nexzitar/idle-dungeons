@@ -123,7 +123,7 @@ pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>) {
                 SettingsModalBackdrop,
                 crate::ui::interaction::UiClickAction::CloseSettings,
                 backdrop_pal,
-                UiTooltip::txt("Click the dimmed backdrop to close settings (same as Close)."),
+                UiTooltip::txt("Click backdrop to close."),
             ));
             layer
                 .spawn((
@@ -173,9 +173,7 @@ pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>) {
                             ResetProgressButton,
                             crate::ui::interaction::UiClickAction::ResetProgress,
                             reset_pal,
-                            UiTooltip::txt(
-                                "Permanently wipe local save data—hero, stash, gold, upgrades—and return to a fresh profile.",
-                            ),
+                            UiTooltip::txt("Wipe save data and start fresh."),
                         ))
                         .with_children(|b| {
                             b.spawn((
@@ -202,7 +200,7 @@ pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>) {
                             SettingsModalCloseButton,
                             crate::ui::interaction::UiClickAction::CloseSettings,
                             close_pal,
-                            UiTooltip::txt("Close the settings dialog without applying other changes."),
+                            UiTooltip::txt("Close settings."),
                         ))
                         .with_children(|b| {
                             b.spawn((
@@ -263,7 +261,7 @@ fn spawn_playback_speed_controls(parent: &mut ChildSpawnerCommands<'_>, initial_
                 ..default()
             },
             Interaction::default(),
-            UiTooltip::txt("Delve playback speed. ‹ › step through 1×, 2×, 3×, 5×, and 10×."),
+            UiTooltip::txt("Delve playback speed."),
         ))
         .with_children(|wrap| {
             wrap.spawn(Node {
@@ -313,7 +311,7 @@ fn spawn_playback_speed_controls(parent: &mut ChildSpawnerCommands<'_>, initial_
                     PlaybackSpeedDecButton,
                     crate::ui::interaction::UiClickAction::PlaybackSpeedDec,
                     p_dec,
-                    UiTooltip::txt("Slower delve playback (steps down to 1×)."),
+                    UiTooltip::txt("Slower playback."),
                 ))
                 .with_children(|b| {
                     b.spawn((
@@ -344,7 +342,7 @@ fn spawn_playback_speed_controls(parent: &mut ChildSpawnerCommands<'_>, initial_
                     PlaybackSpeedIncButton,
                     crate::ui::interaction::UiClickAction::PlaybackSpeedInc,
                     p_inc,
-                    UiTooltip::txt("Faster delve playback (steps up to 10×)."),
+                    UiTooltip::txt("Faster playback."),
                 ))
                 .with_children(|b| {
                     b.spawn((
@@ -466,9 +464,7 @@ pub fn spawn_mockup_header(
                         SettingsButton,
                         crate::ui::interaction::UiClickAction::OpenSettings,
                         p,
-                        UiTooltip::txt(
-                            "Open settings: reset all progress or review this note.",
-                        ),
+                        UiTooltip::txt("Open settings."),
                     ))
                     .with_children(|btn| {
                         btn.spawn((

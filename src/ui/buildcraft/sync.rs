@@ -69,26 +69,26 @@ pub fn sync_buildcraft_inspect(
         InspectTarget::Library(id) => inspect_content_library(id, &ph),
     };
     if let Ok(mut icon) = icon.single_mut() {
-        icon.image = content.icon_image;
+        icon.image = content.icon_image.clone();
         icon.color = content.icon_color;
     }
     if let Ok(mut title) = texts.p0().single_mut() {
-        title.0 = content.title;
+        title.0 = content.title.clone();
     }
     if let Ok(mut meta) = texts.p1().single_mut() {
-        meta.0 = content.meta;
+        meta.0 = content.meta.clone();
     }
     if let Ok(mut tags) = texts.p2().single_mut() {
-        tags.0 = content.tags;
+        tags.0 = content.tags.clone();
     }
     if let Ok(mut body) = texts.p3().single_mut() {
-        body.0 = content.body;
+        body.0 = content.body.clone();
     }
     if let Ok(mut synergy) = texts.p4().single_mut() {
-        synergy.0 = content.synergy;
+        synergy.0 = content.synergy.clone();
     }
     if let Ok(mut hint) = texts.p5().single_mut() {
-        hint.0 = content.hint;
+        hint.0 = content.hint.clone();
     }
 }
 
