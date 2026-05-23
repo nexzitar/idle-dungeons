@@ -11,3 +11,4 @@ pub use button::*;
 pub use modal::*;
 pub use panel::*;
 pub use scroll::*;
+pub use text::*;
