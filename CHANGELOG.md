@@ -4,6 +4,10 @@ All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **
 
 ## Unreleased
 
+### UI foundation (Phase 1)
+
+- Extracted `ui/primitives` (button, scroll, bar, panel, modal, text) — behavior-neutral moves from `widgets` / `mockup_layout` / `gear_hub`.
+
 ### Presentation Wave 2 — atmosphere-first (title camp)
 
 - **Softer campfire glow:** dual radial layers (wide halo + core), stack `overflow: visible`, no always-on layer borders (editor outlines only when layout mode is on).
