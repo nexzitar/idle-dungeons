@@ -15,7 +15,6 @@ pub mod summary_panel;
 pub mod theme;
 pub mod title_camp;
 pub mod tooltip;
-pub mod widgets;
 
 use crate::app::{
     AcceptRunRewards, ActiveRunPlayback, AssignHeroSkill, BuySkillUnlock, EquipInventoryItem,
@@ -65,7 +64,7 @@ use crate::ui::theme::{
     body_text, caption_text, format_item_affix_lines, format_item_stat_summary, rarity_color,
     UiTheme,
 };
-use crate::ui::widgets::spawn_atmosphere;
+use crate::ui::primitives::spawn_atmosphere;
 use bevy::app::MainScheduleOrder;
 use bevy::asset::AssetPlugin;
 use bevy::ecs::schedule::ScheduleLabel;

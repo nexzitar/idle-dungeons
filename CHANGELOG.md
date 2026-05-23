@@ -4,9 +4,10 @@ All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **
 
 ## Unreleased
 
-### UI foundation (Phase 1)
+### UI foundation (Phase 1–2)
 
-- Extracted `ui/primitives` (button, scroll, bar, panel, modal, text) — behavior-neutral moves from `widgets` / `mockup_layout` / `gear_hub`.
+- **Phase 1:** Extracted `ui/primitives` (button, scroll, bar, panel, modal, text) — behavior-neutral moves from `widgets` / `mockup_layout` / `gear_hub`.
+- **Phase 2:** Renamed `placeholder_graphics` → `assets`; split `mockup_layout` into `ui/shell/` (`layout`, `theater`, `playback_bars`, `footer`); retired `widgets` (`spawn_atmosphere` lives in `primitives/panel`).
 
 ### Presentation Wave 2 — atmosphere-first (title camp)
 

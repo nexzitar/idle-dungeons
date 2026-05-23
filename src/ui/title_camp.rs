@@ -28,7 +28,7 @@ use crate::ui::scene_tune::{
 };
 use crate::ui::theme::{body_text, caption_text, section_title, UiTheme};
 use crate::ui::tooltip;
-use crate::ui::widgets::spawn_atmosphere;
+use crate::ui::primitives::spawn_atmosphere;
 
 fn camp_seat_assignment_seed(meta: &MetaProgression) -> u64 {
     (meta.gold as u64)
