@@ -4,6 +4,7 @@ pub mod card;
 pub mod modal;
 pub mod panel;
 pub mod scroll;
+pub mod loadout;
 pub mod section;
 pub mod inspect_panel;
 pub mod skill_bar;

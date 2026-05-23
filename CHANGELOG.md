@@ -4,6 +4,11 @@ All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **
 
 ## Unreleased
 
+### UI design convergence (in progress)
+
+- **Phase 0–1:** Design system doc, `UiDensity` / `MountedPanelStyle` / `SkillDisplayFamily`, `spawn_mounted_panel`, `spawn_framed_section_header`.
+- **Phase 2:** Shared `loadout_row` + `skill_bar` on build, summary, and running camp columns; text chip slots removed (~170 lines from `shell/layout.rs`).
+
 ### Party buildcraft sheet (Phase 1)
 
 - **Party-first skill workspace:** Replaces the list-style skill book with a full **Party Buildcraft** sheet — party loadout column (P1/P2, six slots each), icon library grid, and fixed inspect panel.

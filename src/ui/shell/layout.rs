@@ -10,19 +10,21 @@ use crate::domain::party::PartyHeroKind;
 use crate::domain::progression::MetaProgression;
 use crate::domain::progression::PARTY_SLOT_2_UNLOCK_DEPTH;
 use crate::domain::run::{RunOutcome, RunSummary, DEFAULT_RUN_MAX_DEPTH, DEFAULT_RUN_SEED};
-use crate::domain::skills::{skill_definition, SkillKind};
+use crate::domain::skills::skill_definition;
 use crate::ui::components::{
     HeroNameDisplayText, HeroNameEditButton,
     PlaybackSpeedDecButton, PlaybackSpeedIncButton, PlaybackSpeedValueText,
     ResetProgressButton, SettingsButton, SettingsModalBackdrop,
-    SettingsModalCloseButton, SettingsModalRoot, SkillSlotButton,
+    SettingsModalCloseButton, SettingsModalRoot,
     TopBarField, UiButtonPalette, UiTooltip,
 };
 use crate::ui::assets::UiPlaceholderImages;
+use crate::ui::primitives::loadout::{spawn_loadout_row, slots_from_hero, LoadoutRowConfig};
+use crate::ui::primitives::skill_bar::SkillBarInteraction;
 use crate::ui::primitives::scroll::{spawn_scrollable_flex_column, spawn_scrollable_log};
 use crate::ui::theme::{
     body_text, caption_text, format_item_affix_lines, format_item_stat_summary, headline_text,
-    log_line_present, rarity_color, section_title, UiTheme,
+    log_line_present, rarity_color, section_title, UiDensity, UiTheme,
 };
 
 fn ornate_shell(
@@ -695,10 +697,10 @@ pub fn spawn_hero_column_mockup(
     lead: &crate::domain::hero::HeroProfile,
     partner: Option<&crate::domain::hero::HeroProfile>,
     party_slots_unlocked: usize,
-    loadout_lines: &[String],
     skill_slots_interactive: bool,
     allow_rename: bool,
 ) {
+    let density = UiDensity::Camp;
     let inner = move |p: &mut ChildSpawnerCommands<'_>| {
         p.spawn(panel_title_centered("PARTY"));
         spawn_column_flex_scroll(p, None, move |body| {
@@ -710,22 +712,27 @@ pub fn spawn_hero_column_mockup(
             stat_line_row(body, "Damage", stats.damage);
             stat_line_row(body, "Armor", stats.armor);
             stat_line_row(body, "Healing", stats.healing_power);
-            if !loadout_lines.is_empty() {
-                body.spawn(caption_text("Loadout"));
-                for line in loadout_lines {
-                    body.spawn(caption_text(line.clone()));
-                }
-            }
             body.spawn(section_title("Skills"));
             if skill_slots_interactive {
-                body.spawn(caption_text("Click a slot to open the skill book."));
+                body.spawn(caption_text("Click a slot to open Party Buildcraft."));
             }
-            skill_slot_row(
+            let lead_slots = slots_from_hero(lead);
+            spawn_loadout_row(
                 body,
+                LoadoutRowConfig {
+                    hero_kind: PartyHeroKind::Player1,
+                    label: None,
+                    slots: &lead_slots,
+                    unlocked: lead.unlocked_skill_slots,
+                    focused_index: None,
+                    interaction: if skill_slots_interactive {
+                        SkillBarInteraction::OpenSkillBook(PartyHeroKind::Player1)
+                    } else {
+                        SkillBarInteraction::None
+                    },
+                    density,
+                },
                 ph,
-                lead,
-                skill_slots_interactive,
-                PartyHeroKind::Player1,
             );
 
             if party_slots_unlocked >= 2 {
@@ -744,12 +751,23 @@ pub fn spawn_hero_column_mockup(
                             "Player 2 has their own skills — click a slot to change them.",
                         ));
                     }
-                    skill_slot_row(
+                    let partner_slots = slots_from_hero(phero);
+                    spawn_loadout_row(
                         body,
+                        LoadoutRowConfig {
+                            hero_kind: PartyHeroKind::Player2,
+                            label: None,
+                            slots: &partner_slots,
+                            unlocked: phero.unlocked_skill_slots,
+                            focused_index: None,
+                            interaction: if skill_slots_interactive {
+                                SkillBarInteraction::OpenSkillBook(PartyHeroKind::Player2)
+                            } else {
+                                SkillBarInteraction::None
+                            },
+                            density,
+                        },
                         ph,
-                        phero,
-                        skill_slots_interactive,
-                        PartyHeroKind::Player2,
                     );
                 } else {
                     body.spawn(caption_text(
@@ -793,178 +811,6 @@ fn stat_line_row(
                 TextFont::from_font_size(UiTheme::FONT_BODY),
                 TextColor(UiTheme::muted_cream()),
             ));
-        });
-}
-
-fn skill_slot_placeholder_handle(
-    hero: &crate::domain::hero::HeroProfile,
-    slot: usize,
-    unlocked: bool,
-    ph: &UiPlaceholderImages,
-) -> Handle<Image> {
-    if !unlocked {
-        return ph.skill_locked.clone();
-    }
-    match hero.equipped_skills.get(slot).copied().flatten() {
-        None => ph.skill_empty.clone(),
-        Some(id) => {
-            if skill_definition(id).kind == SkillKind::Passive {
-                ph.skill_passive.clone()
-            } else {
-                ph.skill_active.clone()
-            }
-        }
-    }
-}
-
-fn skill_slot_row(
-    parent: &mut ChildSpawnerCommands<'_>,
-    ph: &UiPlaceholderImages,
-    hero: &crate::domain::hero::HeroProfile,
-    skill_slots_interactive: bool,
-    sheet: PartyHeroKind,
-) {
-    parent
-        .spawn(Node {
-                box_sizing: BoxSizing::BorderBox,
-                flex_direction: FlexDirection::Row,
-                column_gap: Val::Px(8.0),
-                flex_wrap: FlexWrap::Wrap,
-                ..default()
-            })
-        .with_children(|row| {
-            let cap = hero.equipped_skills.len().max(6);
-            for i in 0..cap {
-                let unlocked = i < hero.unlocked_skill_slots;
-                if unlocked && skill_slots_interactive {
-                    let label = hero
-                        .equipped_skills
-                        .get(i)
-                        .and_then(|s| *s)
-                        .map(|sk| skill_definition(sk).name.to_string())
-                        .unwrap_or_else(|| format!("Slot {}", i + 1));
-                    let tip = hero
-                        .equipped_skills
-                        .get(i)
-                        .and_then(|s| *s)
-                        .map(|sk| {
-                            let d = skill_definition(sk);
-                            format!("{}\n{}", d.name, d.description)
-                        })
-                        .unwrap_or_else(|| {
-                            "Open the skill book to assign or clear this slot (no duplicates across slots)."
-                                .to_string()
-                        });
-                    let p = UiButtonPalette::skill_slot_chip();
-                    let icon = skill_slot_placeholder_handle(hero, i, true, ph);
-                    row.spawn((
-                        Node {
-                box_sizing: BoxSizing::BorderBox,
-                min_width: Val::Px(118.0),
-                                min_height: Val::Px(48.0),
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                padding: UiRect::horizontal(Val::Px(4.0)),
-                                border: UiRect::all(Val::Px(1.0)),
-                                ..default()
-            },
-            Button,
-            BackgroundColor(p.idle_bg.into()),
-            BorderColor::from(p.idle_border),
-                        SkillSlotButton { slot: i, kind: sheet },
-                        crate::ui::interaction::UiClickAction::OpenSkillBook,
-                        p,
-                        UiTooltip::txt(tip),
-                    ))
-                    .with_children(|s| {
-                        s.spawn(Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Percent(100.0),
-                                height: Val::Px(44.0),
-                                flex_direction: FlexDirection::Row,
-                                align_items: AlignItems::Center,
-                                column_gap: Val::Px(6.0),
-                                ..default()
-            })
-                        .with_children(|inner| {
-                            inner.spawn((
-                                Node {
-                                    box_sizing: BoxSizing::BorderBox,
-                                    width: Val::Px(22.0),
-                                    height: Val::Px(22.0),
-                                    flex_shrink: 0.0,
-                                    ..default()
-                                },
-                                ImageNode {
-                                    image: icon,
-                                    color: Color::WHITE,
-                                    ..default()
-                                },
-                            ));
-                            inner.spawn((
-                Text::new(label),
-                TextFont::from_font_size(UiTheme::FONT_LABEL),
-                TextColor(UiTheme::body()),
-            ));
-                        });
-                    });
-                    continue;
-                }
-
-                let idle_tip = if !unlocked {
-                    "Locked skill slot. Gain delve progress milestones to unlock up to six slots."
-                        .to_string()
-                } else {
-                    hero.equipped_skills
-                        .get(i)
-                        .and_then(|s| *s)
-                        .map(|sk| {
-                            let d = skill_definition(sk);
-                            format!("{}\n{}", d.name, d.description)
-                        })
-                        .unwrap_or_else(|| "Empty skill slot.".to_string())
-                };
-                let icon = skill_slot_placeholder_handle(hero, i, unlocked, ph);
-                row.spawn((
-                    Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Px(52.0),
-                            height: Val::Px(52.0),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            border: UiRect::all(Val::Px(1.0)),
-                            ..default()
-            },
-            BackgroundColor(if unlocked {
-                            UiTheme::panel_bg_deep().into()
-                        } else {
-                            Color::srgba(0.06, 0.06, 0.07, 1.0).into()
-                        }),
-            BorderColor::from(if unlocked {
-                            UiTheme::ornate_gold()
-                        } else {
-                            UiTheme::panel_border()
-                        }),
-                    Interaction::default(),
-                    UiTooltip::txt(idle_tip),
-                ))
-                .with_children(|s| {
-                    s.spawn((
-                        Node {
-                            box_sizing: BoxSizing::BorderBox,
-                            width: Val::Px(36.0),
-                            height: Val::Px(36.0),
-                            flex_shrink: 0.0,
-                            ..default()
-                        },
-                        ImageNode {
-                            image: icon,
-                            color: Color::WHITE,
-                            ..default()
-                        },
-                    ));
-                });
-            }
         });
 }
 
