@@ -10,6 +10,7 @@ All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **
 - **Phase 2:** Renamed `placeholder_graphics` → `assets`; split `mockup_layout` into `ui/shell/` (`layout`, `theater`, `playback_bars`, `footer`); retired `widgets` (`spawn_atmosphere` lives in `primitives/panel`).
 - **Phase 3:** `ui/interaction` centralizes click capture and `UiClickAction` dispatch (modals, stash sort, gear/skill flows, playback chrome, presentation editor in debug). Legacy per-button `handle_*` click systems removed from `ui/mod.rs`.
 - **Phase 4:** `UiPanelStyle` / `UiModalStyle` layout presets in `theme`; `spawn_item_card` / `spawn_item_card_preview` moved to `primitives/card` (gear hub + summary footer call sites updated).
+- **Phase 5:** Build / running / summary screen spawn moved to `ui/screens/`; `UiPlugin` registration stays in `mod.rs`.
 
 ### Presentation Wave 2 — atmosphere-first (title camp)
 

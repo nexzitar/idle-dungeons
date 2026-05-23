@@ -16,8 +16,13 @@ pub mod theme;
 pub mod title_camp;
 pub mod tooltip;
 pub mod interaction;
+pub mod screens;
 
 pub(crate) use interaction::{ui_click_release_confirms, UiClickPress};
+pub(crate) use screens::{
+    spawn_build_screen_root, spawn_running_screen_root, spawn_summary_screen_root,
+};
+use screens::{spawn_build_screen, spawn_running_screen, spawn_summary_screen};
 
 use crate::app::{
     AcceptRunRewards, ActiveRunPlayback, AssignHeroSkill, BuySkillUnlock, EquipInventoryItem,
@@ -63,7 +68,6 @@ use crate::ui::components::{
 use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::scene_tune::TitleSceneLayout;
 use crate::ui::theme::UiTheme;
-use crate::ui::primitives::spawn_atmosphere;
 use bevy::app::MainScheduleOrder;
 use bevy::asset::AssetPlugin;
 use bevy::ecs::schedule::ScheduleLabel;
@@ -312,248 +316,11 @@ fn spawn_title_screen(
     );
 }
 
-fn root_shell() -> impl Bundle {
-    (
-        Node {
-            box_sizing: BoxSizing::BorderBox,
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            position_type: PositionType::Relative,
-            flex_direction: FlexDirection::Column,
-            align_items: AlignItems::Stretch,
-            ..default()
-        },
-        BackgroundColor(Color::NONE),
-    )
-}
-
-fn content_column_bundle() -> impl Bundle {
-    (Node {
-        box_sizing: BoxSizing::BorderBox,
-        width: Val::Percent(100.0),
-        flex_grow: 1.0,
-        min_height: Val::Px(0.0),
-        flex_direction: FlexDirection::Column,
-        padding: UiRect::axes(Val::Px(18.0), Val::Px(14.0)),
-        row_gap: Val::Px(12.0),
-        align_items: AlignItems::Stretch,
-        ..default()
-    },)
-}
-
 fn cleanup_running_exit(mut commands: Commands, roots: Query<Entity, With<UiRoot>>) {
     for root in &roots {
         commands.entity(root).despawn();
     }
     commands.remove_resource::<ActiveRunPlayback>();
-}
-
-fn spawn_running_screen(
-    mut commands: Commands,
-    profile: Res<ProfileState>,
-    speed: Res<RunSpeedSetting>,
-    ph: Res<UiPlaceholderImages>,
-) {
-    spawn_running_screen_root(&mut commands, &profile, speed.multiplier(), &ph);
-}
-
-pub(crate) fn spawn_running_screen_root(
-    commands: &mut Commands,
-    profile: &ProfileState,
-    speed_mult: f32,
-    ph: &UiPlaceholderImages,
-) {
-    let lead = profile.effective_hero();
-    let partner = profile.effective_party_partner();
-    let party_slots = profile.profile.meta.party_slots_unlocked();
-    let meta = &profile.profile.meta;
-    let loadout_lines: Vec<String> = build_panel_text(&lead)
-        .lines()
-        .map(|s| s.to_string())
-        .collect();
-
-    commands
-        .spawn((root_shell(), UiRoot, RunPlaybackScreen))
-        .with_children(|root| {
-            spawn_atmosphere(root);
-            root.spawn(content_column_bundle()).with_children(|col| {
-                crate::ui::shell::spawn_mockup_header(
-                    col,
-                    ph,
-                    meta.gold,
-                    meta.salvage,
-                    meta.unlocked_skill_slots,
-                    lead.equipped_skills.len(),
-                    "—",
-                    speed_mult,
-                );
-                crate::ui::shell::spawn_three_column_row(col, |row| {
-                    crate::ui::shell::spawn_ornate_column(row, 1.0, |panel| {
-                        crate::ui::shell::spawn_hero_column_mockup(
-                            panel,
-                            ph,
-                            &lead,
-                            partner.as_ref(),
-                            party_slots,
-                            &loadout_lines,
-                            false,
-                            false,
-                        );
-                    });
-                    crate::ui::shell::spawn_ornate_column(row, 1.25, |panel| {
-                        crate::ui::shell::spawn_run_playback_middle_column(panel, ph);
-                    });
-                });
-                crate::ui::shell::spawn_mockup_footer(
-                    col,
-                    crate::ui::shell::FooterMode::DelvePlayback,
-                );
-            });
-            crate::ui::tooltip::spawn_tooltip_layer(root);
-        });
-}
-
-fn spawn_build_screen(
-    mut commands: Commands,
-    profile: Res<ProfileState>,
-    speed: Res<RunSpeedSetting>,
-    ph: Res<UiPlaceholderImages>,
-) {
-    spawn_build_screen_root(&mut commands, &profile, speed.multiplier(), &ph);
-}
-
-pub(crate) fn spawn_build_screen_root(
-    commands: &mut Commands,
-    profile: &ProfileState,
-    speed_mult: f32,
-    ph: &UiPlaceholderImages,
-) -> Entity {
-    let lead = profile.effective_hero();
-    let partner = profile.effective_party_partner();
-    let party_slots = profile.profile.meta.party_slots_unlocked();
-    let meta = &profile.profile.meta;
-    let loadout_lines: Vec<String> = build_panel_text(&lead)
-        .lines()
-        .map(|s| s.to_string())
-        .collect();
-    let stash = profile.profile.inventory.len();
-
-    let root_entity = commands.spawn((root_shell(), UiRoot, BuildScreen)).id();
-    commands.entity(root_entity).with_children(|root| {
-        spawn_atmosphere(root);
-        root.spawn(content_column_bundle()).with_children(|col| {
-            crate::ui::shell::spawn_mockup_header(
-                col,
-                ph,
-                meta.gold,
-                meta.salvage,
-                meta.unlocked_skill_slots,
-                lead.equipped_skills.len(),
-                "—",
-                speed_mult,
-            );
-            crate::ui::shell::spawn_three_column_row(col, |row| {
-                crate::ui::shell::spawn_ornate_column(row, 1.0, |panel| {
-                    crate::ui::shell::spawn_hero_column_mockup(
-                        panel,
-                        ph,
-                        &lead,
-                        partner.as_ref(),
-                        party_slots,
-                        &loadout_lines,
-                        true,
-                        true,
-                    );
-                });
-                crate::ui::shell::spawn_ornate_column(row, 1.25, |panel| {
-                    crate::ui::shell::spawn_dungeon_briefing_column(panel, stash, meta);
-                });
-            });
-            crate::ui::shell::spawn_mockup_footer(
-                col,
-                crate::ui::shell::FooterMode::Briefing,
-            );
-        });
-        crate::ui::tooltip::spawn_tooltip_layer(root);
-    });
-    root_entity
-}
-
-fn spawn_summary_screen(
-    mut commands: Commands,
-    profile: Res<ProfileState>,
-    latest_summary: Option<Res<LatestRunSummary>>,
-    speed: Res<RunSpeedSetting>,
-    ph: Res<UiPlaceholderImages>,
-) {
-    let summary = latest_summary
-        .as_deref()
-        .map(|s| s.summary.clone())
-        .unwrap_or_else(crate::ui::summary_panel::empty_run_summary);
-    spawn_summary_screen_root(&mut commands, &profile, &summary, speed.multiplier(), &ph);
-}
-
-pub(crate) fn spawn_summary_screen_root(
-    commands: &mut Commands,
-    profile: &ProfileState,
-    summary: &RunSummary,
-    speed_mult: f32,
-    ph: &UiPlaceholderImages,
-) -> Entity {
-    let meta = &profile.profile.meta;
-    let lead = profile.effective_hero();
-    let partner = profile.effective_party_partner();
-    let party_slots = profile.profile.meta.party_slots_unlocked();
-    let loadout_lines: Vec<String> = build_panel_text(&lead)
-        .lines()
-        .map(|s| s.to_string())
-        .collect();
-
-    let root_entity = commands.spawn((root_shell(), UiRoot, SummaryScreen)).id();
-    commands.entity(root_entity).with_children(|root| {
-        spawn_atmosphere(root);
-        root.spawn(content_column_bundle()).with_children(|col| {
-            crate::ui::shell::spawn_mockup_header(
-                col,
-                ph,
-                meta.gold,
-                meta.salvage,
-                meta.unlocked_skill_slots,
-                lead.equipped_skills.len(),
-                &summary.deepest_depth.to_string(),
-                speed_mult,
-            );
-            crate::ui::shell::spawn_three_column_row(col, |row| {
-                crate::ui::shell::spawn_ornate_column(row, 1.0, |panel| {
-                    crate::ui::shell::spawn_hero_column_mockup(
-                        panel,
-                        ph,
-                        &lead,
-                        partner.as_ref(),
-                        party_slots,
-                        &loadout_lines,
-                        false,
-                        false,
-                    );
-                });
-                crate::ui::shell::spawn_ornate_column(row, 1.25, |panel| {
-                    crate::ui::shell::spawn_dungeon_summary_column(panel, summary);
-                });
-            });
-            crate::ui::shell::spawn_mockup_footer(
-                col,
-                crate::ui::shell::FooterMode::Summary,
-            );
-        });
-        crate::ui::shell::spawn_summary_rewards_modal(
-            root,
-            summary,
-            profile.profile.stash_sort,
-            ph,
-        );
-        crate::ui::tooltip::spawn_tooltip_layer(root);
-    });
-    root_entity
 }
 
 /// Re-spawns the gear hub modal after a full UI root rebuild when the player still has it open.
