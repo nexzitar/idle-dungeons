@@ -3,8 +3,13 @@
 use crate::presentation::editor::PresentationEditorSession;
 use crate::presentation::element::PresentationElementId;
 use crate::presentation::layer::{TITLE_CAMP_LAYER_REGISTRY, TITLE_ELEMENT_FIREPLACE};
-use crate::ui::components::{UiButtonPalette, UiTooltip};
-use crate::ui::theme::{section_title, UiTheme};
+use crate::ui::components::UiTooltip;
+use crate::ui::interaction::UiClickAction;
+use crate::ui::primitives::button::{
+    spawn_button, spawn_button_with_extra_text, UiButtonConfig, UiButtonVariant,
+};
+use crate::ui::primitives::panel::spawn_framed_column;
+use crate::ui::theme::{section_title, UiPanelStyle, UiTheme};
 use bevy::picking::prelude::Pickable;
 use bevy::prelude::*;
 use bevy::text::{Justify, TextColor, TextFont, TextLayout};
@@ -196,28 +201,28 @@ pub fn spawn_presentation_editor_overlay(parent: &mut ChildSpawnerCommands<'_>) 
                     foot,
                     "Reset to center",
                     PresentationEditorResetCenterButton,
-                    crate::ui::interaction::UiClickAction::EditorResetCenter,
+                    UiClickAction::EditorResetCenter,
                     "Selected element: zero offsets on its anchor, scale 1, rotation 0.",
                 );
                 spawn_footer_button(
                     foot,
                     "Reset all",
                     PresentationEditorResetAllButton,
-                    crate::ui::interaction::UiClickAction::EditorResetAll,
+                    UiClickAction::EditorResetAll,
                     "All camp elements: snap fireplace, lead, and ally back to anchor center.",
                 );
                 spawn_footer_button(
                     foot,
                     "Save to disk",
                     PresentationEditorSaveButton,
-                    crate::ui::interaction::UiClickAction::EditorSave,
+                    UiClickAction::EditorSave,
                     "Write title scene JSON (same as debug Ctrl+S).",
                 );
                 spawn_footer_button(
                     foot,
                     "Reload from disk",
                     PresentationEditorReloadButton,
-                    crate::ui::interaction::UiClickAction::EditorReload,
+                    UiClickAction::EditorReload,
                     "Reload title scene JSON (same as debug F5).",
                 );
             });
@@ -225,23 +230,15 @@ pub fn spawn_presentation_editor_overlay(parent: &mut ChildSpawnerCommands<'_>) 
 }
 
 fn spawn_hierarchy_column(parent: &mut ChildSpawnerCommands<'_>) {
-    parent
-        .spawn((
-            Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Px(210.0),
-                flex_shrink: 0.0,
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Stretch,
-                row_gap: Val::Px(8.0),
-                padding: UiRect::all(Val::Px(UiTheme::PANEL_INSET_SM)),
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
-            BackgroundColor(UiTheme::panel_bg().into()),
-            BorderColor::from(UiTheme::ornate_gold()),
-        ))
-        .with_children(|col| {
+    spawn_framed_column(
+        parent,
+        UiPanelStyle::editor_sidebar(),
+        Val::Px(210.0),
+        0.0,
+        8.0,
+        Overflow::default(),
+        None,
+        |col| {
             col.spawn(section_title("Elements"));
             for entry in TITLE_CAMP_LAYER_REGISTRY {
                 hierarchy_row(col, entry.host_label, entry.element_id);
@@ -249,7 +246,8 @@ fn spawn_hierarchy_column(parent: &mut ChildSpawnerCommands<'_>) {
                     hierarchy_row_indented(col, layer.label, layer.id);
                 }
             }
-        });
+        },
+    );
 }
 
 fn hierarchy_row_indented(parent: &mut ChildSpawnerCommands<'_>, label: &str, id: &'static str) {
@@ -266,55 +264,30 @@ fn hierarchy_row_indented(parent: &mut ChildSpawnerCommands<'_>, label: &str, id
 }
 
 fn hierarchy_row(parent: &mut ChildSpawnerCommands<'_>, label: &str, id: &'static str) {
-    let pal = UiButtonPalette::panel_secondary();
-    parent
-        .spawn((
-            Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Percent(100.0),
-                min_height: Val::Px(36.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
-            Button,
-            BackgroundColor(pal.idle_bg.into()),
-            BorderColor::from(pal.idle_border),
-            pal,
-            PresentationEditorHierarchyButton(id.into()),
-            crate::ui::interaction::UiClickAction::EditorHierarchySelect,
-            UiTooltip::txt("Select this presentation element for editing."),
-        ))
-        .with_children(|b| {
-            b.spawn((
-                Text::new(label),
-                TextFont::from_font_size(UiTheme::FONT_BODY),
-                TextColor(UiTheme::body()),
-            ));
-        });
+    spawn_editor_button(
+        parent,
+        label,
+        UiButtonVariant::PanelSecondary,
+        UiTheme::body(),
+        Val::Percent(100.0),
+        Val::Px(36.0),
+        UiTheme::FONT_BODY,
+        PresentationEditorHierarchyButton(id.into()),
+        UiClickAction::EditorHierarchySelect,
+        "Select this presentation element for editing.",
+    );
 }
 
 fn spawn_inspector_column(parent: &mut ChildSpawnerCommands<'_>) {
-    parent
-        .spawn((
-            Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Px(320.0),
-                flex_shrink: 0.0,
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Stretch,
-                row_gap: Val::Px(6.0),
-                padding: UiRect::all(Val::Px(UiTheme::PANEL_INSET_SM)),
-                border: UiRect::all(Val::Px(1.0)),
-                max_height: Val::Percent(100.0),
-                overflow: Overflow::scroll_y(),
-                ..default()
-            },
-            BackgroundColor(UiTheme::panel_bg().into()),
-            BorderColor::from(UiTheme::ornate_gold()),
-        ))
-        .with_children(|col| {
+    spawn_framed_column(
+        parent,
+        UiPanelStyle::editor_sidebar(),
+        Val::Px(320.0),
+        0.0,
+        6.0,
+        Overflow::scroll_y(),
+        Some(Val::Percent(100.0)),
+        |col| {
             col.spawn(section_title("Inspector"));
             tune_row(
                 col,
@@ -407,44 +380,59 @@ fn spawn_inspector_column(parent: &mut ChildSpawnerCommands<'_>) {
                 TextLayout::new_with_justify(Justify::Left),
                 PresentationEditorPivotSummaryText,
             ));
-        });
+        },
+    );
+}
+
+fn spawn_editor_button<M: Component>(
+    parent: &mut ChildSpawnerCommands<'_>,
+    label: &str,
+    variant: UiButtonVariant,
+    text_color: Color,
+    width: Val,
+    height: Val,
+    font_size: f32,
+    marker: M,
+    action: UiClickAction,
+    tip: &'static str,
+) {
+    let entity = spawn_button(
+        parent,
+        UiButtonConfig {
+            label,
+            variant,
+            width,
+            height,
+            font_size,
+            text_color,
+            flex_shrink: 0.0,
+        },
+    );
+    parent
+        .commands_mut()
+        .entity(entity)
+        .insert((marker, action, UiTooltip::txt(tip)));
 }
 
 fn spawn_footer_button<M: Component>(
     parent: &mut ChildSpawnerCommands<'_>,
     label: &str,
     marker: M,
-    action: crate::ui::interaction::UiClickAction,
+    action: UiClickAction,
     tip: &'static str,
 ) {
-    let pal = UiButtonPalette::panel_outlined();
-    parent
-        .spawn((
-            Node {
-                box_sizing: BoxSizing::BorderBox,
-                min_width: Val::Px(150.0),
-                min_height: Val::Px(36.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                padding: UiRect::horizontal(Val::Px(10.0)),
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
-            Button,
-            BackgroundColor(pal.idle_bg.into()),
-            BorderColor::from(pal.idle_border),
-            marker,
-            action,
-            pal,
-            UiTooltip::txt(tip),
-        ))
-        .with_children(|b| {
-            b.spawn((
-                Text::new(label),
-                TextFont::from_font_size(UiTheme::FONT_BODY),
-                TextColor(UiTheme::body()),
-            ));
-        });
+    spawn_editor_button(
+        parent,
+        label,
+        UiButtonVariant::PanelOutlined,
+        UiTheme::body(),
+        Val::Px(150.0),
+        Val::Px(36.0),
+        UiTheme::FONT_BODY,
+        marker,
+        action,
+        tip,
+    );
 }
 
 fn tune_row(
@@ -453,8 +441,6 @@ fn tune_row(
     field: PresentationEditorTuneField,
     _step_hint: &'static str,
 ) {
-    let pal_dec = UiButtonPalette::panel_outlined();
-    let pal_inc = UiButtonPalette::panel_outlined();
     parent
         .spawn((
             Node {
@@ -487,89 +473,59 @@ fn tune_row(
                 FocusPolicy::Pass,
             ))
             .with_children(|r| {
-                r.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        min_width: Val::Px(28.0),
-                        min_height: Val::Px(26.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        border: UiRect::all(Val::Px(1.0)),
-                        ..default()
-                    },
-                    Button,
-                    BackgroundColor(pal_dec.idle_bg.into()),
-                    BorderColor::from(pal_dec.idle_border),
-                    pal_dec,
+                spawn_editor_button(
+                    r,
+                    "−",
+                    UiButtonVariant::PanelOutlined,
+                    UiTheme::body(),
+                    Val::Px(28.0),
+                    Val::Px(26.0),
+                    UiTheme::FONT_LABEL,
                     PresentationEditorTuneDeltaButton {
                         field,
                         positive: false,
                     },
-                    crate::ui::interaction::UiClickAction::EditorTuneDelta,
-                    UiTooltip::txt("Decrease (Shift = 10× step)."),
-                ))
-                .with_children(|b| {
-                    b.spawn((
-                        Text::new("−"),
-                        TextFont::from_font_size(UiTheme::FONT_LABEL),
-                        TextColor(UiTheme::body()),
-                    ));
-                });
-                let val_pal = UiButtonPalette::panel_secondary();
-                r.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        min_width: Val::Px(72.0),
-                        min_height: Val::Px(26.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        border: UiRect::all(Val::Px(1.0)),
-                        ..default()
+                    UiClickAction::EditorTuneDelta,
+                    "Decrease (Shift = 10× step).",
+                );
+                let value_ent = spawn_button_with_extra_text(
+                    r,
+                    UiButtonConfig {
+                        label: "0.00",
+                        variant: UiButtonVariant::PanelSecondary,
+                        width: Val::Px(72.0),
+                        height: Val::Px(26.0),
+                        font_size: UiTheme::FONT_CAPTION,
+                        text_color: UiTheme::muted_cream(),
+                        flex_shrink: 0.0,
                     },
-                    Button,
-                    BackgroundColor(val_pal.idle_bg.into()),
-                    BorderColor::from(val_pal.idle_border),
-                    val_pal,
-                    PresentationEditorTuneValueButton(field),
-                    crate::ui::interaction::UiClickAction::EditorTuneValue,
-                    UiTooltip::txt("Click to type a value. Enter applies, Esc cancels. Hold Shift with −/+ for 10× steps."),
-                ))
-                .with_children(|b| {
-                    b.spawn((
-                        Text::new("0.00"),
-                        TextFont::from_font_size(UiTheme::FONT_CAPTION),
-                        TextColor(UiTheme::muted_cream()),
+                    (
                         TextLayout::new_with_justify(Justify::Center),
                         PresentationEditorTuneValueText(field),
-                    ));
-                });
-                r.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        min_width: Val::Px(28.0),
-                        min_height: Val::Px(26.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        border: UiRect::all(Val::Px(1.0)),
-                        ..default()
-                    },
-                    Button,
-                    BackgroundColor(pal_inc.idle_bg.into()),
-                    BorderColor::from(pal_inc.idle_border),
-                    pal_inc,
+                    ),
+                );
+                r.commands_mut().entity(value_ent).insert((
+                    PresentationEditorTuneValueButton(field),
+                    UiClickAction::EditorTuneValue,
+                    UiTooltip::txt(
+                        "Click to type a value. Enter applies, Esc cancels. Hold Shift with −/+ for 10× steps.",
+                    ),
+                ));
+                spawn_editor_button(
+                    r,
+                    "+",
+                    UiButtonVariant::PanelOutlined,
+                    UiTheme::body(),
+                    Val::Px(28.0),
+                    Val::Px(26.0),
+                    UiTheme::FONT_LABEL,
                     PresentationEditorTuneDeltaButton {
                         field,
                         positive: true,
                     },
-                    UiTooltip::txt("Increase (Shift = 10× step)."),
-                ))
-                .with_children(|b| {
-                    b.spawn((
-                        Text::new("+"),
-                        TextFont::from_font_size(UiTheme::FONT_LABEL),
-                        TextColor(UiTheme::body()),
-                    ));
-                });
+                    UiClickAction::EditorTuneDelta,
+                    "Increase (Shift = 10× step).",
+                );
             });
         });
 }

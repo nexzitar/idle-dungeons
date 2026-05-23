@@ -162,6 +162,17 @@ impl UiPanelStyle {
         }
     }
 
+    /// Presentation editor hierarchy / inspector columns.
+    pub fn editor_sidebar() -> Self {
+        Self {
+            background: UiTheme::panel_bg(),
+            border: UiTheme::ornate_gold(),
+            padding_px: UiTheme::PANEL_INSET_SM,
+            row_gap_px: 8.0,
+            border_px: 1.0,
+        }
+    }
+
     /// Centered modal dialog surface (settings, skill book).
     pub fn dialog() -> Self {
         Self {

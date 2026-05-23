@@ -12,6 +12,7 @@ pub enum UiButtonVariant {
     Secondary,
     Danger,
     PanelOutlined,
+    PanelSecondary,
     Equip,
     Salvage,
 }
@@ -23,6 +24,7 @@ impl UiButtonVariant {
             Self::Secondary => UiButtonPalette::panel_outlined(),
             Self::Danger => UiButtonPalette::salvage(),
             Self::PanelOutlined => UiButtonPalette::panel_outlined(),
+            Self::PanelSecondary => UiButtonPalette::panel_secondary(),
             Self::Equip => UiButtonPalette::equip(),
             Self::Salvage => UiButtonPalette::salvage(),
         }
@@ -41,6 +43,14 @@ pub struct UiButtonConfig<'a> {
 }
 
 pub fn spawn_button(parent: &mut ChildSpawnerCommands<'_>, config: UiButtonConfig<'_>) -> Entity {
+    spawn_button_with_extra_text(parent, config, ())
+}
+
+pub fn spawn_button_with_extra_text<B: Bundle>(
+    parent: &mut ChildSpawnerCommands<'_>,
+    config: UiButtonConfig<'_>,
+    extra_on_text: B,
+) -> Entity {
     let pal = config.variant.palette();
     parent
         .spawn((
@@ -66,6 +76,7 @@ pub fn spawn_button(parent: &mut ChildSpawnerCommands<'_>, config: UiButtonConfi
                 Text::new(config.label),
                 TextFont::from_font_size(config.font_size),
                 TextColor(config.text_color),
+                extra_on_text,
             ));
         })
         .id()

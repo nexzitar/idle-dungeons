@@ -85,6 +85,42 @@ pub fn spawn_atmosphere(parent: &mut ChildSpawnerCommands<'_>) {
     ));
 }
 
+/// Fixed-width bordered column (presentation editor sidebars; no scroll wrapper).
+pub fn spawn_framed_column(
+    parent: &mut ChildSpawnerCommands<'_>,
+    style: UiPanelStyle,
+    width: Val,
+    flex_shrink: f32,
+    row_gap_px: f32,
+    overflow: Overflow,
+    max_height: Option<Val>,
+    content: impl FnOnce(&mut ChildSpawnerCommands<'_>),
+) -> Entity {
+    let mut node = Node {
+        box_sizing: BoxSizing::BorderBox,
+        width,
+        flex_shrink,
+        flex_direction: FlexDirection::Column,
+        align_items: AlignItems::Stretch,
+        row_gap: Val::Px(row_gap_px),
+        padding: UiRect::all(Val::Px(style.padding_px)),
+        border: UiRect::all(Val::Px(style.border_px)),
+        overflow,
+        ..default()
+    };
+    if let Some(max_h) = max_height {
+        node.max_height = max_h;
+    }
+    parent
+        .spawn((
+            node,
+            BackgroundColor(style.background),
+            BorderColor::from(style.border),
+        ))
+        .with_children(content)
+        .id()
+}
+
 pub fn spawn_framed_panel(
     parent: &mut ChildSpawnerCommands<'_>,
     flex: f32,
