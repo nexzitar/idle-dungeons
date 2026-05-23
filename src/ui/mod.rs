@@ -15,11 +15,14 @@ pub mod summary_panel;
 pub mod theme;
 pub mod title_camp;
 pub mod tooltip;
+pub mod interaction;
+
+pub(crate) use interaction::{ui_click_release_confirms, UiClickPress};
 
 use crate::app::{
     AcceptRunRewards, ActiveRunPlayback, AssignHeroSkill, BuySkillUnlock, EquipInventoryItem,
     GameState, LatestRunSummary, OpenGearHub, OpenSkillBook, OpenSkillShop, ProfileSavePath,
-    ProfileState, ResetProgress, RunSpeedSetting, SalvageInventoryItem, SkipRunPlayback, StartRun,
+    ProfileState, ResetProgress, RunSpeedSetting, SalvageInventoryItem, SkipRunPlayback,
 };
 use crate::domain::combat::COMBAT_TICK_DISPLAY_SECS;
 use crate::domain::items::ItemInstance;
@@ -55,8 +58,8 @@ use crate::ui::components::{
     SettingsModalCloseButton, SettingsModalRoot, SkillBookBackdrop, SkillBookCloseButton,
     SkillBookPickButton, SkillBookRoot, SkillShopBackdrop, SkillShopBuyButton,
     SkillShopCloseButton, SkillShopOpenButton, SkillShopRoot, SkillSlotButton, SkipPlaybackButton,
-    StartRunButton, StashSortCycleButton, SummaryScreen, TitleEnterCampButton, TitleQuitButton,
-    TitleScreen, ToggleCombatLogButton, TopBarField, UiButtonPalette, UiRoot, UiTooltip,
+    StashSortCycleButton, SummaryScreen, TitleScreen, ToggleCombatLogButton,
+    TopBarField, UiButtonPalette, UiRoot, UiTooltip,
 };
 use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::scene_tune::TitleSceneLayout;
@@ -68,7 +71,6 @@ use crate::ui::primitives::spawn_atmosphere;
 use bevy::app::MainScheduleOrder;
 use bevy::asset::AssetPlugin;
 use bevy::ecs::schedule::ScheduleLabel;
-use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::MouseButton;
 use bevy::input::{keyboard::KeyboardInput, ButtonState, InputPlugin};
 use bevy::prelude::*;
@@ -81,10 +83,6 @@ struct GearHubKeepOpen(pub bool);
 
 #[derive(Resource, Default)]
 pub(crate) struct PlaybackCombatLogVisible(pub bool);
-
-/// Button that received [`Interaction::Pressed`] on press; used to confirm click on mouse-up.
-#[derive(Resource, Default)]
-pub(crate) struct UiClickPress(Option<Entity>);
 
 #[derive(Resource, Default)]
 struct FloatingCombatPopupSeq(u32);
@@ -107,7 +105,7 @@ impl Plugin for UiPlugin {
         }
         app.init_resource::<GearHubKeepOpen>();
         app.init_resource::<UiClickPress>();
-        app.init_resource::<UiPressedButtonEntitiesOnClick>();
+        app.init_resource::<interaction::click::UiPressedButtonEntitiesOnClick>();
         app.init_resource::<crate::ui::tooltip::TooltipState>();
         app.init_resource::<HeroNameEditState>();
         app.init_resource::<PlaybackCombatLogVisible>();
@@ -161,12 +159,10 @@ impl Plugin for UiPlugin {
                 (
                     (
                         (
-                            capture_ui_pressed_button_entities,
-                            capture_ui_click_start,
+                            interaction::click::capture_ui_pressed_button_entities,
+                            interaction::click::capture_ui_click_start,
+                            interaction::dispatch::dispatch_ui_clicks,
                             apply_ui_button_palettes,
-                            handle_title_enter_camp.run_if(in_state(GameState::Title)),
-                            handle_title_quit.run_if(in_state(GameState::Title)),
-                            handle_start_button.run_if(in_state(GameState::Build)),
                             handle_skip_playback_button.run_if(in_state(GameState::Running)),
                             send_reset_progress_requests,
                             fulfill_reset_progress,
@@ -196,7 +192,7 @@ impl Plugin for UiPlugin {
                             handle_accept_button.run_if(in_state(GameState::Summary)),
                             handle_equip_buttons.run_if(in_build_or_summary),
                             handle_salvage_buttons.run_if(in_build_or_summary),
-                            clear_ui_click_after_release,
+                            interaction::click::clear_ui_click_after_release,
                         )
                             .chain(),
                     )
@@ -337,235 +333,6 @@ fn spawn_title_screen(
         &ph,
         &tune,
     );
-}
-
-fn handle_title_enter_camp(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    buttons: Query<(Entity, &Interaction), With<TitleEnterCampButton>>,
-    mut next_state: ResMut<NextState<GameState>>,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    for (entity, interaction) in &buttons {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            next_state.set(GameState::Build);
-            break;
-        }
-    }
-}
-
-fn handle_title_quit(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    buttons: Query<(Entity, &Interaction), With<TitleQuitButton>>,
-    mut exit: MessageWriter<AppExit>,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    for (entity, interaction) in &buttons {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            exit.write(AppExit::Success);
-            break;
-        }
-    }
-}
-
-/// Pressed [`Button`] entities on the current mouse-down (consumed by [`capture_ui_click_start`]).
-#[derive(Resource, Default)]
-struct UiPressedButtonEntitiesOnClick(Option<Vec<Entity>>);
-
-/// Modal roots currently present — used to filter pointer press targets away from briefing UI below.
-#[derive(SystemParam)]
-struct UiBlockingOverlayPresence<'w, 's> {
-    settings: Query<'w, 's, (), With<SettingsModalRoot>>,
-    skill_book: Query<'w, 's, (), With<SkillBookRoot>>,
-    skill_shop: Query<'w, 's, (), With<SkillShopRoot>>,
-    gear_hub: Query<'w, 's, (), With<GearHubRoot>>,
-}
-
-#[derive(SystemParam)]
-struct UiClickResolveMarkers<'w, 's> {
-    reset: Query<'w, 's, (), With<ResetProgressButton>>,
-    playback_speed_dec: Query<'w, 's, (), With<PlaybackSpeedDecButton>>,
-    playback_speed_inc: Query<'w, 's, (), With<PlaybackSpeedIncButton>>,
-    settings_close: Query<'w, 's, (), With<SettingsModalCloseButton>>,
-    settings_back: Query<'w, 's, (), With<SettingsModalBackdrop>>,
-    #[cfg(debug_assertions)]
-    presentation_settings_toggle: Query<'w, 's, (), With<PresentationEditorSettingsToggleButton>>,
-    sbook_pick: Query<'w, 's, (), With<SkillBookPickButton>>,
-    sbook_close: Query<'w, 's, (), With<SkillBookCloseButton>>,
-    sbook_back: Query<'w, 's, (), With<SkillBookBackdrop>>,
-    shop_buy: Query<'w, 's, (), With<SkillShopBuyButton>>,
-    shop_close: Query<'w, 's, (), With<SkillShopCloseButton>>,
-    shop_back: Query<'w, 's, (), With<SkillShopBackdrop>>,
-    gear_back: Query<'w, 's, (), With<GearHubBackdrop>>,
-    gear_close: Query<'w, 's, (), With<GearHubCloseButton>>,
-    equip: Query<'w, 's, (), With<EquipItemButton>>,
-    salvage: Query<'w, 's, (), With<SalvageItemButton>>,
-    stash_sort: Query<'w, 's, (), With<StashSortCycleButton>>,
-}
-
-fn capture_ui_pressed_button_entities(
-    mouse: Res<ButtonInput<MouseButton>>,
-    mut buf: ResMut<UiPressedButtonEntitiesOnClick>,
-    buttons: Query<(Entity, &Interaction), With<Button>>,
-) {
-    if !mouse.just_pressed(MouseButton::Left) {
-        buf.0 = None;
-        return;
-    }
-    let pressed: Vec<Entity> = buttons
-        .iter()
-        .filter_map(|(e, i)| (*i == Interaction::Pressed).then_some(e))
-        .collect();
-    buf.0 = (!pressed.is_empty()).then_some(pressed);
-}
-
-fn capture_ui_click_start(
-    mut press: ResMut<UiClickPress>,
-    mut buf: ResMut<UiPressedButtonEntitiesOnClick>,
-    overlay: UiBlockingOverlayPresence,
-    m: UiClickResolveMarkers,
-) {
-    let Some(mut pressed) = buf.0.take() else {
-        return;
-    };
-
-    if pressed.is_empty() {
-        press.0 = None;
-        return;
-    }
-
-    // Overlay-only candidates so briefing buttons under the same root cannot steal the press.
-    if !overlay.settings.is_empty() {
-        pressed.retain(|&e| {
-            m.reset.get(e).is_ok()
-                || m.presentation_settings_toggle.get(e).is_ok()
-                || m.settings_close.get(e).is_ok()
-                || m.settings_back.get(e).is_ok()
-        });
-        press.0 = pressed.iter().copied().min_by_key(|&e| {
-            let tier = if m.presentation_settings_toggle.get(e).is_ok() {
-                0u8
-            } else if m.reset.get(e).is_ok() {
-                1
-            } else if m.settings_close.get(e).is_ok() {
-                2
-            } else if m.settings_back.get(e).is_ok() {
-                3
-            } else {
-                255
-            };
-            (tier, e.to_bits())
-        });
-        return;
-    }
-
-    if !overlay.skill_book.is_empty() {
-        pressed.retain(|&e| {
-            m.sbook_pick.get(e).is_ok()
-                || m.sbook_close.get(e).is_ok()
-                || m.sbook_back.get(e).is_ok()
-        });
-        press.0 = pressed.iter().copied().min_by_key(|&e| {
-            let tier = if m.sbook_pick.get(e).is_ok() {
-                0u8
-            } else if m.sbook_close.get(e).is_ok() {
-                1
-            } else if m.sbook_back.get(e).is_ok() {
-                2
-            } else {
-                255
-            };
-            (tier, e.to_bits())
-        });
-        return;
-    }
-
-    if !overlay.skill_shop.is_empty() {
-        pressed.retain(|&e| {
-            m.shop_buy.get(e).is_ok() || m.shop_close.get(e).is_ok() || m.shop_back.get(e).is_ok()
-        });
-        press.0 = pressed.iter().copied().min_by_key(|&e| {
-            let tier = if m.shop_buy.get(e).is_ok() {
-                0u8
-            } else if m.shop_close.get(e).is_ok() {
-                1
-            } else if m.shop_back.get(e).is_ok() {
-                2
-            } else {
-                255
-            };
-            (tier, e.to_bits())
-        });
-        return;
-    }
-
-    if !overlay.gear_hub.is_empty() {
-        pressed.retain(|&e| {
-            m.equip.get(e).is_ok()
-                || m.salvage.get(e).is_ok()
-                || m.stash_sort.get(e).is_ok()
-                || m.gear_close.get(e).is_ok()
-                || m.gear_back.get(e).is_ok()
-        });
-        press.0 = pressed.iter().copied().min_by_key(|&e| {
-            let tier = if m.equip.get(e).is_ok() {
-                0u8
-            } else if m.salvage.get(e).is_ok() {
-                1
-            } else if m.stash_sort.get(e).is_ok() {
-                2
-            } else if m.gear_close.get(e).is_ok() {
-                3
-            } else if m.gear_back.get(e).is_ok() {
-                4
-            } else {
-                255
-            };
-            (tier, e.to_bits())
-        });
-        return;
-    }
-
-    press.0 = pressed
-        .iter()
-        .copied()
-        .filter(|&e| m.playback_speed_dec.get(e).is_ok() || m.playback_speed_inc.get(e).is_ok())
-        .min_by_key(|e| e.to_bits())
-        .or_else(|| pressed.iter().min_by_key(|e| e.to_bits()).copied());
-}
-
-/// Bevy UI's `ui_focus_system` may leave [`Interaction::Pressed`] on the frame where the
-/// mouse button is released if press and release occur in the same update (common with quick taps).
-/// After a longer hold, release instead becomes [`Interaction::Hovered`].
-/// Bevy can briefly flip a control to [`Interaction::None`] on mouse-up before hover restabilizes,
-/// especially with nested UI hit targets—still treat release as confirming if [`UiClickPress`]
-/// captured this entity on mouse-down (callers gate on matching `target`).
-#[inline]
-pub(crate) fn ui_click_release_confirms(interaction: Interaction) -> bool {
-    matches!(
-        interaction,
-        Interaction::Hovered | Interaction::Pressed | Interaction::None
-    )
-}
-
-fn clear_ui_click_after_release(
-    mouse: Res<ButtonInput<MouseButton>>,
-    mut press: ResMut<UiClickPress>,
-) {
-    if mouse.just_released(MouseButton::Left) {
-        press.0 = None;
-    }
 }
 
 fn root_shell() -> impl Bundle {
@@ -1848,28 +1615,6 @@ fn handle_playback_speed_arrows(
     }
 }
 
-fn handle_start_button(
-    mouse: Res<ButtonInput<MouseButton>>,
-    press: Res<UiClickPress>,
-    buttons: Query<(Entity, &Interaction), With<StartRunButton>>,
-    mut start_run_events: MessageWriter<StartRun>,
-) {
-    if !mouse.just_released(MouseButton::Left) {
-        return;
-    }
-    let Some(target) = press.0 else {
-        return;
-    };
-    for (entity, interaction) in &buttons {
-        if entity == target && ui_click_release_confirms(*interaction) {
-            start_run_events.write(StartRun {
-                seed: crate::domain::run::DEFAULT_RUN_SEED,
-            });
-            break;
-        }
-    }
-}
-
 fn handle_skip_playback_button(
     mouse: Res<ButtonInput<MouseButton>>,
     press: Res<UiClickPress>,
@@ -2750,6 +2495,7 @@ fn cleanup_ui(mut commands: Commands, roots: Query<Entity, With<UiRoot>>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ui::components::StartRunButton;
     use crate::app::{
         AcceptRunRewards, GameState, IdleDungeonsPlugin, LatestRunSummary, OpenGearHub,
         SkipRunPlayback, StartRun,

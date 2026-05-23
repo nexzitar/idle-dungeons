@@ -28,6 +28,7 @@ use crate::ui::scene_tune::{
 };
 use crate::ui::theme::{body_text, caption_text, section_title, UiTheme};
 use crate::ui::tooltip;
+use crate::ui::interaction::UiClickAction;
 use crate::ui::primitives::spawn_atmosphere;
 
 fn camp_seat_assignment_seed(meta: &MetaProgression) -> u64 {
@@ -172,14 +173,36 @@ fn spawn_title_nav_column(parent: &mut ChildSpawnerCommands<'_>) {
                 col,
                 "Enter camp",
                 TitleEnterCampButton,
+                UiClickAction::TitleEnterCamp,
                 pal_idle,
                 pal_border,
             );
-            title_menu_button(col, "Party", TitleEnterCampButton, pal_idle, pal_border);
-            title_menu_button(col, "Heroes", TitleEnterCampButton, pal_idle, pal_border);
+            title_menu_button(
+                col,
+                "Party",
+                TitleEnterCampButton,
+                UiClickAction::TitleEnterCamp,
+                pal_idle,
+                pal_border,
+            );
+            title_menu_button(
+                col,
+                "Heroes",
+                TitleEnterCampButton,
+                UiClickAction::TitleEnterCamp,
+                pal_idle,
+                pal_border,
+            );
             title_codex_placeholder(col);
             crate::ui::shell::title_settings_menu_button(col);
-            title_menu_button(col, "Quit", TitleQuitButton, pal_idle, pal_border);
+            title_menu_button(
+                col,
+                "Quit",
+                TitleQuitButton,
+                UiClickAction::TitleQuit,
+                pal_idle,
+                pal_border,
+            );
         });
 }
 
@@ -187,6 +210,7 @@ fn title_menu_button(
     parent: &mut ChildSpawnerCommands<'_>,
     label: &str,
     marker: impl Component,
+    action: UiClickAction,
     bg: Color,
     border: Color,
 ) {
@@ -205,6 +229,7 @@ fn title_menu_button(
             BackgroundColor(bg.into()),
             BorderColor::from(border),
             marker,
+            action,
         ))
         .with_children(|b| {
             b.spawn((

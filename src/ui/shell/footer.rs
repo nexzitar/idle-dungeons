@@ -11,6 +11,7 @@ use crate::ui::components::{
     GearHubOpenButton, SkillShopOpenButton, SkipPlaybackButton, StashSortCycleButton,
     UiButtonPalette, UiTooltip,
 };
+use crate::ui::interaction::UiClickAction;
 use crate::ui::theme::{body_text, caption_text, headline_text, section_title, UiTheme};
 
 use super::layout::spawn_column_flex_scroll;
@@ -283,6 +284,7 @@ pub fn spawn_mockup_footer(parent: &mut ChildSpawnerCommands<'_>, mode: FooterMo
             BackgroundColor(p.idle_bg.into()),
             BorderColor::from(p.idle_border),
                         crate::ui::components::StartRunButton,
+                        UiClickAction::StartRun,
                         p,
                         UiTooltip::txt(
                             "Begin a seeded dungeon run using your current hero build and stash.",
