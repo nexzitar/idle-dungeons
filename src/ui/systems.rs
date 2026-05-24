@@ -383,6 +383,7 @@ pub(crate) fn open_skill_shop_from_events(
     roots: Query<Entity, With<UiRoot>>,
     existing: Query<Entity, With<SkillShopRoot>>,
     mut commands: Commands,
+    ph: Res<UiPlaceholderImages>,
     profile: Res<ProfileState>,
     state: Res<State<GameState>>,
 ) {
@@ -399,7 +400,7 @@ pub(crate) fn open_skill_shop_from_events(
         let unlocked = profile.profile.meta.unlocked_skill_ids.clone();
         let gold = profile.profile.meta.gold;
         commands.entity(root).with_children(|parent| {
-            crate::ui::skill_shop::spawn_skill_shop_modal(parent, &unlocked, gold);
+            crate::ui::skill_shop::spawn_skill_shop_modal(parent, &unlocked, gold, &ph);
         });
     }
 }

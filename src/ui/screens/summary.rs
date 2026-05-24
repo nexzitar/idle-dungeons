@@ -3,7 +3,6 @@ use bevy::prelude::*;
 use crate::app::{LatestRunSummary, ProfileState, RunSpeedSetting};
 use crate::domain::run::RunSummary;
 use crate::ui::assets::UiPlaceholderImages;
-use crate::ui::build_panel::build_panel_text;
 use crate::ui::components::{SummaryScreen, UiRoot};
 use crate::ui::primitives::spawn_atmosphere;
 use crate::ui::screens::{content_column_bundle, root_shell};
@@ -34,10 +33,6 @@ pub(crate) fn spawn_summary_screen_root(
     let lead = profile.effective_hero();
     let partner = profile.effective_party_partner();
     let party_slots = profile.profile.meta.party_slots_unlocked();
-    let loadout_lines: Vec<String> = build_panel_text(&lead)
-        .lines()
-        .map(|s| s.to_string())
-        .collect();
 
     let root_entity = commands.spawn((root_shell(), UiRoot, SummaryScreen)).id();
     commands.entity(root_entity).with_children(|root| {
@@ -55,25 +50,25 @@ pub(crate) fn spawn_summary_screen_root(
             );
             shell::spawn_three_column_row(col, |row| {
                 shell::spawn_ornate_column(row, 1.0, |panel| {
-                    shell::spawn_hero_column_mockup(
+                    shell::spawn_hero_column(
                         panel,
                         ph,
                         &lead,
                         partner.as_ref(),
-                        party_slots,
-                        &loadout_lines,
-                        false,
-                        false,
+                        shell::HeroColumnConfig {
+                            party_slots_unlocked: party_slots,
+                            skill_slots_interactive: false,
+                            allow_rename: false,
+                        },
                     );
                 });
                 shell::spawn_ornate_column(row, 1.25, |panel| {
-                    shell::spawn_dungeon_summary_column(panel, summary);
+                    shell::spawn_dungeon_summary_column(panel, summary, ph);
                 });
             });
             shell::spawn_mockup_footer(col, shell::FooterMode::Summary);
         });
         shell::spawn_summary_rewards_modal(root, summary, profile.profile.stash_sort, ph);
-        crate::ui::tooltip::spawn_tooltip_layer(root);
     });
     root_entity
 }

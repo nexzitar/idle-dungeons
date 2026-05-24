@@ -4,6 +4,23 @@ All notable changes to **Delvers** (crate `idle_dungeons`) are recorded here. **
 
 ## Unreleased
 
+### UI design convergence — complete (Phases 0–10)
+
+- **Phase 0–1:** Design system doc, `UiDensity` / `MountedPanelStyle` / `SkillDisplayFamily`, `spawn_mounted_panel`, `spawn_framed_section_header`.
+- **Phase 2:** Shared `loadout_row` + `skill_bar` on build, summary, and running camp columns; text chip slots removed (~170 lines from `shell/layout.rs`).
+- **Phase 3:** `hero_identity_card` primitive — portrait frame, name/rename, role subtitle, HP/DMG/ARM stat strip; camp party column uses it for P1/P2 instead of separate title + vitals rows.
+- **Phase 4:** Build screen convergence — `shell/hero_column.rs` (deep mounted panel, framed headers, gold layering captions); briefing column recessed panel; footer dock uses `spawn_button` with one-line hints; `build_panel_text` wall retired.
+- **Phase 5:** Inspect ecosystem — `ui/inspect.rs` (`InspectRegion`, scoped strips, unified hover/sync); compact inspect on camp, gear hub, and skill shop; floating tooltips removed from camp surfaces (inspect strip replaces them).
+- **Phase 6:** Gear hub convergence — `icon_frame` / `rarity_frame_border`; icon-first stash cards (52px art, compact actions, stats in inspect strip); `hero_identity_card` above loadout scroll.
+- **Phase 7:** Summary rewards — `reward_card` (72px icon, rarity glow, NEW badge); dungeon summary column outcome → treasure row → loot grid + recessed chronicle; rewards modal uses `spawn_modal_shell` framing.
+- **Phase 8:** Combat theater — `UiBarStyle` playback presets; enemy/timing bars unified on `spawn_horizontal_bar`; 40px combat `skill_bar` under theater portraits (overlays hidden, hooks reserved).
+- **Phase 9:** Motion hooks — focused slot gold glow; debounced inspect fade (150ms alpha); theater skill GCD overlay stub wired from playback frames.
+- **Phase 10:** Skill shop — `spawn_modal_shell` framing; icon catalogue grid (buildcraft library pattern); fixed inspect strip for purchase detail; `spawn_button` close footer.
+
+### Post-convergence (Wave 8 — combat UX)
+
+- **Playback theater inspect strip** — fixed skill detail panel in the live delve column; hover combat skill icons for loadout info and left-to-right priority hint.
+
 ### Party buildcraft sheet (Phase 1)
 
 - **Party-first skill workspace:** Replaces the list-style skill book with a full **Party Buildcraft** sheet — party loadout column (P1/P2, six slots each), icon library grid, and fixed inspect panel.

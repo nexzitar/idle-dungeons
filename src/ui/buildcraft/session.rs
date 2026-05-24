@@ -7,7 +7,7 @@ use crate::domain::party::PartyHeroKind;
 use crate::domain::skills::SkillId;
 use crate::save::SaveProfile;
 
-pub const LOADOUT_SLOT_COUNT: usize = 6;
+pub use crate::ui::primitives::skill_bar::LOADOUT_SLOT_COUNT;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InspectTarget {

@@ -6,23 +6,24 @@ use bevy::ui::FocusPolicy;
 use crate::app::PLAYBACK_SPEED_STEPS;
 use crate::domain::dungeon::RoomKind;
 use crate::domain::items::GearSlot;
-use crate::domain::party::PartyHeroKind;
 use crate::domain::progression::MetaProgression;
-use crate::domain::progression::PARTY_SLOT_2_UNLOCK_DEPTH;
 use crate::domain::run::{RunOutcome, RunSummary, DEFAULT_RUN_MAX_DEPTH, DEFAULT_RUN_SEED};
-use crate::domain::skills::{skill_definition, SkillKind};
+use crate::domain::skills::skill_definition;
 use crate::ui::components::{
-    HeroNameDisplayText, HeroNameEditButton,
     PlaybackSpeedDecButton, PlaybackSpeedIncButton, PlaybackSpeedValueText,
     ResetProgressButton, SettingsButton, SettingsModalBackdrop,
-    SettingsModalCloseButton, SettingsModalRoot, SkillSlotButton,
-    TopBarField, UiButtonPalette, UiTooltip,
+    SettingsModalCloseButton, SettingsModalRoot,
+    TopBarField, UiButtonPalette,
 };
+use crate::ui::inspect::{GearSlotInspect, InspectHint};
 use crate::ui::assets::UiPlaceholderImages;
-use crate::ui::primitives::scroll::{spawn_scrollable_flex_column, spawn_scrollable_log};
+use crate::ui::primitives::panel::{spawn_mounted_panel, MountedPanelConfig};
+use crate::ui::primitives::reward_card::spawn_reward_loot_grid;
+use crate::ui::primitives::section::spawn_framed_section_header;
+use crate::ui::primitives::scroll::spawn_scrollable_flex_column;
 use crate::ui::theme::{
     body_text, caption_text, format_item_affix_lines, format_item_stat_summary, headline_text,
-    log_line_present, rarity_color, section_title, UiTheme,
+    log_line_present, rarity_color, section_title, MountedPanelStyle, UiDensity, UiTheme,
 };
 
 fn ornate_shell(
@@ -124,7 +125,7 @@ pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>) {
                 SettingsModalBackdrop,
                 crate::ui::interaction::UiClickAction::CloseSettings,
                 backdrop_pal,
-                UiTooltip::txt("Click the dimmed backdrop to close settings (same as Close)."),
+                InspectHint("Click backdrop to close."),
             ));
             layer
                 .spawn((
@@ -174,9 +175,7 @@ pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>) {
                             ResetProgressButton,
                             crate::ui::interaction::UiClickAction::ResetProgress,
                             reset_pal,
-                            UiTooltip::txt(
-                                "Permanently wipe local save data—hero, stash, gold, upgrades—and return to a fresh profile.",
-                            ),
+                            InspectHint("Wipe save data and start fresh."),
                         ))
                         .with_children(|b| {
                             b.spawn((
@@ -203,7 +202,7 @@ pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>) {
                             SettingsModalCloseButton,
                             crate::ui::interaction::UiClickAction::CloseSettings,
                             close_pal,
-                            UiTooltip::txt("Close the settings dialog without applying other changes."),
+                            InspectHint("Close settings."),
                         ))
                         .with_children(|b| {
                             b.spawn((
@@ -236,9 +235,7 @@ pub fn spawn_settings_modal(parent: &mut ChildSpawnerCommands<'_>) {
                                 PresentationEditorSettingsToggleButton,
                                 crate::ui::interaction::UiClickAction::EditorToggleLayout,
                                 pe_pal,
-                                UiTooltip::txt(
-                                    "Open the fullscreen presentation editor overlay (same as layout mode).",
-                                ),
+                                InspectHint("Open presentation editor overlay."),
                             ))
                             .with_children(|b| {
                                 b.spawn((
@@ -264,7 +261,7 @@ fn spawn_playback_speed_controls(parent: &mut ChildSpawnerCommands<'_>, initial_
                 ..default()
             },
             Interaction::default(),
-            UiTooltip::txt("Delve playback speed. ‹ › step through 1×, 2×, 3×, 5×, and 10×."),
+            InspectHint("Delve playback speed."),
         ))
         .with_children(|wrap| {
             wrap.spawn(Node {
@@ -314,7 +311,7 @@ fn spawn_playback_speed_controls(parent: &mut ChildSpawnerCommands<'_>, initial_
                     PlaybackSpeedDecButton,
                     crate::ui::interaction::UiClickAction::PlaybackSpeedDec,
                     p_dec,
-                    UiTooltip::txt("Slower delve playback (steps down to 1×)."),
+                    InspectHint("Slower playback."),
                 ))
                 .with_children(|b| {
                     b.spawn((
@@ -345,7 +342,7 @@ fn spawn_playback_speed_controls(parent: &mut ChildSpawnerCommands<'_>, initial_
                     PlaybackSpeedIncButton,
                     crate::ui::interaction::UiClickAction::PlaybackSpeedInc,
                     p_inc,
-                    UiTooltip::txt("Faster delve playback (steps up to 10×)."),
+                    InspectHint("Faster playback."),
                 ))
                 .with_children(|b| {
                     b.spawn((
@@ -467,9 +464,7 @@ pub fn spawn_mockup_header(
                         SettingsButton,
                         crate::ui::interaction::UiClickAction::OpenSettings,
                         p,
-                        UiTooltip::txt(
-                            "Open settings: reset all progress or review this note.",
-                        ),
+                        InspectHint("Open settings."),
                     ))
                     .with_children(|btn| {
                         btn.spawn((
@@ -502,7 +497,7 @@ pub fn title_settings_menu_button(parent: &mut ChildSpawnerCommands<'_>) {
             SettingsButton,
             crate::ui::interaction::UiClickAction::OpenSettings,
             p,
-            UiTooltip::txt("Open settings: reset all progress and saves."),
+            InspectHint("Open settings."),
         ))
         .with_children(|b| {
             b.spawn((
@@ -540,7 +535,7 @@ fn resource_chip(
                 ..default()
             },
             Interaction::default(),
-            UiTooltip::txt(tooltip),
+            InspectHint(tooltip),
         ))
         .with_children(|col| {
             col.spawn(Node {
@@ -636,338 +631,6 @@ pub(super) fn panel_title_centered(text: impl Into<String>) -> impl Bundle {
     )
 }
 
-fn spawn_hero_name_row(parent: &mut ChildSpawnerCommands<'_>, slot: u8, allow_rename: bool) {
-    parent
-        .spawn(Node {
-            box_sizing: BoxSizing::BorderBox,
-            width: Val::Percent(100.0),
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::SpaceBetween,
-            column_gap: Val::Px(8.0),
-            padding: UiRect::vertical(Val::Px(2.0)),
-            ..default()
-        })
-        .with_children(|r| {
-            r.spawn((
-                Text::new(""),
-                TextFont::from_font_size(UiTheme::FONT_BODY),
-                TextColor(UiTheme::muted_cream()),
-                HeroNameDisplayText { slot },
-            ));
-            if allow_rename {
-                let p = UiButtonPalette::panel_outlined();
-                r.spawn((
-                    Node {
-                        box_sizing: BoxSizing::BorderBox,
-                        min_width: Val::Px(72.0),
-                        min_height: Val::Px(30.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        padding: UiRect::horizontal(Val::Px(6.0)),
-                        border: UiRect::all(Val::Px(1.0)),
-                        ..default()
-                    },
-                    Button,
-                    BackgroundColor(p.idle_bg.into()),
-                    BorderColor::from(p.idle_border),
-                    HeroNameEditButton { slot },
-                    crate::ui::interaction::UiClickAction::HeroNameEdit,
-                    p,
-                    UiTooltip::txt(
-                        "Rename this hero: type, Enter to save, Esc to cancel.".to_string(),
-                    ),
-                ))
-                .with_children(|b| {
-                    b.spawn((
-                        Text::new("Rename"),
-                        TextFont::from_font_size(UiTheme::FONT_LABEL),
-                        TextColor(UiTheme::body()),
-                    ));
-                });
-            }
-        });
-}
-
-pub fn spawn_hero_column_mockup(
-    parent: &mut ChildSpawnerCommands<'_>,
-    ph: &UiPlaceholderImages,
-    lead: &crate::domain::hero::HeroProfile,
-    partner: Option<&crate::domain::hero::HeroProfile>,
-    party_slots_unlocked: usize,
-    loadout_lines: &[String],
-    skill_slots_interactive: bool,
-    allow_rename: bool,
-) {
-    let inner = move |p: &mut ChildSpawnerCommands<'_>| {
-        p.spawn(panel_title_centered("PARTY"));
-        spawn_column_flex_scroll(p, None, move |body| {
-            body.spawn(section_title("Player 1"));
-            spawn_hero_name_row(body, 0, allow_rename);
-            let stats = lead.derived_stats();
-            body.spawn(section_title("Vitals"));
-            stat_line_row(body, "Max Health", stats.max_health);
-            stat_line_row(body, "Damage", stats.damage);
-            stat_line_row(body, "Armor", stats.armor);
-            stat_line_row(body, "Healing", stats.healing_power);
-            if !loadout_lines.is_empty() {
-                body.spawn(caption_text("Loadout"));
-                for line in loadout_lines {
-                    body.spawn(caption_text(line.clone()));
-                }
-            }
-            body.spawn(section_title("Skills"));
-            if skill_slots_interactive {
-                body.spawn(caption_text("Click a slot to open the skill book."));
-            }
-            skill_slot_row(
-                body,
-                ph,
-                lead,
-                skill_slots_interactive,
-                PartyHeroKind::Player1,
-            );
-
-            if party_slots_unlocked >= 2 {
-                body.spawn(section_title("Player 2"));
-                if let Some(phero) = partner {
-                    spawn_hero_name_row(body, 1, allow_rename);
-                    body.spawn(section_title("Vitals"));
-                    let pst = phero.derived_stats();
-                    stat_line_row(body, "Max Health", pst.max_health);
-                    stat_line_row(body, "Damage", pst.damage);
-                    stat_line_row(body, "Armor", pst.armor);
-                    stat_line_row(body, "Healing", pst.healing_power);
-                    body.spawn(section_title("Skills"));
-                    if skill_slots_interactive {
-                        body.spawn(caption_text(
-                            "Player 2 has their own skills — click a slot to change them.",
-                        ));
-                    }
-                    skill_slot_row(
-                        body,
-                        ph,
-                        phero,
-                        skill_slots_interactive,
-                        PartyHeroKind::Player2,
-                    );
-                } else {
-                    body.spawn(caption_text(
-                        "Companion will appear after rewards sync (new unlock).",
-                    ));
-                }
-            } else {
-                body.spawn(caption_text(format!(
-                    "Reach depth {} on a run to unlock a second party hero.",
-                    PARTY_SLOT_2_UNLOCK_DEPTH
-                )));
-            }
-        });
-    };
-    inner(parent);
-}
-
-fn stat_line_row(
-    parent: &mut ChildSpawnerCommands<'_>,
-    label: &str,
-    value: impl std::fmt::Display,
-) {
-    parent
-        .spawn(Node {
-            box_sizing: BoxSizing::BorderBox,
-            width: Val::Percent(100.0),
-            flex_direction: FlexDirection::Row,
-            justify_content: JustifyContent::SpaceBetween,
-            align_items: AlignItems::Center,
-            padding: UiRect::vertical(Val::Px(2.0)),
-            ..default()
-        })
-        .with_children(|r| {
-            r.spawn((
-                Text::new(format!("\u{25C8} {label}")),
-                TextFont::from_font_size(UiTheme::FONT_COMPACT),
-                TextColor(UiTheme::body_dim()),
-            ));
-            r.spawn((
-                Text::new(format!("{value}")),
-                TextFont::from_font_size(UiTheme::FONT_BODY),
-                TextColor(UiTheme::muted_cream()),
-            ));
-        });
-}
-
-fn skill_slot_placeholder_handle(
-    hero: &crate::domain::hero::HeroProfile,
-    slot: usize,
-    unlocked: bool,
-    ph: &UiPlaceholderImages,
-) -> Handle<Image> {
-    if !unlocked {
-        return ph.skill_locked.clone();
-    }
-    match hero.equipped_skills.get(slot).copied().flatten() {
-        None => ph.skill_empty.clone(),
-        Some(id) => {
-            if skill_definition(id).kind == SkillKind::Passive {
-                ph.skill_passive.clone()
-            } else {
-                ph.skill_active.clone()
-            }
-        }
-    }
-}
-
-fn skill_slot_row(
-    parent: &mut ChildSpawnerCommands<'_>,
-    ph: &UiPlaceholderImages,
-    hero: &crate::domain::hero::HeroProfile,
-    skill_slots_interactive: bool,
-    sheet: PartyHeroKind,
-) {
-    parent
-        .spawn(Node {
-                box_sizing: BoxSizing::BorderBox,
-                flex_direction: FlexDirection::Row,
-                column_gap: Val::Px(8.0),
-                flex_wrap: FlexWrap::Wrap,
-                ..default()
-            })
-        .with_children(|row| {
-            let cap = hero.equipped_skills.len().max(6);
-            for i in 0..cap {
-                let unlocked = i < hero.unlocked_skill_slots;
-                if unlocked && skill_slots_interactive {
-                    let label = hero
-                        .equipped_skills
-                        .get(i)
-                        .and_then(|s| *s)
-                        .map(|sk| skill_definition(sk).name.to_string())
-                        .unwrap_or_else(|| format!("Slot {}", i + 1));
-                    let tip = hero
-                        .equipped_skills
-                        .get(i)
-                        .and_then(|s| *s)
-                        .map(|sk| {
-                            let d = skill_definition(sk);
-                            format!("{}\n{}", d.name, d.description)
-                        })
-                        .unwrap_or_else(|| {
-                            "Open the skill book to assign or clear this slot (no duplicates across slots)."
-                                .to_string()
-                        });
-                    let p = UiButtonPalette::skill_slot_chip();
-                    let icon = skill_slot_placeholder_handle(hero, i, true, ph);
-                    row.spawn((
-                        Node {
-                box_sizing: BoxSizing::BorderBox,
-                min_width: Val::Px(118.0),
-                                min_height: Val::Px(48.0),
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                padding: UiRect::horizontal(Val::Px(4.0)),
-                                border: UiRect::all(Val::Px(1.0)),
-                                ..default()
-            },
-            Button,
-            BackgroundColor(p.idle_bg.into()),
-            BorderColor::from(p.idle_border),
-                        SkillSlotButton { slot: i, kind: sheet },
-                        crate::ui::interaction::UiClickAction::OpenSkillBook,
-                        p,
-                        UiTooltip::txt(tip),
-                    ))
-                    .with_children(|s| {
-                        s.spawn(Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Percent(100.0),
-                                height: Val::Px(44.0),
-                                flex_direction: FlexDirection::Row,
-                                align_items: AlignItems::Center,
-                                column_gap: Val::Px(6.0),
-                                ..default()
-            })
-                        .with_children(|inner| {
-                            inner.spawn((
-                                Node {
-                                    box_sizing: BoxSizing::BorderBox,
-                                    width: Val::Px(22.0),
-                                    height: Val::Px(22.0),
-                                    flex_shrink: 0.0,
-                                    ..default()
-                                },
-                                ImageNode {
-                                    image: icon,
-                                    color: Color::WHITE,
-                                    ..default()
-                                },
-                            ));
-                            inner.spawn((
-                Text::new(label),
-                TextFont::from_font_size(UiTheme::FONT_LABEL),
-                TextColor(UiTheme::body()),
-            ));
-                        });
-                    });
-                    continue;
-                }
-
-                let idle_tip = if !unlocked {
-                    "Locked skill slot. Gain delve progress milestones to unlock up to six slots."
-                        .to_string()
-                } else {
-                    hero.equipped_skills
-                        .get(i)
-                        .and_then(|s| *s)
-                        .map(|sk| {
-                            let d = skill_definition(sk);
-                            format!("{}\n{}", d.name, d.description)
-                        })
-                        .unwrap_or_else(|| "Empty skill slot.".to_string())
-                };
-                let icon = skill_slot_placeholder_handle(hero, i, unlocked, ph);
-                row.spawn((
-                    Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Px(52.0),
-                            height: Val::Px(52.0),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            border: UiRect::all(Val::Px(1.0)),
-                            ..default()
-            },
-            BackgroundColor(if unlocked {
-                            UiTheme::panel_bg_deep().into()
-                        } else {
-                            Color::srgba(0.06, 0.06, 0.07, 1.0).into()
-                        }),
-            BorderColor::from(if unlocked {
-                            UiTheme::ornate_gold()
-                        } else {
-                            UiTheme::panel_border()
-                        }),
-                    Interaction::default(),
-                    UiTooltip::txt(idle_tip),
-                ))
-                .with_children(|s| {
-                    s.spawn((
-                        Node {
-                            box_sizing: BoxSizing::BorderBox,
-                            width: Val::Px(36.0),
-                            height: Val::Px(36.0),
-                            flex_shrink: 0.0,
-                            ..default()
-                        },
-                        ImageNode {
-                            image: icon,
-                            color: Color::WHITE,
-                            ..default()
-                        },
-                    ));
-                });
-            }
-        });
-}
-
 fn gear_slot_row_color(slot: GearSlot) -> Color {
     match slot {
         GearSlot::MainHand | GearSlot::OffHand | GearSlot::Hands => Color::srgb(1.0, 0.72, 0.45),
@@ -991,34 +654,6 @@ pub fn mockup_gear_cards(
         let label = slot.display_label();
         let item = profile.profile.hero.equipped_item(slot);
         let blocked_off_hand = matches!(slot, GearSlot::OffHand) && main_two_handed;
-        let tip = if blocked_off_hand {
-            "Two-handed weapon equipped — off-hand is locked while this weapon is in use. \
-             Equip a one-handed main weapon to use a shield or focus again."
-                .to_string()
-        } else if let Some(item) = item {
-            let aff = format_item_affix_lines(item);
-            if aff.is_empty() {
-                format!(
-                    "{}\n{:?}\n{}",
-                    item.name,
-                    item.rarity,
-                    format_item_stat_summary(item)
-                )
-            } else {
-                format!(
-                    "{}\n{:?}\n{}\n{}",
-                    item.name,
-                    item.rarity,
-                    format_item_stat_summary(item),
-                    aff
-                )
-            }
-        } else {
-            format!(
-                "No {} equipped yet. Loot gear on runs and equip it from the Inventory tab.",
-                label.to_lowercase()
-            )
-        };
         parent
             .spawn((
                 Node {
@@ -1034,7 +669,7 @@ pub fn mockup_gear_cards(
                 BackgroundColor(UiTheme::panel_bg_deep().into()),
                 BorderColor::from(UiTheme::ornate_gold()),
                 Interaction::default(),
-                UiTooltip::txt(tip),
+                GearSlotInspect(slot),
             ))
             .with_children(|card| {
                 card.spawn((
@@ -1116,84 +751,93 @@ pub fn spawn_dungeon_briefing_column(
     stash_count: usize,
     meta: &MetaProgression,
 ) {
-    let inner = move |p: &mut ChildSpawnerCommands<'_>| {
-        p.spawn(panel_title_centered("DUNGEON RUN"));
-        p.spawn(Node {
-            box_sizing: BoxSizing::BorderBox,
-            flex_direction: FlexDirection::Row,
-            justify_content: JustifyContent::SpaceBetween,
+    spawn_mounted_panel(
+        parent,
+        MountedPanelConfig {
+            style: crate::ui::theme::MountedPanelStyle::Recessed,
             width: Val::Percent(100.0),
-            ..default()
-        })
-        .with_children(|r| {
-            r.spawn(caption_text(format!(
-                "Target depth: {DEFAULT_RUN_MAX_DEPTH}"
-            )));
-            r.spawn(caption_text("Phase: briefing"));
-        });
-        p.spawn(Node {
-            box_sizing: BoxSizing::BorderBox,
-            flex_direction: FlexDirection::Row,
-            column_gap: Val::Px(12.0),
-            align_items: AlignItems::Center,
-            ..default()
-        })
-        .with_children(|row| {
-            row.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    width: Val::Px(96.0),
-                    height: Val::Px(96.0),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    border: UiRect::all(Val::Px(2.0)),
-                    ..default()
-                },
-                BackgroundColor(UiTheme::panel_bg_deep().into()),
-                BorderColor::from(UiTheme::ornate_gold()),
-            ))
-            .with_children(|port| {
-                port.spawn((
-                    Text::new("\u{1F480}"),
-                    TextFont::from_font_size(UiTheme::FONT_DISPLAY_HERO),
-                    TextColor(UiTheme::body_dim()),
-                ));
-            });
-            row.spawn(Node {
+            flex_grow: 1.0,
+            flex_shrink: 1.0,
+            min_height: Val::Px(0.0),
+        },
+        |panel| {
+            spawn_framed_section_header(panel, "DUNGEON RUN");
+            panel.spawn(Node {
                 box_sizing: BoxSizing::BorderBox,
-                flex_direction: FlexDirection::Column,
-                flex_grow: 1.0,
-                row_gap: Val::Px(6.0),
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::SpaceBetween,
+                width: Val::Percent(100.0),
                 ..default()
             })
-            .with_children(|col| {
-                col.spawn(headline_text("Awaiting delve"));
-                col.spawn(caption_text(format!(
-                    "Boss at depth {DEFAULT_RUN_MAX_DEPTH} · MVP run seed {DEFAULT_RUN_SEED}",
+            .with_children(|r| {
+                r.spawn(caption_text(format!(
+                    "Target depth: {DEFAULT_RUN_MAX_DEPTH}"
                 )));
-                health_bar(col, 1.0, UiTheme::healing());
-                col.spawn(caption_text(format!("Stash waiting: {stash_count} items")));
-                if meta.party_slots_unlocked() < 2 {
-                    col.spawn(caption_text(format!(
-                        "Reach depth {} to unlock a second hero slot.",
-                        PARTY_SLOT_2_UNLOCK_DEPTH
-                    )));
-                } else {
-                    col.spawn(caption_text(
-                        "Second party slot unlocked — meet your ally in the party panel.",
-                    ));
-                }
+                r.spawn(caption_text("Phase: briefing"));
             });
-        });
-        p.spawn(section_title("COMBAT LOG"));
-        p.spawn(caption_text(
-            "Encounter text streams here once live combat ships; scroll with mouse wheel.",
-        ));
-        p.spawn(caption_text("Mouse wheel scrolls any framed panel."));
-        p.spawn(section_title("PROGRESS"));
-        spawn_static_delve_progress_section(p, 0, DEFAULT_RUN_MAX_DEPTH);
-    };
-    inner(parent);
+            panel.spawn(Node {
+                box_sizing: BoxSizing::BorderBox,
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(UiDensity::Camp.gutter_section()),
+                align_items: AlignItems::Center,
+                ..default()
+            })
+            .with_children(|row| {
+                row.spawn((
+                    Node {
+                        box_sizing: BoxSizing::BorderBox,
+                        width: Val::Px(96.0),
+                        height: Val::Px(96.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(Val::Px(2.0)),
+                        ..default()
+                    },
+                    BackgroundColor(UiTheme::panel_bg_deep().into()),
+                    BorderColor::from(UiTheme::ornate_gold()),
+                ))
+                .with_children(|port| {
+                    port.spawn((
+                        Text::new("\u{1F480}"),
+                        TextFont::from_font_size(UiTheme::FONT_DISPLAY_HERO),
+                        TextColor(UiTheme::body_dim()),
+                    ));
+                });
+                row.spawn(Node {
+                    box_sizing: BoxSizing::BorderBox,
+                    flex_direction: FlexDirection::Column,
+                    flex_grow: 1.0,
+                    row_gap: Val::Px(UiDensity::Camp.gutter_row()),
+                    ..default()
+                })
+                .with_children(|col| {
+                    col.spawn(headline_text("Awaiting delve"));
+                    col.spawn(caption_text(format!(
+                        "Boss at depth {DEFAULT_RUN_MAX_DEPTH} · MVP run seed {DEFAULT_RUN_SEED}",
+                    )));
+                    health_bar(col, 1.0, UiTheme::healing());
+                    col.spawn(caption_text(format!("Stash waiting: {stash_count} items")));
+                    if meta.party_slots_unlocked() < 2 {
+                        col.spawn(caption_text(format!(
+                            "Reach depth {} to unlock a second hero slot.",
+                            crate::domain::progression::PARTY_SLOT_2_UNLOCK_DEPTH
+                        )));
+                    } else {
+                        col.spawn(caption_text(
+                            "Second party slot unlocked — meet your ally in the party panel.",
+                        ));
+                    }
+                });
+            });
+            panel.spawn(section_title("COMBAT LOG"));
+            panel.spawn(caption_text(
+                "Encounter text streams here once live combat ships; scroll with mouse wheel.",
+            ));
+            panel.spawn(caption_text("Mouse wheel scrolls any framed panel."));
+            panel.spawn(section_title("PROGRESS"));
+            spawn_static_delve_progress_section(panel, 0, DEFAULT_RUN_MAX_DEPTH);
+        },
+    );
 }
 
 pub fn spawn_dungeon_camp_column(parent: &mut ChildSpawnerCommands<'_>) {
@@ -1220,119 +864,80 @@ pub fn spawn_dungeon_camp_column(parent: &mut ChildSpawnerCommands<'_>) {
     inner(parent);
 }
 
-pub fn spawn_dungeon_summary_column(parent: &mut ChildSpawnerCommands<'_>, summary: &RunSummary) {
-    let inner = move |p: &mut ChildSpawnerCommands<'_>| {
-        p.spawn(panel_title_centered("DUNGEON RUN"));
-        let depth = summary.deepest_depth;
-        let is_death = summary.outcome == RunOutcome::HeroDied;
-        let type_color = if is_death {
-            UiTheme::danger()
-        } else {
-            UiTheme::muted_gold()
-        };
-        let type_label = if is_death { "Defeat" } else { "Boss" };
-        p.spawn(Node {
-            box_sizing: BoxSizing::BorderBox,
-            flex_direction: FlexDirection::Row,
-            justify_content: JustifyContent::SpaceBetween,
+pub fn spawn_dungeon_summary_column(
+    parent: &mut ChildSpawnerCommands<'_>,
+    summary: &RunSummary,
+    ph: &UiPlaceholderImages,
+) {
+    spawn_mounted_panel(
+        parent,
+        MountedPanelConfig {
+            style: MountedPanelStyle::Recessed,
             width: Val::Percent(100.0),
-            ..default()
-        })
-        .with_children(|r| {
-            r.spawn(caption_text(format!("Depth: {depth}")));
-            r.spawn((
-                Text::new(format!("Type: {type_label}")),
-                TextFont::from_font_size(UiTheme::FONT_COMPACT),
-                TextColor(type_color),
+            flex_grow: 1.0,
+            flex_shrink: 1.0,
+            min_height: Val::Px(0.0),
+        },
+        |panel| {
+            spawn_framed_section_header(panel, "RUN OUTCOME");
+            let is_death = summary.outcome == RunOutcome::HeroDied;
+            let headline_color = if is_death {
+                UiTheme::danger()
+            } else {
+                UiTheme::muted_gold()
+            };
+            panel.spawn((
+                Text::new(crate::ui::summary_panel::outcome_headline(summary)),
+                TextFont::from_font_size(UiTheme::FONT_STRONG),
+                TextColor(headline_color),
             ));
-        });
-        if !summary.peak_risk_note.is_empty() {
-            p.spawn(caption_text(summary.peak_risk_note.clone()));
-        }
-        let foe = summary
-            .death_reason
-            .clone()
-            .unwrap_or_else(|| "Victory".to_string());
-        p.spawn(Node {
-            box_sizing: BoxSizing::BorderBox,
-            flex_direction: FlexDirection::Row,
-            column_gap: Val::Px(12.0),
-            align_items: AlignItems::Center,
-            ..default()
-        })
-        .with_children(|row| {
-            row.spawn((
-                Node {
-                    box_sizing: BoxSizing::BorderBox,
-                    width: Val::Px(96.0),
-                    height: Val::Px(96.0),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    border: UiRect::all(Val::Px(2.0)),
-                    ..default()
+            if !summary.peak_risk_note.is_empty() {
+                panel.spawn(caption_text(summary.peak_risk_note.clone()));
+            }
+            spawn_framed_section_header(panel, "TREASURE");
+            crate::ui::summary_panel::spawn_treasure_stat_row(panel, summary);
+            if !summary.loot.is_empty() {
+                spawn_framed_section_header(panel, "LOOT");
+                panel.spawn(caption_text(
+                    "Accept rewards below to add these to your stash.".to_string(),
+                ));
+                spawn_reward_loot_grid(panel, &summary.loot, ph, 6);
+            }
+            spawn_framed_section_header(panel, "CHRONICLE");
+            spawn_mounted_panel(
+                panel,
+                MountedPanelConfig {
+                    style: MountedPanelStyle::Recessed,
+                    width: Val::Percent(100.0),
+                    flex_grow: 0.0,
+                    flex_shrink: 0.0,
+                    min_height: Val::Px(0.0),
                 },
-                BackgroundColor(UiTheme::panel_bg_deep().into()),
-                BorderColor::from(UiTheme::ornate_gold()),
-            ))
-            .with_children(|port| {
-                port.spawn((
-                    Text::new(if is_death { "\u{2620}" } else { "\u{1F3F9}" }),
-                    TextFont::from_font_size(UiTheme::FONT_DISPLAY_SUB),
-                    TextColor(type_color),
-                ));
-            });
-            row.spawn(Node {
-                box_sizing: BoxSizing::BorderBox,
-                flex_direction: FlexDirection::Column,
-                flex_grow: 1.0,
-                row_gap: Val::Px(6.0),
-                ..default()
-            })
-            .with_children(|col| {
-                col.spawn((
-                    Text::new(foe.clone()),
-                    TextFont::from_font_size(UiTheme::FONT_SECTION),
-                    TextColor(type_color),
-                ));
-                let frac = if is_death { 0.35 } else { 1.0 };
-                health_bar(col, frac, type_color);
-            });
-        });
-        if !summary.loot.is_empty() {
-            let n = summary.loot.len();
-            p.spawn(section_title("GEAR FROM THIS RUN"));
-            p.spawn(body_text(format!(
-                "{n} piece(s) here go to your stash when you Accept rewards below. Open Gear after that to equip."
-            )));
-            for item in summary.loot.iter().take(4) {
-                p.spawn(caption_text(format!(
-                    "\u{2022} {} ({:?})",
-                    item.name, item.rarity
-                )));
-            }
-            if summary.loot.len() > 4 {
-                p.spawn(caption_text(format!(
-                    "\u{2026} and {} more in the rewards popup.",
-                    summary.loot.len() - 4
-                )));
-            }
-        }
-        p.spawn(section_title("COMBAT LOG"));
-        p.spawn(caption_text("Mouse wheel scrolls."));
-        let log_lines: Vec<_> = summary
-            .log
-            .iter()
-            .map(|line| {
-                let (color, size) = log_line_present(line);
-                (line.clone(), size, color)
-            })
-            .collect();
-        spawn_scrollable_log(p, 200.0, log_lines);
-        p.spawn(section_title("PROGRESS"));
-        let cap = summary.dungeon_depth_cap.max(1);
-        spawn_static_delve_progress_section(p, summary.floors_cleared, cap);
-    };
-    inner(parent);
+                |rec| {
+                    spawn_scrollable_flex_column(rec, Some(160.0), |scroll| {
+                        let beats = crate::ui::summary_panel::narrative_highlights(summary);
+                        if beats.is_empty() {
+                            scroll.spawn(caption_text(
+                                "Quiet run — no standout beats recorded.".to_string(),
+                            ));
+                        } else {
+                            for line in beats {
+                                let (color, size) = log_line_present(&line);
+                                scroll.spawn((
+                                    Text::new(line),
+                                    TextFont::from_font_size(size),
+                                    TextColor(color),
+                                ));
+                            }
+                        }
+                    });
+                },
+            );
+            spawn_framed_section_header(panel, "PROGRESS");
+            let cap = summary.dungeon_depth_cap.max(1);
+            spawn_static_delve_progress_section(panel, summary.floors_cleared, cap);
+        },
+    );
 }
 fn spawn_static_delve_progress_section(
     parent: &mut ChildSpawnerCommands<'_>,

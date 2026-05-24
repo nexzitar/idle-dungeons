@@ -6,14 +6,18 @@ use bevy::ui::{FocusPolicy, RelativeCursorPosition};
 use crate::save::StashSortOrder;
 use crate::ui::components::{
     GearHubBackdrop, GearHubCloseButton, GearHubRoot, UiScrollContent, UiScrollRegion,
-    UiScrollState, UiTooltip,
+    UiScrollState,
 };
+use crate::ui::inspect::{InspectHint, InspectRegion, InspectRegionScope};
+use crate::ui::primitives::inspect_panel::spawn_inspect_panel_compact;
 use crate::ui::shell::spawn_stash_filters_and_sort_row;
 use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::primitives::modal::{spawn_modal_shell_with_handles, ModalShellConfig};
 use crate::ui::primitives::scroll::spawn_scrollable_flex_column;
+use crate::domain::party::PartyHeroKind;
+use crate::ui::primitives::hero_card::{spawn_hero_identity_card, HeroIdentityConfig};
 use crate::ui::primitives::{spawn_button, UiButtonConfig, UiButtonVariant};
-use crate::ui::theme::{caption_text, headline_text, section_title, UiTheme};
+use crate::ui::theme::{caption_text, headline_text, section_title, UiDensity, UiTheme};
 
 /// Equipped-gear column.
 const GEAR_LOADOUT_PANEL_W: f32 = 292.0;
@@ -100,6 +104,18 @@ pub fn spawn_gear_hub_modal(
                                 ))
                                 .with_children(|loadout_panel| {
                                     loadout_panel.spawn(headline_text("Equipped"));
+                                    spawn_hero_identity_card(
+                                        loadout_panel,
+                                        HeroIdentityConfig {
+                                            slot: 0,
+                                            hero: &profile.profile.hero,
+                                            kind: PartyHeroKind::Player1,
+                                            allow_rename: false,
+                                            show_stat_strip: true,
+                                            density: UiDensity::Gear,
+                                        },
+                                        ph,
+                                    );
                                     loadout_panel.spawn(section_title("LOADOUT"));
                                     spawn_scrollable_flex_column(loadout_panel, None, |loadout| {
                                         crate::ui::shell::mockup_gear_cards(
@@ -129,6 +145,12 @@ pub fn spawn_gear_hub_modal(
                                         stash_sort,
                                         ph,
                                     );
+                                    let inspect =
+                                        spawn_inspect_panel_compact(stash_panel, InspectRegionScope::GearHub);
+                                    stash_panel.commands_mut().entity(inspect).insert((
+                                        InspectRegion,
+                                        InspectRegionScope::GearHub,
+                                    ));
                                     let close_ent = spawn_button(
                                         stash_panel,
                                         UiButtonConfig {
@@ -144,7 +166,7 @@ pub fn spawn_gear_hub_modal(
                                     stash_panel.commands_mut().entity(close_ent).insert((
                                         GearHubCloseButton,
                                         crate::ui::interaction::UiClickAction::CloseGearHub,
-                                        UiTooltip::txt("Close both gear panels."),
+                                        InspectHint("Close gear hub."),
                                     ));
                                 });
                         });
@@ -153,7 +175,7 @@ pub fn spawn_gear_hub_modal(
             layer.commands_mut().entity(shell.backdrop).insert((
                 GearHubBackdrop,
                 crate::ui::interaction::UiClickAction::CloseGearHub,
-                UiTooltip::txt("Click outside empty space to close the gear hub."),
+                InspectHint("Click outside to close."),
             ));
         });
 }

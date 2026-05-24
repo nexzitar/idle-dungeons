@@ -4,6 +4,8 @@ pub mod build_panel;
 pub mod components;
 pub mod gear_hub;
 pub mod interaction;
+pub mod inspect;
+pub mod inspect_fade;
 pub mod inventory_panel;
 pub mod log_panel;
 pub mod playback_sync;
@@ -50,7 +52,7 @@ use playback_sync::{
     sync_playback_aggro_arrow, sync_playback_aggro_arrow_line, sync_playback_cast_bars_foe,
     sync_playback_cast_bars_party, sync_playback_combat_log_panel_visibility,
     sync_playback_damage_meters, sync_playback_delve_progress_bar,
-    sync_playback_theater_slot_visibility, sync_run_playback_debuff_slots,
+    sync_playback_skill_icon_overlays, sync_playback_theater_slot_visibility, sync_run_playback_debuff_slots,
     sync_run_playback_party_bars, sync_run_playback_ui, tick_floating_combat_popups,
 };
 use screens::{spawn_build_screen, spawn_running_screen, spawn_summary_screen};
@@ -96,6 +98,9 @@ impl Plugin for UiPlugin {
         app.init_resource::<PlaybackCombatLogVisible>();
         app.init_resource::<FloatingCombatPopupSeq>();
         app.init_resource::<buildcraft::BuildcraftEditSession>();
+        app.init_resource::<inspect::UiInspectState>();
+        app.init_resource::<inspect::CampInspectFade>();
+        app.init_resource::<buildcraft::sync::BuildcraftInspectFade>();
         app.insert_resource(crate::ui::scene_tune::TitleSceneLayout::try_load_from_disk());
         app.init_resource::<PresentationEditorSession>();
         #[cfg(debug_assertions)]
@@ -161,6 +166,8 @@ impl Plugin for UiPlugin {
                             buildcraft::sync::sync_buildcraft_inspect,
                             buildcraft::sync::sync_buildcraft_apply_enabled,
                             buildcraft::sync::sync_buildcraft_party_bars,
+                            inspect::sync_ui_inspect_hover,
+                            inspect::sync_ui_inspect_panel,
                             interaction::click::clear_ui_click_after_release,
                         ),
                     )
@@ -172,6 +179,9 @@ impl Plugin for UiPlugin {
                     sync_playback_cast_bars_party
                         .run_if(in_state(GameState::Running))
                         .after(sync_run_playback_ui),
+                    sync_playback_skill_icon_overlays
+                        .run_if(in_state(GameState::Running))
+                        .after(sync_playback_cast_bars_party),
                     sync_playback_cast_bars_foe
                         .run_if(in_state(GameState::Running))
                         .after(sync_run_playback_ui),

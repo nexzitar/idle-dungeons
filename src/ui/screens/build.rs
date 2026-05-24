@@ -2,7 +2,6 @@ use bevy::prelude::*;
 
 use crate::app::{ProfileState, RunSpeedSetting};
 use crate::ui::assets::UiPlaceholderImages;
-use crate::ui::build_panel::build_panel_text;
 use crate::ui::components::{BuildScreen, UiRoot};
 use crate::ui::primitives::spawn_atmosphere;
 use crate::ui::screens::{content_column_bundle, root_shell};
@@ -27,10 +26,7 @@ pub(crate) fn spawn_build_screen_root(
     let partner = profile.effective_party_partner();
     let party_slots = profile.profile.meta.party_slots_unlocked();
     let meta = &profile.profile.meta;
-    let loadout_lines: Vec<String> = build_panel_text(&lead)
-        .lines()
-        .map(|s| s.to_string())
-        .collect();
+
     let stash = profile.profile.inventory.len();
 
     let root_entity = commands.spawn((root_shell(), UiRoot, BuildScreen)).id();
@@ -49,15 +45,16 @@ pub(crate) fn spawn_build_screen_root(
             );
             shell::spawn_three_column_row(col, |row| {
                 shell::spawn_ornate_column(row, 1.0, |panel| {
-                    shell::spawn_hero_column_mockup(
+                    shell::spawn_hero_column(
                         panel,
                         ph,
                         &lead,
                         partner.as_ref(),
-                        party_slots,
-                        &loadout_lines,
-                        true,
-                        true,
+                        shell::HeroColumnConfig {
+                            party_slots_unlocked: party_slots,
+                            skill_slots_interactive: true,
+                            allow_rename: true,
+                        },
                     );
                 });
                 shell::spawn_ornate_column(row, 1.25, |panel| {
@@ -66,7 +63,6 @@ pub(crate) fn spawn_build_screen_root(
             });
             shell::spawn_mockup_footer(col, shell::FooterMode::Briefing);
         });
-        crate::ui::tooltip::spawn_tooltip_layer(root);
     });
     root_entity
 }

@@ -5,8 +5,11 @@ use bevy::prelude::*;
 use crate::domain::party::PartyHeroKind;
 use crate::ui::assets::UiPlaceholderImages;
 use crate::ui::buildcraft::session::BuildcraftEditSession;
-use crate::ui::primitives::skill_bar::{spawn_skill_bar, SkillBarConfig};
-use crate::ui::theme::{section_title, UiTheme};
+use crate::ui::primitives::loadout::{spawn_loadout_row, LoadoutRowConfig};
+use crate::ui::primitives::panel::{spawn_mounted_panel, MountedPanelConfig};
+use crate::ui::primitives::section::spawn_framed_section_header;
+use crate::ui::primitives::skill_bar::SkillBarInteraction;
+use crate::ui::theme::{UiDensity, UiTheme};
 
 #[derive(Component)]
 pub struct BuildcraftPartyColumn;
@@ -16,69 +19,46 @@ pub fn spawn_party_column(
     session: &BuildcraftEditSession,
     ph: &UiPlaceholderImages,
 ) {
-    parent
-        .spawn((
-            Node {
-                box_sizing: BoxSizing::BorderBox,
-                width: Val::Percent(38.0),
-                flex_shrink: 0.0,
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(14.0),
-                padding: UiRect::all(Val::Px(UiTheme::PANEL_INSET)),
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
-            BackgroundColor(UiTheme::panel_bg()),
-            BorderColor::from(UiTheme::ornate_gold()),
-            BuildcraftPartyColumn,
-        ))
-        .with_children(|col| {
-            col.spawn(section_title("PARTY LOADOUTS"));
-            spawn_hero_row(col, &session.lead, session.focused, ph);
+    let density = UiDensity::Buildcraft;
+    let panel = spawn_mounted_panel(
+        parent,
+        MountedPanelConfig::ornate_column(Val::Percent(38.0)),
+        |col| {
+            spawn_framed_section_header(col, "PARTY LOADOUTS");
+            spawn_buildcraft_row(col, &session.lead, session.focused, ph, density);
             if let Some(partner) = &session.partner {
-                spawn_hero_row(col, partner, session.focused, ph);
+                spawn_buildcraft_row(col, partner, session.focused, ph, density);
             }
             col.spawn((
                 Text::new("Slot order 1→6 sets combat priority when multiple skills are ready."),
                 TextFont::from_font_size(UiTheme::FONT_CAPTION),
                 TextColor(UiTheme::body_dim()),
             ));
-        });
+        },
+    );
+    parent.commands_mut().entity(panel).insert(BuildcraftPartyColumn);
 }
 
-fn spawn_hero_row(
+fn spawn_buildcraft_row(
     parent: &mut ChildSpawnerCommands<'_>,
     edit: &crate::ui::buildcraft::session::HeroLoadoutEdit,
     focused: (PartyHeroKind, usize),
     ph: &UiPlaceholderImages,
+    density: UiDensity,
 ) {
-    parent
-        .spawn((
-            Node {
-                box_sizing: BoxSizing::BorderBox,
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(6.0),
-                ..default()
-            },
-        ))
-        .with_children(|block| {
-            block.spawn((
-                Text::new(format!("{} — {}", edit.hero.label(), edit.display_name)),
-                TextFont::from_font_size(UiTheme::FONT_SECTION),
-                TextColor(UiTheme::muted_cream()),
-            ));
-            let focused_index = (focused.0 == edit.hero).then_some(focused.1);
-            spawn_skill_bar(
-                block,
-                SkillBarConfig {
-                    hero: edit.hero,
-                    slots: &edit.pending,
-                    unlocked: edit.unlocked,
-                    focused_index,
-                    interactive: true,
-                    cell_px: 52.0,
-                },
-                ph,
-            );
-        });
+    let label = format!("{} — {}", edit.hero.label(), edit.display_name);
+    let focused_index = (focused.0 == edit.hero).then_some(focused.1);
+    spawn_loadout_row(
+        parent,
+        LoadoutRowConfig {
+            hero_kind: edit.hero,
+            label: Some(&label),
+            slots: &edit.pending,
+            unlocked: edit.unlocked,
+            focused_index,
+            interaction: SkillBarInteraction::BuildcraftFocus,
+            density,
+        },
+        ph,
+    );
 }
